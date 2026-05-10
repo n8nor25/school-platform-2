@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { ImageUpload } from '@/components/ui/image-upload'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
@@ -302,16 +303,13 @@ export function SchoolsManagement() {
                 className="min-h-[80px] mt-1.5"
               />
             </div>
-            <div>
-              <Label>رابط الشعار</Label>
-              <Input
-                value={form.logoUrl}
-                onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-                placeholder="https://..."
-                className="h-11 mt-1.5"
-                dir="ltr"
-              />
-            </div>
+            <ImageUpload
+              value={form.logoUrl}
+              onChange={(url) => setForm({ ...form, logoUrl: url })}
+              folder="logos"
+              label="شعار المدرسة"
+              placeholder="أدخل رابط الشعار أو ارفع من جهازك"
+            />
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <Label>اللون الرئيسي</Label>

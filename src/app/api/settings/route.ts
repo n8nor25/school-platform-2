@@ -39,9 +39,12 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const querySchoolId = searchParams.get("schoolId");
+
     const body = await request.json();
-    const { schoolId, ...allData } = body;
-    const targetSchoolId = schoolId || SCHOOL_ID;
+    const { schoolId: bodySchoolId, ...allData } = body;
+    const targetSchoolId = querySchoolId || bodySchoolId || SCHOOL_ID;
 
     // Separate Settings fields from School fields
     const settingsData: Record<string, unknown> = {};

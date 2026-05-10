@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Phone, Mail, Facebook, Youtube, Search, Menu, X,
@@ -9,6 +9,7 @@ import {
   Camera, Users, MapPin, Send, Star, Award, TrendingUp,
   School, Eye, ArrowUp, Shield, Play, Globe
 } from 'lucide-react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -230,11 +231,31 @@ function getSubjectColor(subject: string): string {
 }
 
 // ===== Main Component =====
-export default function HomePage() {
+export default function HomePageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-m3-surface">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-m3-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-m3-on-surface-variant text-sm">جاري التحميل...</p>
+        </div>
+      </div>
+    }>
+      <HomePage />
+    </Suspense>
+  )
+}
+
+function HomePage() {
   const { isAdminMode, selectedSchoolId, schools, setSelectedSchoolId, setSchools, _hasHydrated } = useAdminStore()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [showAdminLogin, setShowAdminLogin] = useState(false)
   const logoClickCount = useRef(0)
   const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const urlSubdomain = searchParams.get('school')
+  const hasAppliedUrlSchool = useRef(false)
 
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null)
   const [news, setNews] = useState<NewsItem[]>([])
@@ -290,6 +311,40 @@ export default function HomePage() {
     }
     fetchSchools()
   }, [setSchools, hydrated])
+
+  // Apply school from URL ?school=subdomain on first load
+  useEffect(() => {
+    if (!hydrated || !urlSubdomain || hasAppliedUrlSchool.current) return
+    if (schools.length === 0) return
+    const matched = schools.find(s => s.subdomain === urlSubdomain)
+    if (matched && matched.id !== selectedSchoolId) {
+      setSelectedSchoolId(matched.id)
+      hasAppliedUrlSchool.current = true
+    }
+  }, [hydrated, urlSubdomain, schools, setSelectedSchoolId, selectedSchoolId])
+
+  // If no school selected and no URL param, but schools are loaded, select first
+  useEffect(() => {
+    if (!hydrated || urlSubdomain) return
+    if (schools.length > 0 && !selectedSchoolId) {
+      setSelectedSchoolId(schools[0].id)
+    }
+  }, [hydrated, urlSubdomain, schools, selectedSchoolId, setSelectedSchoolId])
+
+  // Update URL when school changes (not on initial URL-driven load)
+  const prevSchoolIdRef = useRef(selectedSchoolId)
+  useEffect(() => {
+    if (!hydrated || !selectedSchoolId || schools.length === 0) return
+    // Skip the initial sync from URL
+    if (hasAppliedUrlSchool.current && prevSchoolIdRef.current === selectedSchoolId) return
+    const currentSchool = schools.find(s => s.id === selectedSchoolId)
+    if (!currentSchool) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('school', currentSchool.subdomain)
+    const newUrl = `${pathname}?${params.toString()}`
+    router.replace(newUrl, { scroll: false })
+    prevSchoolIdRef.current = selectedSchoolId
+  }, [selectedSchoolId, schools, hydrated, router, pathname, searchParams])
 
   // Fetch data
   useEffect(() => {
@@ -570,13 +625,13 @@ export default function HomePage() {
       <nav className="bg-m3-on-secondary-fixed text-white shadow-lg border-b-4 border-m3-primary">
         <div className="max-w-[1280px] mx-auto px-4">
           {/* Desktop Nav */}
-          <div className="hidden lg:flex items-center h-10">
+          <div className="hidden lg:flex items-center h-12">
             {navLinks.map((link, index) => (
               link.isServicesDropdown ? (
                 <DropdownMenu key={link.href}>
                   <DropdownMenuTrigger asChild>
                     <button
-                      className={`px-4 h-full flex items-center text-xs font-medium transition-colors min-h-[36px] gap-1 ${
+                      className={`px-5 h-full flex items-center text-sm font-semibold transition-colors min-h-[44px] gap-1 ${
                         index === activeNavIndex
                           ? 'border-b-2 border-m3-primary-container bg-white/5 text-white'
                           : 'hover:text-m3-primary-container hover:bg-white/5'
@@ -584,7 +639,7 @@ export default function HomePage() {
                       onClick={() => setActiveNavIndex(index)}
                     >
                       {link.label}
-                      <ChevronLeft className="w-3 h-3 rotate-[-90deg]" />
+                      <ChevronLeft className="w-3.5 h-3.5 rotate-[-90deg]" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="bg-white dark:bg-gray-800 border shadow-lg rounded-lg min-w-[200px]" dir="rtl">
@@ -616,7 +671,7 @@ export default function HomePage() {
                     }
                     setActiveNavIndex(index)
                   }}
-                  className={`px-4 h-full flex items-center text-xs font-medium transition-colors min-h-[36px] ${
+                  className={`px-5 h-full flex items-center text-sm font-semibold transition-colors min-h-[44px] ${
                     index === activeNavIndex
                       ? 'border-b-2 border-m3-primary-container bg-white/5 text-white'
                       : 'hover:text-m3-primary-container hover:bg-white/5'
@@ -687,16 +742,16 @@ export default function HomePage() {
       {settings?.showNewsTicker && news.length > 0 && (
         <section className="bg-m3-surface-container-high border-b border-m3-outline-variant overflow-hidden">
           <div className="max-w-[1280px] mx-auto flex items-center">
-            <Badge className="bg-red-600 text-white shrink-0 rounded-none px-3 py-1 text-xs font-bold min-h-[30px] flex items-center gap-1">
-              <span className="material-symbols-outlined filled text-sm">campaign</span>
+            <Badge className="bg-red-600 text-white shrink-0 rounded-none px-4 py-1.5 text-sm font-bold min-h-[38px] flex items-center gap-1.5">
+              <span className="material-symbols-outlined filled text-lg">campaign</span>
               عاجل
             </Badge>
-            <div className="overflow-hidden flex-1 mr-3">
-              <div className="animate-news-ticker whitespace-nowrap py-1.5 text-xs">
+            <div className="overflow-hidden flex-1 mr-4">
+              <div className="animate-news-ticker whitespace-nowrap py-2.5 text-sm font-bold">
                 {[...news, ...news].map((item, i) => (
                   <span key={`${item.id}-${i}`} className="inline-block mx-8">
-                    <span className="text-m3-primary ml-2">◆</span>
-                    {item.title}
+                    <span className="text-m3-primary ml-2 text-base">◆</span>
+                    <span className="font-bold">{item.title}</span>
                     <span className="text-m3-on-surface-variant/30 mx-4">|</span>
                   </span>
                 ))}

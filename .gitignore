@@ -59,7 +59,8 @@ db/
 *.db-journal
 
 # Upload files (local only)
-upload/
+/upload/
+/public/uploads/*/
 
 # Sandbox config
 .zscripts/
