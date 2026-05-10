@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { SCHOOL_ID } from "@/lib/constants";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 // Fields that belong to the School model, not Settings
-const SCHOOL_FIELDS = ["phone", "email", "address", "name", "description", "logoUrl", "primaryColor", "secondaryColor"];
+const SCHOOL_FIELDS = ["phone", "email", "address", "mapEmbedUrl", "name", "description", "logoUrl", "primaryColor", "secondaryColor"];
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId") || SCHOOL_ID;
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     const settings = await db.settings.findUnique({
       where: { schoolId },
@@ -24,7 +31,7 @@ export async function GET(request: NextRequest) {
     // Also include school contact data so the frontend can display it
     const school = await db.school.findUnique({
       where: { id: schoolId },
-      select: { phone: true, email: true, address: true, name: true, description: true, logoUrl: true, primaryColor: true, secondaryColor: true },
+      select: { phone: true, email: true, address: true, mapEmbedUrl: true, name: true, description: true, logoUrl: true, primaryColor: true, secondaryColor: true },
     });
 
     return NextResponse.json({ ...settings, ...school });
@@ -39,9 +46,18 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const querySchoolId = searchParams.get("schoolId");
+
     const body = await request.json();
-    const { schoolId, ...allData } = body;
-    const targetSchoolId = schoolId || SCHOOL_ID;
+    const { schoolId: bodySchoolId, ...allData } = body;
+    const targetSchoolId = await resolveSchoolId(querySchoolId || bodySchoolId);
+    if (!targetSchoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     // Separate Settings fields from School fields
     const settingsData: Record<string, unknown> = {};
@@ -92,7 +108,7 @@ export async function PUT(request: NextRequest) {
     // Return combined data
     const school = await db.school.findUnique({
       where: { id: targetSchoolId },
-      select: { phone: true, email: true, address: true, name: true, description: true, logoUrl: true, primaryColor: true, secondaryColor: true },
+      select: { phone: true, email: true, address: true, mapEmbedUrl: true, name: true, description: true, logoUrl: true, primaryColor: true, secondaryColor: true },
     });
 
     return NextResponse.json({ ...settings, ...school });

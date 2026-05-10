@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { SCHOOL_ID } from "@/lib/constants";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId") || SCHOOL_ID;
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
     const category = searchParams.get("category");
     const type = searchParams.get("type");
 
@@ -40,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      schoolId,
+      schoolId: bodySchoolId,
       title,
       category,
       grade,
@@ -52,6 +59,13 @@ export async function POST(request: NextRequest) {
       type,
       active,
     } = body;
+    const schoolId = await resolveSchoolId(bodySchoolId);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     if (!title || !filePath || !fileName) {
       return NextResponse.json(
@@ -62,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const schedule = await db.schedule.create({
       data: {
-        schoolId: schoolId || SCHOOL_ID,
+        schoolId,
         title,
         category: category || "class",
         grade,

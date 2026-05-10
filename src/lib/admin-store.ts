@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { SCHOOL_ID } from '@/lib/constants'
 
 interface SchoolOption {
   id: string
@@ -117,7 +116,7 @@ export const useAdminStore = create<AdminStore>()(
         const stillValid = existingId && schools.some(s => s.id === existingId)
         const newSelectedId = stillValid
           ? existingId
-          : (schools.length > 0 ? schools[0].id : SCHOOL_ID)
+          : (schools.length > 0 ? schools[0].id : '')
         set({ schools, selectedSchoolId: newSelectedId })
       },
     }),

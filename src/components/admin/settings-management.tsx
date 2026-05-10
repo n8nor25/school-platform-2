@@ -30,10 +30,14 @@ interface SettingsData {
   liveStreamUrl: string
   facebookUrl: string
   youtubeUrl: string
+  // Developer info
+  developerName: string
+  developerPhoto: string
   // School model fields (also managed here)
   phone: string
   email: string
   address: string
+  mapEmbedUrl: string
   name: string
   description: string
   logoUrl: string
@@ -55,9 +59,12 @@ const defaultSettings: SettingsData = {
   liveStreamUrl: '',
   facebookUrl: '',
   youtubeUrl: '',
+  developerName: 'محروس شعبان',
+  developerPhoto: '',
   phone: '',
   email: '',
   address: '',
+  mapEmbedUrl: '',
   name: '',
   description: '',
   logoUrl: '',
@@ -92,9 +99,12 @@ export function SettingsManagement() {
               liveStreamUrl: data.liveStreamUrl || '',
               facebookUrl: data.facebookUrl || '',
               youtubeUrl: data.youtubeUrl || '',
+              developerName: data.developerName || 'محروس شعبان',
+              developerPhoto: data.developerPhoto || '',
               phone: data.phone || '',
               email: data.email || '',
               address: data.address || '',
+              mapEmbedUrl: data.mapEmbedUrl || '',
               name: data.name || '',
               description: data.description || '',
               logoUrl: data.logoUrl || '',
@@ -354,6 +364,17 @@ export function SettingsManagement() {
               className="h-11 mt-1.5"
             />
           </div>
+          <div>
+            <Label>رابط خريطة جوجل (Embed)</Label>
+            <Input
+              value={settings.mapEmbedUrl}
+              onChange={(e) => updateField('mapEmbedUrl', e.target.value)}
+              className="h-11 mt-1.5"
+              placeholder="https://www.google.com/maps/embed?pb=..."
+              dir="ltr"
+            />
+            <p className="text-xs text-gray-400 mt-1">أدخل رابط تضمين خريطة جوجل من Google Maps → مشاركة → تضمين خريطة</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -436,6 +457,42 @@ export function SettingsManagement() {
                 placeholder="https://..."
                 dir="ltr"
               />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Developer Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">معلومات المطور</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>اسم المطور</Label>
+              <Input
+                value={settings.developerName}
+                onChange={(e) => updateField('developerName', e.target.value)}
+                className="h-11 mt-1.5"
+                placeholder="محروس شعبان"
+              />
+            </div>
+            <div>
+              <Label>صورة المطور</Label>
+              <Input
+                value={settings.developerPhoto}
+                onChange={(e) => updateField('developerPhoto', e.target.value)}
+                className="h-11 mt-1.5"
+                placeholder="https://..."
+                dir="ltr"
+              />
+            </div>
+          </div>
+          {settings.developerPhoto && (
+            <div className="flex items-center gap-3 pt-2">
+              <img src={settings.developerPhoto} alt="صورة المطور" className="w-10 h-10 rounded-full object-cover border" />
+              <span className="text-sm text-gray-500">{settings.developerName}</span>
             </div>
           )}
         </CardContent>

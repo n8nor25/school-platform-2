@@ -174,21 +174,8 @@
   background: #61000080;
 }
 
-/* News Ticker Animation (simple scroll) */
-@keyframes news-ticker {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-.animate-news-ticker {
-  animation: news-ticker 30s linear infinite;
-}
-
 /* News Ticker Scroll (horizontal, seamless) */
+/* RTL: text scrolls from right to left (translateX 0 → -50%) */
 @keyframes news-ticker-scroll {
   0% {
     transform: translateX(0);
@@ -199,7 +186,8 @@
 }
 
 .animate-news-ticker-scroll {
-  animation: news-ticker-scroll 40s linear infinite;
+  animation: news-ticker-scroll 30s linear infinite;
+  display: inline-flex;
 }
 
 .animate-news-ticker-scroll:hover {

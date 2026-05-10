@@ -16,6 +16,7 @@ export async function GET() {
         phone: true,
         email: true,
         facebookUrl: true,
+        mapEmbedUrl: true,
         isActive: true,
         createdAt: true,
       },
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       phone,
       email,
       facebookUrl,
+      mapEmbedUrl,
       isActive,
     } = body;
 
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
         phone: phone || "",
         email: email || "",
         facebookUrl: facebookUrl || null,
+        mapEmbedUrl: mapEmbedUrl || null,
         isActive: isActive ?? true,
       },
     });
@@ -148,6 +151,7 @@ export async function PUT(request: NextRequest) {
     if ("phone" in body) updateData.phone = body.phone;
     if ("email" in body) updateData.email = body.email;
     if ("facebookUrl" in body) updateData.facebookUrl = body.facebookUrl;
+    if ("mapEmbedUrl" in body) updateData.mapEmbedUrl = body.mapEmbedUrl;
     if ("isActive" in body) updateData.isActive = body.isActive;
 
     const school = await db.school.update({

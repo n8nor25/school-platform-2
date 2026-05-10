@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { SCHOOL_ID } from "@/lib/constants";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId") || SCHOOL_ID;
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     const stats = await db.schoolStats.findUnique({
       where: { schoolId },
@@ -31,8 +38,14 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { schoolId, ...updateData } = body;
-    const targetSchoolId = schoolId || SCHOOL_ID;
+    const { schoolId: bodySchoolId, ...updateData } = body;
+    const targetSchoolId = await resolveSchoolId(bodySchoolId);
+    if (!targetSchoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     const existing = await db.schoolStats.findUnique({
       where: { schoolId: targetSchoolId },

@@ -8,6 +8,11 @@ export async function GET(request: NextRequest) {
     const term = searchParams.get("term");
     const schoolId = searchParams.get("schoolId");
 
+    // حماية الذاكرة: تحديد الصفحة والحد الأقصى للسجلات في الطلب الواحد لتفادي انفجار الـ RAM
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
+
     const includeArchived = searchParams.get("includeArchived") === "true";
     const archivedOnly = searchParams.get("archivedOnly") === "true";
 
@@ -21,9 +26,12 @@ export async function GET(request: NextRequest) {
       where.archived = false;
     }
 
+    // استدعاء البيانات بحجم محكوم ومحدد عبر الشبكة من Supabase
     const results = await db.result.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
     });
 
     const resultsWithCount = results.map((result) => {
@@ -35,7 +43,7 @@ export async function GET(request: NextRequest) {
       }
       return {
         ...result,
-        students: undefined,
+        students: undefined, // تفريغ نص الـ JSON الطويل فوراً من الذاكرة لتقليل حجم الاستجابة
         studentCount: students.length,
       };
     });

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ===== المدارس (Multi-Tenant) =====
@@ -20,6 +21,7 @@ model School {
   phone          String    @default("")
   email          String    @default("")
   facebookUrl    String?
+  mapEmbedUrl    String?   // Google Maps embed URL for location map
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -65,6 +67,8 @@ model Settings {
   showContact    Boolean  @default(true)
   showAbout      Boolean  @default(true)
   sectionOrder   String   @default("[]") // JSON array: ["slider","about","news","services","gallery","teachers","stats","contact"]
+  developerName  String   @default("محروس شعبان")
+  developerPhoto String?  // URL for developer's circular photo
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }

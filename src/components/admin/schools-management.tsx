@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { ImageUpload } from '@/components/ui/image-upload'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
@@ -27,6 +28,7 @@ interface SchoolItem {
   phone: string
   email: string
   facebookUrl: string | null
+  mapEmbedUrl: string | null
   isActive: boolean
   createdAt: string
 }
@@ -42,6 +44,7 @@ interface SchoolForm {
   phone: string
   email: string
   facebookUrl: string
+  mapEmbedUrl: string
   isActive: boolean
 }
 
@@ -56,6 +59,7 @@ const defaultForm: SchoolForm = {
   phone: '',
   email: '',
   facebookUrl: '',
+  mapEmbedUrl: '',
   isActive: true,
 }
 
@@ -109,6 +113,7 @@ export function SchoolsManagement() {
       phone: item.phone || '',
       email: item.email || '',
       facebookUrl: item.facebookUrl || '',
+      mapEmbedUrl: (item as Record<string, unknown>).mapEmbedUrl as string || '',
       isActive: item.isActive,
     })
     setDialogOpen(true)
@@ -137,6 +142,7 @@ export function SchoolsManagement() {
         phone: form.phone || '',
         email: form.email || '',
         facebookUrl: form.facebookUrl || null,
+        mapEmbedUrl: form.mapEmbedUrl || null,
         isActive: form.isActive,
       }
 
@@ -302,16 +308,13 @@ export function SchoolsManagement() {
                 className="min-h-[80px] mt-1.5"
               />
             </div>
-            <div>
-              <Label>رابط الشعار</Label>
-              <Input
-                value={form.logoUrl}
-                onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-                placeholder="https://..."
-                className="h-11 mt-1.5"
-                dir="ltr"
-              />
-            </div>
+            <ImageUpload
+              value={form.logoUrl}
+              onChange={(url) => setForm({ ...form, logoUrl: url })}
+              folder="logos"
+              label="شعار المدرسة"
+              placeholder="أدخل رابط الشعار أو ارفع من جهازك"
+            />
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <Label>اللون الرئيسي</Label>
@@ -386,6 +389,16 @@ export function SchoolsManagement() {
                 value={form.facebookUrl}
                 onChange={(e) => setForm({ ...form, facebookUrl: e.target.value })}
                 placeholder="https://facebook.com/..."
+                className="h-11 mt-1.5"
+                dir="ltr"
+              />
+            </div>
+            <div>
+              <Label>رابط خريطة جوجل (Embed)</Label>
+              <Input
+                value={form.mapEmbedUrl}
+                onChange={(e) => setForm({ ...form, mapEmbedUrl: e.target.value })}
+                placeholder="https://www.google.com/maps/embed?pb=..."
                 className="h-11 mt-1.5"
                 dir="ltr"
               />

@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { SCHOOL_ID } from '@/lib/constants'
+import { resolveSchoolId } from '@/lib/school-utils'
 
 // GET /api/custom-sections?schoolId=xxx
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const schoolId = searchParams.get('schoolId') || SCHOOL_ID
+    const schoolIdParam = searchParams.get('schoolId')
+    const schoolId = await resolveSchoolId(schoolIdParam)
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: 'No school found' },
+        { status: 404 }
+      )
+    }
 
     const sections = await db.customSection.findMany({
       where: { schoolId },
@@ -27,11 +34,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { schoolId, title, content, imageUrl, layout, active, sortOrder } = body
-
-    if (!schoolId || !title) {
+    const { schoolId: bodySchoolId, title, content, imageUrl, layout, active, sortOrder } = body
+    const schoolId = await resolveSchoolId(bodySchoolId)
+    if (!schoolId) {
       return NextResponse.json(
-        { error: 'يرجى توفير المدرسة والعنوان' },
+        { error: 'No school found' },
+        { status: 404 }
+      )
+    }
+
+    if (!title) {
+      return NextResponse.json(
+        { error: 'يرجى توفير العنوان' },
         { status: 400 }
       )
     }
