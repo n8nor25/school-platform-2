@@ -1,0 +1,336 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-cairo);
+  --font-mono: var(--font-cairo);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* School brand colors */
+  --color-school-primary: #610000;
+  --color-school-secondary: #009688;
+  --color-school-accent: #FFC107;
+  --color-school-primary-light: #8B0000;
+  --color-school-secondary-light: #00BFA5;
+
+  /* Material3 Design Tokens - Mapped to Tailwind */
+  --color-m3-primary: #610000;
+  --color-m3-on-primary: #ffffff;
+  --color-m3-primary-container: #8B0000;
+  --color-m3-on-primary-container: #ffffff;
+  --color-m3-secondary: #009688;
+  --color-m3-on-secondary: #ffffff;
+  --color-m3-surface: #fef7ff;
+  --color-m3-on-surface: #1d1b20;
+  --color-m3-surface-variant: #e7e0ec;
+  --color-m3-on-surface-variant: #49454f;
+  --color-m3-outline-variant: #cac4d0;
+  --color-m3-surface-container: #f3edf7;
+  --color-m3-surface-container-lowest: #ffffff;
+  --color-m3-surface-container-high: #ece6f0;
+  --color-m3-on-secondary-fixed: #1d1b20;
+  --color-m3-surface-container-low: #f6f3f2;
+  --color-m3-secondary-container: #bdd6ff;
+  --color-m3-error: #ba1a1a;
+  --color-m3-on-error: #ffffff;
+
+  /* Layout tokens */
+  --color-container-max: 1280px;
+  --color-margin-x: 1rem;
+  --color-gutter: 1.5rem;
+  --color-stack-lg: 2rem;
+  --color-stack-xl: 3rem;
+  --color-section-padding: 4rem;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: #fbf9f8;
+  --foreground: #1d1b20;
+  --card: #ffffff;
+  --card-foreground: #1d1b20;
+  --popover: #ffffff;
+  --popover-foreground: #1d1b20;
+  --primary: #610000;
+  --primary-foreground: #ffffff;
+  --secondary: #009688;
+  --secondary-foreground: #ffffff;
+  --muted: #f3edf7;
+  --muted-foreground: #49454f;
+  --accent: #8b0000;
+  --accent-foreground: #ffffff;
+  --destructive: #ba1a1a;
+  --border: #cac4d0;
+  --input: #cac4d0;
+  --ring: #610000;
+  --chart-1: #610000;
+  --chart-2: #009688;
+  --chart-3: #FFC107;
+  --chart-4: #8b0000;
+  --chart-5: #009688;
+  --sidebar: #001c3a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #610000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3edf7;
+  --sidebar-accent-foreground: #1d1b20;
+  --sidebar-border: #cac4d0;
+  --sidebar-ring: #610000;
+
+  /* M3 CSS variables for tailwind.config.ts var() references */
+  --m3-primary: #610000;
+  --m3-on-primary: #ffffff;
+  --m3-primary-container: #8B0000;
+  --m3-on-primary-container: #ffffff;
+  --m3-secondary: #009688;
+  --m3-on-secondary: #ffffff;
+  --m3-secondary-container: #bdd6ff;
+  --m3-on-secondary-fixed: #1d1b20;
+  --m3-surface: #fef7ff;
+  --m3-on-surface: #1d1b20;
+  --m3-surface-variant: #e7e0ec;
+  --m3-on-surface-variant: #49454f;
+  --m3-outline-variant: #cac4d0;
+  --m3-surface-container: #f3edf7;
+  --m3-surface-container-lowest: #ffffff;
+  --m3-surface-container-low: #f6f3f2;
+  --m3-surface-container-high: #ece6f0;
+  --m3-error: #ba1a1a;
+  --m3-on-error: #ffffff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* RTL-specific styles */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .flip-in-rtl {
+  transform: scaleX(-1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #61000040;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #61000080;
+}
+
+/* News Ticker Animation (simple scroll) */
+@keyframes news-ticker {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-news-ticker {
+  animation: news-ticker 30s linear infinite;
+}
+
+/* News Ticker Scroll (horizontal, seamless) */
+@keyframes news-ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-news-ticker-scroll {
+  animation: news-ticker-scroll 40s linear infinite;
+}
+
+.animate-news-ticker-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* Vertical Scroll Animation */
+@keyframes vertical-scroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.animate-vertical-scroll {
+  animation: vertical-scroll 20s linear infinite;
+}
+
+.animate-vertical-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* Smooth section transitions */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #610000, #009688);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Teachers Swiper Custom Styles */
+.teachers-swiper {
+  padding-bottom: 50px !important;
+}
+
+.teachers-swiper .swiper-pagination-bullet {
+  width: 10px;
+  height: 10px;
+  background: #d1d5db;
+  opacity: 1;
+  transition: all 0.3s ease;
+}
+
+.teachers-swiper .swiper-pagination-bullet-active {
+  background: #610000;
+  width: 28px;
+  border-radius: 5px;
+}
+
+.teachers-swiper .swiper-button-next,
+.teachers-swiper .swiper-button-prev {
+  width: 40px;
+  height: 40px;
+  background: rgba(97, 0, 0, 0.9);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.teachers-swiper .swiper-button-next::after,
+.teachers-swiper .swiper-button-prev::after {
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+}
+
+.teachers-swiper .swiper-button-next:hover,
+.teachers-swiper .swiper-button-prev:hover {
+  background: #8B0000;
+  transform: scale(1.1);
+}
+
+.teachers-swiper .swiper-slide {
+  transition: transform 0.4s ease, opacity 0.4s ease;
+}
+
+.teachers-swiper .swiper-slide:hover {
+  transform: translateY(-6px);
+}
+
+/* Material Symbols Outlined config */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  direction: rtl;
+  user-select: none;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings:
+    'FILL' 1,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+/* Container max width utility */
+.max-w-container-max {
+  max-width: 1280px;
+}
+
+/* Swiper overrides for RTL */
+.swiper-rtl {
+  direction: rtl;
+}
+
+.swiper-rtl .swiper-button-next,
+.swiper-rtl .swiper-button-prev {
+  transform: scaleX(1);
+}
+
+.swiper-pagination-bullet-active {
+  background: #610000 !important;
+}

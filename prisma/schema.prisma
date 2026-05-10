@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ===== المدارس (Multi-Tenant) =====
+model School {
+  id             String    @id @default(cuid())
+  name           String
+  subdomain      String    @unique
+  description    String    @default("")
+  logoUrl        String?
+  primaryColor   String    @default("#610000")
+  secondaryColor String    @default("#009688")
+  address        String    @default("")
+  phone          String    @default("")
+  email          String    @default("")
+  facebookUrl    String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  settings       Settings?
+  users          User[]
+  news           News[]
+  gallery        Gallery[]
+  teachers       Teacher[]
+  stats          SchoolStats?
+  schedules      Schedule[]
+  pages          Page[]
+  grades         Grade[]
+  results        Result[]
+  sliders        Slider[]
+  customSections CustomSection[]
+}
+
+// ===== الإعدادات =====
+model Settings {
+  id             String   @id @default(cuid())
+  schoolId       String   @unique
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  heroTitle      String   @default("")
+  heroSubtitle   String   @default("المرحلة الإعدادية")
+  bannerTitle    String?
+  bannerImageUrl String?
+  vision         String?
+  aboutImage     String?
+  aboutVideoUrl  String?
+  showNewsTicker Boolean  @default(true)
+  showHeroBanner Boolean  @default(true)
+  showLiveStream Boolean  @default(false)
+  liveStreamUrl  String?
+  facebookUrl    String?
+  youtubeUrl     String?
+  showSlider     Boolean  @default(true)
+  showNews       Boolean  @default(true)
+  showServices   Boolean  @default(true)
+  showGallery    Boolean  @default(true)
+  showTeachers   Boolean  @default(true)
+  showStats      Boolean  @default(true)
+  showContact    Boolean  @default(true)
+  showAbout      Boolean  @default(true)
+  sectionOrder   String   @default("[]") // JSON array: ["slider","about","news","services","gallery","teachers","stats","contact"]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ===== المستخدمين / المشرفين =====
+model User {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  username    String
+  password    String
+  role        String  @default("school_admin") // super_admin, school_admin, teacher
+  permissions String  @default("{}") // JSON: {slider:true, news:true, gallery:false, ...}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([schoolId, username])
+}
+
+// ===== الأخبار =====
+model News {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String
+  slug      String?
+  excerpt   String?
+  content   String?
+  image     String?
+  category  String   @default("أخبار")
+  active    Boolean  @default(true)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, slug])
+}
+
+// ===== معرض الصور =====
+model Gallery {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String?
+  imageUrl  String
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===== المعلمون =====
+model Teacher {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  subject   String
+  email     String?
+  imageUrl  String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===== إحصائيات المدرسة =====
+model SchoolStats {
+  id        String   @id @default(cuid())
+  schoolId  String   @unique
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students  Int      @default(0)
+  teachers  Int      @default(0)
+  classes   Int      @default(0)
+  years     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===== الصفوف الدراسية والمواد =====
+model Grade {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String
+  subjects  String   // JSON string: ["عربي","انجليزي","رياضيات",...]
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===== النتائج =====
+model Result {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gradeName  String
+  term       String
+  students   String   // JSON string: [{seatNumber, studentName, arabic, english, ...}]
+  uploadDate DateTime @default(now())
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ===== جداول الحصص =====
+model Schedule {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title       String
+  category    String   @default("class") // class, teacher, daily
+  grade       String?
+  section     String?
+  teacherName String?
+  dayOfWeek   Int?
+  filePath    String
+  fileName    String
+  type        String   @default("حالي") // حالي, أرشيف
+  active      Boolean  @default(true)
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== سلايدر الصور =====
+model Slider {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  title     String?
+  subtitle  String?
+  link      String?
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ===== الصفحات الثابتة =====
+model Page {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  slug      String
+  title     String
+  content   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, slug])
+}
+
+// ===== الأقسام المخصصة =====
+model CustomSection {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title     String
+  content   String   @default("") // HTML content
+  imageUrl  String?
+  layout    String   @default("full") // full, image-right, image-left, cards
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
