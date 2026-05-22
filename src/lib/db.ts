@@ -5,11 +5,13 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // ===== CRITICAL: Fix SQLite → Supabase PostgreSQL override =====
-// On container/machine restart, the .env file may be overwritten with SQLite config.
-// This code detects that and forces the correct Supabase PostgreSQL URLs at runtime,
-// BEFORE the PrismaClient is instantiated.
-const SUPABASE_DATABASE_URL = 'postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres'
-const SUPABASE_DIRECT_URL = 'postgresql://postgres:e1yexwk7UBPWPeCV@db.tjnlxkyzopxnlunpeude.supabase.co:5432/postgres'
+// The container sets a system-level DATABASE_URL pointing to SQLite,
+// which overrides the .env file. This code detects that and forces
+// the correct Supabase PostgreSQL URLs at runtime, BEFORE the
+// PrismaClient is instantiated.
+// Connection limit=5 to avoid Supabase pooler max client limits.
+const SUPABASE_DATABASE_URL = 'postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5'
+const SUPABASE_DIRECT_URL = 'postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?connection_limit=5'
 
 const currentUrl = process.env.DATABASE_URL || ''
 const currentDirectUrl = process.env.DIRECT_URL || ''
@@ -23,7 +25,7 @@ if (!currentUrl.startsWith('postgresql://')) {
 // Override DIRECT_URL if it's not pointing to PostgreSQL
 if (!currentDirectUrl.startsWith('postgresql://')) {
   process.env.DIRECT_URL = SUPABASE_DIRECT_URL
-  console.warn('[db] ⚠️ DIRECT_URL was not PostgreSQL, overriding with Supabase direct URL')
+  console.warn('[db] ⚠️ DIRECT_URL was not PostgreSQL, overriding with Supabase pooler URL')
 }
 
 // Log the active database connection (mask password for security)
