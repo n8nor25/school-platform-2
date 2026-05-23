@@ -1,34 +1,17 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId");
-
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
     if (!schoolId) {
-      // No schoolId provided, return the first available school
-      const anySchool = await db.school.findFirst({
-        where: { isActive: true },
-      });
-      if (!anySchool) {
-        return NextResponse.json(
-          { error: "No school found" },
-          { status: 404 }
-        );
-      }
-      const settings = await db.settings.findUnique({
-        where: { schoolId: anySchool.id },
-      });
-      const stats = await db.schoolStats.findUnique({
-        where: { schoolId: anySchool.id },
-      });
-      return NextResponse.json({
-        school: anySchool,
-        settings,
-        stats,
-        schoolId: anySchool.id,
-      });
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
     }
 
     const school = await db.school.findUnique({
@@ -36,28 +19,10 @@ export async function GET(request: Request) {
     });
 
     if (!school) {
-      // School not found by ID, try to find any active school as fallback
-      const anySchool = await db.school.findFirst({
-        where: { isActive: true },
-      });
-      if (!anySchool) {
-        return NextResponse.json(
-          { error: "No school found" },
-          { status: 404 }
-        );
-      }
-      const settings = await db.settings.findUnique({
-        where: { schoolId: anySchool.id },
-      });
-      const stats = await db.schoolStats.findUnique({
-        where: { schoolId: anySchool.id },
-      });
-      return NextResponse.json({
-        school: anySchool,
-        settings,
-        stats,
-        schoolId: anySchool.id,
-      });
+      return NextResponse.json(
+        { error: "School not found" },
+        { status: 404 }
+      );
     }
 
     const settings = await db.settings.findUnique({

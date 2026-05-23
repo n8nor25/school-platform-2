@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { SCHOOL_ID } from "@/lib/constants";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId") || SCHOOL_ID;
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
     const includeArchived = searchParams.get("includeArchived") === "true";
     const archivedOnly = searchParams.get("archivedOnly") === "true";
 
@@ -34,7 +41,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { schoolId, name, subject, email, imageUrl, sortOrder, active } = body;
+    const { schoolId: bodySchoolId, name, subject, email, imageUrl, sortOrder, active } = body;
+    const schoolId = await resolveSchoolId(bodySchoolId);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     if (!name || !subject) {
       return NextResponse.json(
@@ -45,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const teacher = await db.teacher.create({
       data: {
-        schoolId: schoolId || SCHOOL_ID,
+        schoolId,
         name,
         subject,
         email,

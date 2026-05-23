@@ -1,13 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import dynamic from 'next/dynamic'
 import {
   Phone, Mail, Facebook, Youtube, Search, Menu, X,
-  ChevronLeft, ChevronRight, Clock, BookOpen, Calendar,
-  GraduationCap, ClipboardList, Activity, MessageSquare,
-  Camera, Users, MapPin, Send, Star, Award, TrendingUp,
-  School, Eye, ArrowUp, Shield, Play, Globe
+  ChevronLeft, Clock, BookOpen,
+  Camera, Users, MapPin, Send, Star, TrendingUp,
+  Eye, ArrowUp, Shield, Play, Globe
 } from 'lucide-react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -23,31 +22,30 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from '@/components/ui/carousel'
-
-
 import Autoplay from 'embla-carousel-autoplay'
-import { Swiper, SwiperSlide } from 'swiper/react'
-import { Navigation, Pagination, Autoplay as SwiperAutoplay, EffectCreative, EffectCoverflow } from 'swiper/modules'
-import 'swiper/css'
-import 'swiper/css/navigation'
-import 'swiper/css/pagination'
-import 'swiper/css/effect-creative'
-import 'swiper/css/effect-coverflow'
 import { useAdminStore } from '@/lib/admin-store'
-import { AdminLayout } from '@/components/admin/admin-layout'
-import { AdminLogin } from '@/components/admin/admin-login'
-import StudentLifePage from '@/components/student-life-page'
-import ResultsPage from '@/components/results-page'
-import SchedulesPage from '@/components/schedules-page'
-import DigitalLibraryPage from '@/components/digital-library-page'
-import ParentsPortalPage from '@/components/parents-portal-page'
-import { CustomSectionRenderer } from '@/components/home/CustomSectionRenderer'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+
+// Lazy-loaded page components (only loaded when their tab is active)
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-m3-surface">
+    <div className="w-12 h-12 border-4 border-m3-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+)
+
+const AdminLayout = dynamic(() => import('@/components/admin/admin-layout').then(m => ({ default: m.AdminLayout })), { loading: PageLoader })
+const AdminLogin = dynamic(() => import('@/components/admin/admin-login').then(m => ({ default: m.AdminLogin })))
+const StudentLifePage = dynamic(() => import('@/components/student-life-page'), { loading: PageLoader })
+const ResultsPage = dynamic(() => import('@/components/results-page'), { loading: PageLoader })
+const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
+const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
+const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
+const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
 interface SchoolData {
@@ -683,58 +681,51 @@ function HomePage() {
             ))}
           </div>
           {/* Mobile Nav */}
-          <AnimatePresence>
-            {mobileMenuOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="lg:hidden overflow-hidden"
-              >
-                {navLinks.map((link, index) => (
-                  link.isServicesDropdown ? (
-                    <div key={link.href} className="border-b border-white/10">
-                      <div className="block px-4 py-3 text-sm font-medium text-white min-h-[44px] flex items-center">
-                        {link.label}
-                      </div>
-                      {serviceDropdownItems.map((item) => (
-                        <button
-                          key={item.action}
-                          onClick={() => {
-                            if (item.action === 'results') setShowResultsPage(true)
-                            if (item.action === 'schedules') setShowSchedulesPage(true)
-                            if (item.action === 'library') setShowLibraryPage(true)
-                            if (item.action === 'parents') setShowParentsPage(true)
-                            setMobileMenuOpen(false)
-                          }}
-                          className="w-full flex items-center gap-2 px-8 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors min-h-[40px]"
-                        >
-                          <span className="material-symbols-outlined text-base text-white/60">{item.icon}</span>
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <a
-                      key={link.href}
-                      href={link.isStudentLife ? undefined : link.href}
-                      onClick={(e) => {
-                        if (link.isStudentLife) {
-                          e.preventDefault()
-                          setShowStudentLife(true)
-                        }
-                        setActiveNavIndex(index)
+          <div
+            className={`lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${mobileMenuOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+          >
+            {navLinks.map((link, index) => (
+              link.isServicesDropdown ? (
+                <div key={link.href} className="border-b border-white/10">
+                  <div className="block px-4 py-3 text-sm font-medium text-white min-h-[44px] flex items-center">
+                    {link.label}
+                  </div>
+                  {serviceDropdownItems.map((item) => (
+                    <button
+                      key={item.action}
+                      onClick={() => {
+                        if (item.action === 'results') setShowResultsPage(true)
+                        if (item.action === 'schedules') setShowSchedulesPage(true)
+                        if (item.action === 'library') setShowLibraryPage(true)
+                        if (item.action === 'parents') setShowParentsPage(true)
                         setMobileMenuOpen(false)
                       }}
-                      className="block px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors min-h-[44px] flex items-center border-b border-white/10"
+                      className="w-full flex items-center gap-2 px-8 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors min-h-[40px]"
                     >
-                      {link.label}
-                    </a>
-                  )
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                      <span className="material-symbols-outlined text-base text-white/60">{item.icon}</span>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <a
+                  key={link.href}
+                  href={link.isStudentLife ? undefined : link.href}
+                  onClick={(e) => {
+                    if (link.isStudentLife) {
+                      e.preventDefault()
+                      setShowStudentLife(true)
+                    }
+                    setActiveNavIndex(index)
+                    setMobileMenuOpen(false)
+                  }}
+                  className="block px-4 py-3 text-sm font-medium hover:bg-white/10 transition-colors min-h-[44px] flex items-center border-b border-white/10"
+                >
+                  {link.label}
+                </a>
+              )
+            ))}
+          </div>
         </div>
       </nav>
 
@@ -1025,11 +1016,7 @@ function HomePage() {
         <section id="welcome" className="py-12 md:py-16 bg-m3-surface-container-lowest">
           <div className="max-w-[1280px] mx-auto px-4">
             <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
+              <div
                 className="relative"
               >
                 {settings?.aboutVideoUrl ? (
@@ -1075,12 +1062,8 @@ function HomePage() {
                 <div className="absolute -bottom-4 -left-4 bg-m3-secondary text-white px-6 py-3 rounded-xl shadow-lg hidden md:block">
                   <p className="font-bold text-lg">نحو التميز</p>
                 </div>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: -30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
+              </div>
+              <div
               >
                 <Badge className="bg-m3-primary/10 text-m3-primary hover:bg-m3-primary/20 mb-4">
                   <Star className="w-3.5 h-3.5 ml-1" />
@@ -1105,7 +1088,7 @@ function HomePage() {
                     </p>
                   </div>
                 )}
-              </motion.div>
+              </div>
             </div>
           </div>
         </section>
@@ -1138,12 +1121,8 @@ function HomePage() {
             ) : news.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {news.slice(0, 6).map((item, index) => (
-                  <motion.div
+                  <div
                     key={item.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 }}
                   >
                     <Card className="overflow-hidden group hover:shadow-lg transition-all duration-300 h-full">
                       <div className="relative h-48 overflow-hidden">
@@ -1173,7 +1152,7 @@ function HomePage() {
                         )}
                       </CardContent>
                     </Card>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -1246,12 +1225,8 @@ function HomePage() {
                   },
                 },
               ].map((service, index) => (
-                <motion.div
+                <div
                   key={service.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
                 >
                   <Card
                     className="overflow-hidden group hover:shadow-xl transition-all duration-300 h-full cursor-pointer"
@@ -1274,7 +1249,7 @@ function HomePage() {
                       </span>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
@@ -1294,12 +1269,8 @@ function HomePage() {
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {gallery.map((item, index) => (
-                  <motion.div
+                  <div
                     key={item.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.05 }}
                     className="group relative aspect-square rounded-xl overflow-hidden shadow-md cursor-pointer"
                   >
                     <img
@@ -1312,14 +1283,14 @@ function HomePage() {
                         <p className="text-white text-sm font-medium">{item.title}</p>
                       )}
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
           </section>
         )}
 
-        {/* ===== 11. TEACHERS SECTION (SWIPER) ===== */}
+        {/* ===== 11. TEACHERS SECTION ===== */}
         {(settings?.showTeachers ?? true) && teachers.length > 0 && (
           <section id="teachers" className="py-12 md:py-16 bg-m3-surface-container-lowest overflow-hidden">
             <div className="max-w-[1280px] mx-auto px-4">
@@ -1333,87 +1304,60 @@ function HomePage() {
                   اكتشف فريقنا من المعلمين المتميزين والمحترفين في مجال التعليم
                 </p>
               </div>
-              <Swiper
-                modules={[Navigation, Pagination, SwiperAutoplay, EffectCreative]}
-                spaceBetween={24}
-                slidesPerView={1}
-                navigation
-                pagination={{ clickable: true }}
-                autoplay={{ delay: 2500, disableOnInteraction: false, pauseOnMouseEnter: true }}
-                loop={teachers.length > 3}
-                dir="rtl"
-                effect="creative"
-                creativeEffect={{
-                  prev: {
-                    shadow: true,
-                    translate: ['-20%', 0, -1],
-                    opacity: 0.6,
-                    scale: 0.9,
-                  },
-                  next: {
-                    translate: ['100%', 0, 0],
-                    opacity: 1,
-                    scale: 1,
-                  },
-                }}
-                breakpoints={{
-                  640: { slidesPerView: 2, effect: 'slide' },
-                  768: { slidesPerView: 3, effect: 'slide' },
-                  1024: { slidesPerView: 4, effect: 'slide' },
-                }}
-                className="teachers-swiper pb-12"
+              <Carousel
+                opts={{ direction: 'rtl', loop: teachers.length > 3, align: 'start' }}
+                plugins={[Autoplay({ delay: 2500, stopOnInteraction: true })]}
+                className="teachers-carousel pb-12 w-full"
               >
-                {teachers.map((teacher, index) => (
-                  <SwiperSlide key={teacher.id}>
-                    <motion.div
-                      initial={{ opacity: 0, y: 30 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: index * 0.08, duration: 0.5 }}
-                      className="bg-white rounded-2xl shadow-md overflow-hidden group hover:shadow-xl transition-all duration-400 border border-gray-100"
-                    >
-                      {/* Teacher Image */}
-                      <div className="relative aspect-[3/4] overflow-hidden">
-                        {teacher.imageUrl ? (
-                          <img
-                            src={teacher.imageUrl}
-                            alt={teacher.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-m3-primary via-m3-primary/90 to-m3-primary-container flex items-center justify-center">
-                            <span className="text-6xl font-bold text-white/70 group-hover:scale-110 transition-transform duration-500">{teacher.name.charAt(0)}</span>
+                <CarouselContent className="-ml-4">
+                  {teachers.map((teacher) => (
+                    <CarouselItem key={teacher.id} className="pl-4 basis-full sm:basis-1/2 md:basis-1/3 lg:basis-1/4">
+                      <div className="bg-white rounded-2xl shadow-md overflow-hidden group hover:shadow-xl transition-all duration-400 border border-gray-100">
+                        {/* Teacher Image */}
+                        <div className="relative aspect-[3/4] overflow-hidden">
+                          {teacher.imageUrl ? (
+                            <img
+                              src={teacher.imageUrl}
+                              alt={teacher.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-m3-primary via-m3-primary/90 to-m3-primary-container flex items-center justify-center">
+                              <span className="text-6xl font-bold text-white/70 group-hover:scale-110 transition-transform duration-500">{teacher.name.charAt(0)}</span>
+                            </div>
+                          )}
+                          {/* Overlay on hover */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                          {/* Role Badge */}
+                          <div className={`absolute top-3 left-3 ${getSubjectColor(teacher.subject)} text-white text-xs px-3 py-1 rounded-full font-medium shadow-md`}>
+                            {teacher.subject}
                           </div>
-                        )}
-                        {/* Overlay on hover */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                        {/* Role Badge */}
-                        <div className={`absolute top-3 left-3 ${getSubjectColor(teacher.subject)} text-white text-xs px-3 py-1 rounded-full font-medium shadow-md`}>
-                          {teacher.subject}
+                          {/* Name overlay on hover */}
+                          <div className="absolute bottom-0 right-0 left-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out">
+                            <h3 className="font-bold text-white text-lg drop-shadow-lg">{teacher.name}</h3>
+                            <p className="text-white/80 text-sm">{teacher.subject}</p>
+                          </div>
                         </div>
-
-                        {/* Name overlay on hover */}
-                        <div className="absolute bottom-0 right-0 left-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out">
-                          <h3 className="font-bold text-white text-lg drop-shadow-lg">{teacher.name}</h3>
-                          <p className="text-white/80 text-sm">{teacher.subject}</p>
+                        {/* Teacher Info */}
+                        <div className="p-4 text-center group-hover:bg-m3-primary/5 transition-colors duration-300">
+                          <h3 className="font-bold text-m3-on-surface text-base mb-0.5">{teacher.name}</h3>
+                          <p className="text-sm text-m3-on-surface-variant mb-1.5">{teacher.subject}</p>
+                          {teacher.email && (
+                            <div className="flex items-center justify-center gap-1 text-xs text-m3-on-surface-variant">
+                              <Mail className="w-3 h-3" />
+                              <span dir="ltr" className="truncate">{teacher.email}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      {/* Teacher Info */}
-                      <div className="p-4 text-center group-hover:bg-m3-primary/5 transition-colors duration-300">
-                        <h3 className="font-bold text-m3-on-surface text-base mb-0.5">{teacher.name}</h3>
-                        <p className="text-sm text-m3-on-surface-variant mb-1.5">{teacher.subject}</p>
-                        {teacher.email && (
-                          <div className="flex items-center justify-center gap-1 text-xs text-m3-on-surface-variant">
-                            <Mail className="w-3 h-3" />
-                            <span dir="ltr" className="truncate">{teacher.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  </SwiperSlide>
-                ))}
-              </Swiper>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                <CarouselPrevious className="right-3 left-auto" />
+                <CarouselNext className="left-3 right-auto" />
+              </Carousel>
             </div>
           </section>
         )}
@@ -1428,17 +1372,14 @@ function HomePage() {
                 { icon: 'menu_book', label: 'فصول', value: stats.classes },
                 { icon: 'military_tech', label: 'سنوات خبرة', value: stats.years },
               ].map((stat) => (
-                <motion.div
+                <div
                   key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
                   className="text-center text-white"
                 >
                   <span className="material-symbols-outlined text-4xl mb-2 text-white/80 block mx-auto">{stat.icon}</span>
                   <div className="text-3xl font-bold">{stat.value}</div>
                   <div className="text-white/70 text-sm mt-1">{stat.label}</div>
-                </motion.div>
+                </div>
               ))}
             </div>
           </section>
@@ -1457,10 +1398,7 @@ function HomePage() {
             </div>
             <div className="grid md:grid-cols-2 gap-8">
               {/* Contact Info Card */}
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
+              <div
                 className="space-y-6"
               >
                 <Card className="border-0 shadow-md bg-gradient-to-bl from-m3-primary to-m3-primary-container text-white">
@@ -1526,13 +1464,10 @@ function HomePage() {
                     className="w-full"
                   />
                 </Card>
-              </motion.div>
+              </div>
 
               {/* Contact Form */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+              <div
               >
                 <Card className="border-0 shadow-md h-full">
                   <CardContent className="p-6">
@@ -1569,7 +1504,7 @@ function HomePage() {
                     </form>
                   </CardContent>
                 </Card>
-              </motion.div>
+              </div>
             </div>
           </div>
         </section>
@@ -1744,20 +1679,13 @@ function HomePage() {
       <AdminLogin open={showAdminLogin} onOpenChange={setShowAdminLogin} />
 
       {/* ===== SCROLL TO TOP ===== */}
-      <AnimatePresence>
-        {showScrollTop && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={scrollToTop}
-            className="fixed bottom-6 left-6 z-50 w-12 h-12 rounded-full bg-m3-primary text-m3-on-primary shadow-lg flex items-center justify-center hover:bg-m3-primary-container transition-colors"
-            aria-label="العودة للأعلى"
-          >
-            <ArrowUp className="w-5 h-5" />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-6 left-6 z-50 w-12 h-12 rounded-full bg-m3-primary text-m3-on-primary shadow-lg flex items-center justify-center hover:bg-m3-primary-container transition-all duration-300 ${showScrollTop ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}`}
+        aria-label="العودة للأعلى"
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
 
       {/* ===== ADMIN SHIELD BUTTON ===== */}
       <button

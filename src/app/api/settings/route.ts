@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { SCHOOL_ID } from "@/lib/constants";
+import { resolveSchoolId } from "@/lib/school-utils";
 
 // Fields that belong to the School model, not Settings
 const SCHOOL_FIELDS = ["phone", "email", "address", "name", "description", "logoUrl", "primaryColor", "secondaryColor"];
@@ -8,7 +8,14 @@ const SCHOOL_FIELDS = ["phone", "email", "address", "name", "description", "logo
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const schoolId = searchParams.get("schoolId") || SCHOOL_ID;
+    const schoolIdParam = searchParams.get("schoolId");
+    const schoolId = await resolveSchoolId(schoolIdParam);
+    if (!schoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     const settings = await db.settings.findUnique({
       where: { schoolId },
@@ -44,7 +51,13 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { schoolId: bodySchoolId, ...allData } = body;
-    const targetSchoolId = querySchoolId || bodySchoolId || SCHOOL_ID;
+    const targetSchoolId = await resolveSchoolId(querySchoolId || bodySchoolId);
+    if (!targetSchoolId) {
+      return NextResponse.json(
+        { error: "No school found" },
+        { status: 404 }
+      );
+    }
 
     // Separate Settings fields from School fields
     const settingsData: Record<string, unknown> = {};
