@@ -6,8 +6,8 @@ const globalForPrisma = globalThis as unknown as {
 
 // ===== CRITICAL FIXED: SQLite → Supabase PostgreSQL connection management =====
 // تفعيل مجمع الاتصالات من Supabase على المنفذ الصحيح 6543 لضمان عدم نفاد حدود الاتصال
-const SUPABASE_DATABASE_URL = 'postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4'
-const SUPABASE_DIRECT_URL = 'postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres'
+const SUPABASE_DATABASE_URL = 'postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4'
+const SUPABASE_DIRECT_URL = 'postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres'
 
 const currentUrl = process.env.DATABASE_URL || ''
 const currentDirectUrl = process.env.DIRECT_URL || ''

@@ -4,18 +4,18 @@ cd /home/z/my-project
 # Fix schema.prisma - force postgresql
 sed -i '/^datasource db {/,/^}/c\datasource db {\n  provider  = "postgresql"\n  url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")\n}' prisma/schema.prisma
 
-# Fix .env file
+# Fix .env file - Updated for new Supabase project
 cat > .env << 'EOF'
-DATABASE_URL=postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5
-DIRECT_URL=postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?connection_limit=5
+DATABASE_URL=postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4
+DIRECT_URL=postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
 EOF
 
 # Remove any SQLite files
 rm -f db/*.db db/*.db-journal 2>/dev/null
 
-# Export env vars (critical - system DATABASE_URL points to SQLite)
-export DATABASE_URL='postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5'
-export DIRECT_URL='postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?connection_limit=5'
+# Export env vars
+export DATABASE_URL='postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4'
+export DIRECT_URL='postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres'
 
 # Regenerate Prisma client for PostgreSQL
 npx prisma generate 2>/dev/null
@@ -27,11 +27,10 @@ if pgrep -f "next-server" > /dev/null 2>&1; then
 fi
 
 # Start dev server using double-fork technique for persistence
-# This creates an orphan process that survives shell session termination
 bash -c '
   cd /home/z/my-project
-  export DATABASE_URL="postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=5"
-  export DIRECT_URL="postgresql://postgres.tjnlxkyzopxnlunpeude:e1yexwk7UBPWPeCV@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?connection_limit=5"
+  export DATABASE_URL="postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4"
+  export DIRECT_URL="postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
   export NODE_OPTIONS="--max-old-space-size=2048"
   nohup npx next dev -p 3000 --turbopack > /home/z/my-project/dev.log 2>&1 &
   echo $! > /tmp/next-server-pid
