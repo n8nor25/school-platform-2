@@ -5,6 +5,7 @@ import {
   LayoutDashboard, FileBarChart, GraduationCap, Newspaper,
   Image, Settings, Users, Calendar, LogOut, Menu, X, School,
   SlidersHorizontal, LayoutGrid, UserCog, Building2, UserPlus,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,10 +29,12 @@ import { SectionsManagement } from './sections-management'
 import { UsersManagement } from './users-management'
 import { SchoolsManagement } from './schools-management'
 import { StudentsManagement } from './students-management'
+import { AttendanceManagement } from './attendance-management'
 
 const navItems = [
   { key: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
   { key: 'students', label: 'إدارة الطلاب', icon: UserPlus },
+  { key: 'attendance', label: 'الحضور والغياب', icon: ClipboardCheck },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -49,6 +52,7 @@ function renderView(view: string) {
   switch (view) {
     case 'dashboard': return <Dashboard />
     case 'students': return <StudentsManagement />
+    case 'attendance': return <AttendanceManagement />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />
