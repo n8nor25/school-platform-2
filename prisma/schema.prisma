@@ -38,6 +38,18 @@ model School {
   results        Result[]
   sliders        Slider[]
   customSections CustomSection[]
+  students       Student[]
+  expenses       Expense[]
+  expenseCategories ExpenseCategory[]
+  buses          Bus[]
+  busRoutes      BusRoute[]
+  fees           Fee[]
+  feePayments    FeePayment[]
+  attendanceRecords Attendance[]
+  employees      Employee[]
+  salaries       Salary[]
+  academicYears  AcademicYear[]
+  classrooms     Classroom[]
 }
 
 // ===== الإعدادات =====
@@ -237,4 +249,299 @@ model CustomSection {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// ===== وحدات إدارة المدرسة الجديدة =====
+// ============================================================
+
+// ===== السنة الدراسية =====
+model AcademicYear {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String   // "2024/2025"
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classrooms  Classroom[]
+  fees        Fee[]
+  attendanceRecords Attendance[]
+
+  @@unique([schoolId, name])
+}
+
+// ===== الفصول الدراسية =====
+model Classroom {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  name           String   // "الصف الأول - أ"
+  gradeLevel     String   // "الصف الأول الإعدادي"
+  section        String   @default("أ") // أ، ب، ج
+  capacity       Int      @default(30)
+  teacherId      String?  // معلم الفصل
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  students       Student[]
+  attendanceRecords Attendance[]
+
+  @@unique([schoolId, academicYearId, name])
+}
+
+// ===== الطلاب =====
+model Student {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  classroomId    String?
+  classroom      Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  studentNumber  String   // رقم الطالب
+  name           String   // الاسم
+  nationalId     String?  // الرقم القومي
+  dateOfBirth    DateTime? // تاريخ الميلاد
+  gender         String   @default("ذكر") // ذكر، أنثى
+  address        String?  // العنوان
+  phone          String?  // هاتف ولي الأمر
+  parentName     String?  // اسم ولي الأمر
+  parentPhone    String?  // هاتف ولي الأمر
+  parentNationalId String? // الرقم القومي لولي الأمر
+  enrollDate     DateTime @default(now()) // تاريخ القيد
+  status         String   @default("نشط") // نشط، منقول، منسحب، متخرج
+  previousSchool String?  // المدرسة السابقة
+  notes          String?  // ملاحظات
+  archived       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  feePayments    FeePayment[]
+  attendanceRecords Attendance[]
+  transport      StudentTransport?
+
+  @@unique([schoolId, studentNumber])
+}
+
+// ===== المصروفات =====
+model Expense {
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryId   String?
+  category     ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title        String   // بيان المصروف
+  amount       Float    // المبلغ
+  expenseDate  DateTime // تاريخ الصرف
+  paymentMethod String  @default("نقدي") // نقدي، تحويل، شيك
+  recipient    String?  // المستلم
+  reference    String?  // رقم المرجع / الإيصال
+  notes        String?  // ملاحظات
+  createdBy    String?  // من أنشأ السجل
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ===== تصنيفات المصروفات =====
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name      String   // رواتب، صيانة، كهرباء، ماء، قرطاسية...
+  icon      String?  // أيقونة
+  color     String?  // لون
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenses  Expense[]
+
+  @@unique([schoolId, name])
+}
+
+// ===== الباصات =====
+model Bus {
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  plateNumber  String   // رقم اللوحة
+  driverName   String   // اسم السائق
+  driverPhone  String?  // هاتف السائق
+  capacity     Int      @default(30) // السعة
+  model        String?  // موديل الباص
+  color        String?  // لون الباص (للتمييز)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  routes       BusRoute[]
+
+  @@unique([schoolId, plateNumber])
+}
+
+// ===== خطوط الباص =====
+model BusRoute {
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  busId        String
+  bus          Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+  name         String   // اسم الخط / المنطقة
+  area         String   // المنطقة الجغرافية
+  morningTime  String?  // موعد الصباح
+  afternoonTime String? // موعد الظهيرة
+  stops        String   @default("[]") // JSON: [{"name":"محطة 1","time":"7:00"},...]
+  monthlyFee   Float    @default(0) // الاشتراك الشهري
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions StudentTransport[]
+}
+
+// ===== اشتراكات النقل =====
+model StudentTransport {
+  id           String   @id @default(cuid())
+  schoolId     String
+  studentId    String   @unique
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  routeId      String
+  route        BusRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  startDate    DateTime // بداية الاشتراك
+  endDate      DateTime? // نهاية الاشتراك
+  direction    String   @default("ذهاب وعودة") // ذهاب، عودة، ذهاب وعودة
+  monthlyFee   Float    @default(0) // قد يختلف عن رسوم الخط
+  status       String   @default("نشط") // نشط، ملغي، متوقف
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ===== الرسوم والأقساط =====
+model Fee {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  name           String   // "رسوم الدراسة - الصف الأول"
+  gradeLevel     String?  // الصف الدراسي (null = جميع الصفوف)
+  totalAmount    Float    // إجمالي الرسوم
+  installments   Int      @default(1) // عدد الأقساط
+  installmentAmount Float? // قيمة القسط (يُحسب تلقائياً)
+  dueDates       String   @default("[]") // JSON: ["2024-09-01","2024-12-01","2025-03-01"]
+  feeType        String   @default("دراسة") // دراسة، أنشطة، كتب، أخرى
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments       FeePayment[]
+}
+
+// ===== دفعات الأقساط =====
+model FeePayment {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  feeId         String
+  fee           Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount        Float    // المبلغ المدفوع
+  paymentDate   DateTime // تاريخ الدفع
+  paymentMethod String   @default("نقدي") // نقدي، تحويل، بطاقة
+  receiptNumber String?  // رقم الإيصال
+  installmentNo Int      @default(1) // رقم القسط
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ===== الحضور والغياب =====
+model Attendance {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String?
+  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classroomId   String?
+  classroom     Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date          DateTime // تاريخ اليوم
+  status        String   @default("حاضر") // حاضر، غائب، غائب بعذر، متأخر
+  arrivalTime   String?  // وقت الحضور
+  notes         String?  // سبب الغيب أو ملاحظة
+  recordedBy    String?  // من سجل
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([schoolId, studentId, date])
+}
+
+// ===== الموظفين =====
+model Employee {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  employeeNumber String   // رقم الموظف
+  name           String   // الاسم
+  nationalId     String?  // الرقم القومي
+  jobTitle       String   // المسمى الوظيفي
+  department     String?  // القسم
+  qualification  String?  // المؤهل
+  specialization String?  // التخصص
+  hireDate       DateTime? // تاريخ التعيين
+  phone          String?  // الهاتف
+  email          String?  // البريد
+  address        String?  // العنوان
+  salary         Float    @default(0) // الراتب الأساسي
+  allowances     Float    @default(0) // البدلات
+  deductions     Float    @default(0) // الخصومات الثابتة
+  contractType   String   @default("دائم") // دائم، مؤقت، جزء وقت
+  status         String   @default("نشط") // نشط، إجازة، مستقيل
+  bankName       String?  // البنك
+  bankAccount    String?  // رقم الحساب البنكي
+  imageUrl       String?  // الصورة
+  notes          String?
+  archived       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  salaries       Salary[]
+
+  @@unique([schoolId, employeeNumber])
+}
+
+// ===== الرواتب =====
+model Salary {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month          Int      // الشهر 1-12
+  year           Int      // السنة
+  basicSalary    Float    // الراتب الأساسي
+  allowances     Float    @default(0) // البدلات
+  overtime       Float    @default(0) // ساعات إضافية
+  bonus          Float    @default(0) // مكافآت
+  deductions     Float    @default(0) // الخصومات
+  advancePayment Float    @default(0) // السلف
+  insurance      Float    @default(0) // التأمينات
+  taxes          Float    @default(0) // الضرائب
+  netSalary      Float    // الصافي (يُحسب تلقائياً)
+  paymentDate    DateTime? // تاريخ الصرف
+  paymentMethod  String   @default("تحويل") // تحويل، نقدي، شيك
+  status         String   @default("معلق") // معلق، مدفوع، ملغي
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([schoolId, employeeId, month, year])
 }
