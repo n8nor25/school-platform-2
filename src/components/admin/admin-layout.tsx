@@ -4,7 +4,7 @@ import React from 'react'
 import {
   LayoutDashboard, FileBarChart, GraduationCap, Newspaper,
   Image, Settings, Users, Calendar, LogOut, Menu, X, School,
-  SlidersHorizontal, LayoutGrid, UserCog, Building2,
+  SlidersHorizontal, LayoutGrid, UserCog, Building2, UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,9 +27,11 @@ import { SliderManagement } from './slider-management'
 import { SectionsManagement } from './sections-management'
 import { UsersManagement } from './users-management'
 import { SchoolsManagement } from './schools-management'
+import { StudentsManagement } from './students-management'
 
 const navItems = [
   { key: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
+  { key: 'students', label: 'إدارة الطلاب', icon: UserPlus },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -46,6 +48,7 @@ const navItems = [
 function renderView(view: string) {
   switch (view) {
     case 'dashboard': return <Dashboard />
+    case 'students': return <StudentsManagement />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />
