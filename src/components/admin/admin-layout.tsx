@@ -1,11 +1,13 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import {
   LayoutDashboard, FileBarChart, GraduationCap, Newspaper,
   Image, Settings, Users, Calendar, LogOut, Menu, X, School,
   SlidersHorizontal, LayoutGrid, UserCog, Building2, UserPlus,
-  ClipboardCheck, Briefcase,
+  ClipboardCheck, ChevronDown, BusFront, Bus, MapPin, CreditCard,
+  FileText, Coins, Receipt, BarChart3, UsersRound, Briefcase,
+  DollarSign, Palmtree, Printer,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,12 +33,75 @@ import { SchoolsManagement } from './schools-management'
 import { StudentsManagement } from './students-management'
 import { AttendanceManagement } from './attendance-management'
 import { EmployeeAttendanceManagement } from './employee-attendance-management'
+import { BusFleetManagement } from './bus-fleet-management'
+import { BusRoutesManagement } from './bus-routes-management'
+import { TransportSubscriptionsManagement } from './transport-subscriptions-management'
+import { BusPassengerReport } from './bus-passenger-report'
+import { FeesStructure } from './fees-structure'
+import { FeeAssignments } from './fee-assignments'
+import { FeePaymentsManagement } from './fee-payments-management'
+import { FeeStatements } from './fee-statements'
+import { FinancialReports } from './financial-reports'
 
-const navItems = [
+// ===== Nav Item Types =====
+interface NavItem {
+  key: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  superAdminOnly?: boolean
+}
+
+interface NavGroup {
+  key: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  children: NavItem[]
+  superAdminOnly?: boolean
+}
+
+type NavEntry = NavItem | NavGroup
+
+function isNavGroup(entry: NavEntry): entry is NavGroup {
+  return 'children' in entry
+}
+
+// ===== Navigation Configuration =====
+const navEntries: NavEntry[] = [
   { key: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
   { key: 'students', label: 'إدارة الطلاب', icon: UserPlus },
   { key: 'attendance', label: 'حضور الطلاب', icon: ClipboardCheck },
-  { key: 'emp-attendance', label: 'حضور الموظفين', icon: Briefcase },
+  {
+    key: 'hr',
+    label: 'شئون العاملين',
+    icon: UsersRound,
+    children: [
+      { key: 'emp-attendance', label: 'الحضور والانصراف', icon: ClipboardCheck },
+      { key: 'hr-leaves', label: 'الإجازات', icon: Palmtree },
+    ],
+  },
+  {
+    key: 'transport',
+    label: 'النقل المدرسي',
+    icon: BusFront,
+    children: [
+      { key: 'transport-fleet', label: 'الباصات والسائقين', icon: Bus },
+      { key: 'transport-routes', label: 'خطوط السير', icon: MapPin },
+      { key: 'transport-subscriptions', label: 'الاشتراكات والمدفوعات', icon: CreditCard },
+      { key: 'transport-reports', label: 'كشوف الباصات', icon: Printer },
+    ],
+  },
+  {
+    key: 'fees',
+    label: 'الأقساط والرسوم',
+    icon: Coins,
+    children: [
+      { key: 'fees-structure', label: 'هيكل الرسوم', icon: Coins },
+      { key: 'fee-assignments', label: 'تخصيص الرسوم', icon: Users },
+      { key: 'fee-payments', label: 'تسجيل المدفوعات', icon: Receipt },
+      { key: 'fee-statements', label: 'كشوف الحسابات', icon: FileText },
+      { key: 'financial-reports', label: 'التقارير المالية', icon: BarChart3 },
+    ],
+  },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -50,12 +115,36 @@ const navItems = [
   { key: 'schools', label: 'إدارة المدارس', icon: Building2, superAdminOnly: true },
 ]
 
+// ===== View Title Helper =====
+function getViewLabel(view: string): string {
+  for (const entry of navEntries) {
+    if (isNavGroup(entry)) {
+      for (const child of entry.children) {
+        if (child.key === view) return `${entry.label} - ${child.label}`
+      }
+    } else if (entry.key === view) {
+      return entry.label
+    }
+  }
+  return 'لوحة التحكم'
+}
+
 function renderView(view: string) {
   switch (view) {
     case 'dashboard': return <Dashboard />
     case 'students': return <StudentsManagement />
     case 'attendance': return <AttendanceManagement />
     case 'emp-attendance': return <EmployeeAttendanceManagement />
+    case 'hr-leaves': return <EmployeeAttendanceManagement />
+    case 'transport-fleet': return <BusFleetManagement />
+    case 'transport-routes': return <BusRoutesManagement />
+    case 'transport-subscriptions': return <TransportSubscriptionsManagement />
+    case 'transport-reports': return <BusPassengerReport />
+    case 'fees-structure': return <FeesStructure />
+    case 'fee-assignments': return <FeeAssignments />
+    case 'fee-payments': return <FeePaymentsManagement />
+    case 'fee-statements': return <FeeStatements />
+    case 'financial-reports': return <FinancialReports />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />
@@ -73,6 +162,7 @@ function renderView(view: string) {
 
 export function AdminLayout() {
   const { adminView, setAdminView, logout, adminUser, sidebarOpen, setSidebarOpen, selectedSchoolId, schools, setSelectedSchoolId } = useAdminStore()
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
 
   const isSuperAdmin = adminUser?.role === 'super_admin'
 
@@ -81,8 +171,41 @@ export function AdminLayout() {
     ? schools
     : schools.filter(s => s.id === adminUser?.schoolId)
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.superAdminOnly || isSuperAdmin
+  // Check if any group child is active
+  const isGroupChildActive = (groupPrefix: string) => adminView.startsWith(groupPrefix + '-')
+
+  // Auto-expand group when its child is active
+  const getGroupExpanded = (groupKey: string) => {
+    if (isGroupChildActive(groupKey)) return true
+    return expandedGroups[groupKey] || false
+  }
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }))
+  }
+
+  const handleNavClick = (key: string) => {
+    setAdminView(key)
+  }
+
+  const handleGroupClick = (groupKey: string, firstChildKey: string) => {
+    const isExpanded = getGroupExpanded(groupKey)
+    if (!isExpanded) {
+      // Expand and select first child
+      setExpandedGroups(prev => ({ ...prev, [groupKey]: true }))
+      setAdminView(firstChildKey)
+    } else {
+      // Toggle collapse
+      toggleGroup(groupKey)
+    }
+  }
+
+  // Filter entries for visibility
+  const visibleEntries = navEntries.filter(
+    (entry) => !entry.superAdminOnly || isSuperAdmin
   )
 
   return (
@@ -125,20 +248,74 @@ export function AdminLayout() {
 
           {/* Navigation */}
           <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {visibleNavItems.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setAdminView(item.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-                  adminView === item.key
-                    ? 'bg-[#610000] text-white shadow-md'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {visibleEntries.map((entry) => {
+              if (isNavGroup(entry)) {
+                const isExpanded = getGroupExpanded(entry.key)
+                const isGroupActive = entry.children.some(c => c.key === adminView)
+
+                return (
+                  <div key={entry.key} className="space-y-1">
+                    {/* Group Header */}
+                    <button
+                      onClick={() => handleGroupClick(entry.key, entry.children[0].key)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 min-h-[44px] ${
+                        isGroupActive
+                          ? 'bg-[#610000]/80 text-white shadow-md'
+                          : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <entry.icon className="w-5 h-5 shrink-0" />
+                      <span className="flex-1 text-right">{entry.label}</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform duration-300 ${
+                          isExpanded ? 'rotate-180' : 'rotate-0'
+                        }`}
+                      />
+                    </button>
+
+                    {/* Sub-items with collapse animation */}
+                    <div
+                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                        isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                      }`}
+                    >
+                      <div className="space-y-0.5 pr-4 border-r-2 border-white/10 mr-3">
+                        {entry.children.map((child) => (
+                          <button
+                            key={child.key}
+                            onClick={() => handleNavClick(child.key)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 min-h-[40px] ${
+                              adminView === child.key
+                                ? 'bg-[#610000] text-white shadow-sm'
+                                : 'text-white/60 hover:bg-white/8 hover:text-white'
+                            }`}
+                          >
+                            <child.icon className="w-4 h-4 shrink-0" />
+                            <span>{child.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // Regular nav item
+              return (
+                <button
+                  key={entry.key}
+                  onClick={() => handleNavClick(entry.key)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+                    adminView === entry.key
+                      ? 'bg-[#610000] text-white shadow-md'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <entry.icon className="w-5 h-5 shrink-0" />
+                  <span>{entry.label}</span>
+                </button>
+              )
+            })}
           </nav>
 
           {/* Sidebar Footer */}
@@ -176,7 +353,7 @@ export function AdminLayout() {
                 <Menu className="w-5 h-5" />
               </Button>
               <h1 className="text-lg font-bold text-[#1a1a2e]">
-                {visibleNavItems.find((n) => n.key === adminView)?.label || 'لوحة التحكم'}
+                {getViewLabel(adminView)}
               </h1>
             </div>
             <div className="flex items-center gap-3">

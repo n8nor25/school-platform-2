@@ -43,6 +43,7 @@ model School {
   expenseCategories ExpenseCategory[]
   buses          Bus[]
   busRoutes      BusRoute[]
+  transportPayments TransportPayment[]
   fees           Fee[]
   feePayments    FeePayment[]
   attendanceRecords Attendance[]
@@ -311,7 +312,8 @@ model Student {
   address        String?  // العنوان
   phone          String?  // هاتف ولي الأمر
   parentName     String?  // اسم ولي الأمر
-  parentPhone    String?  // هاتف ولي الأمر
+  parentPhone    String?  // هاتف ولي الأمر الأول
+  parentPhone2   String?  // هاتف ولي الأمر الثاني
   parentNationalId String? // الرقم القومي لولي الأمر
   enrollDate     DateTime @default(now()) // تاريخ القيد
   status         String   @default("نشط") // نشط، منقول، منسحب، متخرج
@@ -322,6 +324,7 @@ model Student {
   updatedAt      DateTime @updatedAt
 
   feePayments    FeePayment[]
+  studentFees    StudentFee[]
   attendanceRecords Attendance[]
   transport      StudentTransport?
 
@@ -366,20 +369,24 @@ model ExpenseCategory {
 
 // ===== الباصات =====
 model Bus {
-  id           String   @id @default(cuid())
-  schoolId     String
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  plateNumber  String   // رقم اللوحة
-  driverName   String   // اسم السائق
-  driverPhone  String?  // هاتف السائق
-  capacity     Int      @default(30) // السعة
-  model        String?  // موديل الباص
-  color        String?  // لون الباص (للتمييز)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  plateNumber     String   // رقم اللوحة
+  driverName      String   // اسم السائق
+  driverPhone     String?  // هاتف السائق
+  driverLicense   String?  // رقم رخصة السائق
+  supervisorName  String?  // اسم المشرف
+  supervisorPhone String?  // هاتف المشرف
+  capacity        Int      @default(30) // السعة
+  model           String?  // موديل الباص
+  color           String?  // لون الباص (للتمييز)
+  active          Boolean  @default(true)
+  notes           String?  // ملاحظات
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  routes       BusRoute[]
+  routes          BusRoute[]
 
   @@unique([schoolId, plateNumber])
 }
@@ -420,6 +427,29 @@ model StudentTransport {
   notes        String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  payments     TransportPayment[]
+}
+
+// ===== مدفوعات النقل =====
+model TransportPayment {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subscriptionId String
+  subscription   StudentTransport @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  month          Int      // الشهر 1-12
+  year           Int      // السنة
+  amount         Float    // المبلغ المدفوع
+  paymentDate    DateTime // تاريخ الدفع
+  paymentMethod  String   @default("نقدي") // نقدي، تحويل، بطاقة
+  receiptNumber  String?  // رقم الإيصال
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([schoolId, subscriptionId, month, year])
 }
 
 // ===== الرسوم والأقساط =====
@@ -441,6 +471,46 @@ model Fee {
   updatedAt      DateTime @updatedAt
 
   payments       FeePayment[]
+  feeInstallments FeeInstallment[]
+  studentFees    StudentFee[]
+}
+
+// ===== أقساط الرسوم =====
+model FeeInstallment {
+  id            String   @id @default(cuid())
+  schoolId      String
+  feeId         String
+  fee           Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+  installmentNo Int      // رقم القسط (1، 2، 3...)
+  amount        Float    // مبلغ القسط
+  dueDate       DateTime // تاريخ الاستحقاق
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments      FeePayment[]
+
+  @@unique([schoolId, feeId, installmentNo])
+}
+
+// ===== تخصيص الرسوم للطلاب =====
+model StudentFee {
+  id             String   @id @default(cuid())
+  schoolId       String
+  studentId      String
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeId          String
+  fee            Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+  totalAmount    Float    // الإجمالي بعد الخصم
+  discountType   String?  // نسبة، ثابت، إعفاء
+  discountValue  Float?   // قيمة الخصم
+  discountReason String?  // سبب الخصم
+  assignedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments       FeePayment[]
+
+  @@unique([schoolId, studentId, feeId])
 }
 
 // ===== دفعات الأقساط =====
@@ -452,9 +522,13 @@ model FeePayment {
   fee           Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
   studentId     String
   student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentFeeId  String?  // ربط بتخصيص الرسوم
+  studentFee    StudentFee? @relation(fields: [studentFeeId], references: [id], onDelete: SetNull)
+  installmentId String?  // ربط بالقسط المحدد
+  installment   FeeInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
   amount        Float    // المبلغ المدفوع
   paymentDate   DateTime // تاريخ الدفع
-  paymentMethod String   @default("نقدي") // نقدي، تحويل، بطاقة
+  paymentMethod String   @default("نقدي") // نقدي، تحويل، بطاقة، شيك
   receiptNumber String?  // رقم الإيصال
   installmentNo Int      @default(1) // رقم القسط
   notes         String?
