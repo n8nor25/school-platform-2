@@ -7,7 +7,8 @@ import {
   SlidersHorizontal, LayoutGrid, UserCog, Building2, UserPlus,
   ClipboardCheck, ChevronDown, BusFront, Bus, MapPin, CreditCard,
   FileText, Coins, Receipt, BarChart3, UsersRound, Briefcase,
-  DollarSign, Palmtree, Printer,
+  DollarSign, Palmtree, Printer, Wallet, Repeat, PiggyBank,
+  Store, Tags, TrendingUp, LineChart,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,6 +43,13 @@ import { FeeAssignments } from './fee-assignments'
 import { FeePaymentsManagement } from './fee-payments-management'
 import { FeeStatements } from './fee-statements'
 import { FinancialReports } from './financial-reports'
+import { ExpenseCategoriesManagement } from './expense-categories-management'
+import { ExpenseVendorsManagement } from './expense-vendors-management'
+import { ExpensesManagement } from './expenses-management'
+import { ExpenseBudgetsManagement } from './expense-budgets-management'
+import { RecurringExpensesManagement } from './recurring-expenses-management'
+import { PettyCashManagement } from './petty-cash-management'
+import { ExpenseReports } from './expense-reports'
 
 // ===== Nav Item Types =====
 interface NavItem {
@@ -102,6 +110,20 @@ const navEntries: NavEntry[] = [
       { key: 'financial-reports', label: 'التقارير المالية', icon: BarChart3 },
     ],
   },
+  {
+    key: 'expenses',
+    label: 'المصروفات والنفقات',
+    icon: Wallet,
+    children: [
+      { key: 'expenses-list', label: 'تسجيل المصروفات', icon: DollarSign },
+      { key: 'expense-categories', label: 'تصنيفات المصروفات', icon: Tags },
+      { key: 'expense-vendors', label: 'الموردون والمستفيدون', icon: Store },
+      { key: 'expense-budgets', label: 'الميزانيات', icon: PiggyBank },
+      { key: 'recurring-expenses', label: 'المصروفات المتكررة', icon: Repeat },
+      { key: 'petty-cash', label: 'العهد والصناديق', icon: Briefcase },
+      { key: 'expense-reports', label: 'التقارير والإحصائيات', icon: LineChart },
+    ],
+  },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -145,6 +167,13 @@ function renderView(view: string) {
     case 'fee-payments': return <FeePaymentsManagement />
     case 'fee-statements': return <FeeStatements />
     case 'financial-reports': return <FinancialReports />
+    case 'expenses-list': return <ExpensesManagement />
+    case 'expense-categories': return <ExpenseCategoriesManagement />
+    case 'expense-vendors': return <ExpenseVendorsManagement />
+    case 'expense-budgets': return <ExpenseBudgetsManagement />
+    case 'recurring-expenses': return <RecurringExpensesManagement />
+    case 'petty-cash': return <PettyCashManagement />
+    case 'expense-reports': return <ExpenseReports />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />

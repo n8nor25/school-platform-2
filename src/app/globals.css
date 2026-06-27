@@ -150,6 +150,44 @@
   text-align: right;
 }
 
+/* Force RTL on all tables and cells - prevents English codes/numbers from starting at left */
+[dir="rtl"] table {
+  direction: rtl;
+}
+[dir="rtl"] th,
+[dir="rtl"] td {
+  text-align: right;
+}
+/* Center-aligned cells opt-in: explicitly use text-center class */
+[dir="rtl"] th.text-center,
+[dir="rtl"] td.text-center {
+  text-align: center;
+}
+[dir="rtl"] th.text-left,
+[dir="rtl"] td.text-left {
+  text-align: left;
+}
+
+/* Inputs default to RTL unless explicitly marked dir="ltr" (for codes/numbers) */
+[dir="rtl"] input:not([dir="ltr"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+[dir="rtl"] textarea:not([dir="ltr"]),
+[dir="rtl"] select:not([dir="ltr"]) {
+  text-align: right;
+  direction: rtl;
+}
+
+/* Numbers/codes that should display LTR within RTL containers but stay right-aligned */
+.font-mono {
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: right;
+}
+
+/* Ensure flex/grid respect RTL - swap ml/mr semantics for common utility classes */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
 [dir="rtl"] .flip-in-rtl {
   transform: scaleX(-1);
 }

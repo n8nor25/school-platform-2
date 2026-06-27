@@ -41,6 +41,10 @@ model School {
   students       Student[]
   expenses       Expense[]
   expenseCategories ExpenseCategory[]
+  expenseVendors ExpenseVendor[]
+  expenseBudgets ExpenseBudget[]
+  recurringExpenses RecurringExpense[]
+  pettyCashFunds PettyCash[]
   buses          Bus[]
   busRoutes      BusRoute[]
   transportPayments TransportPayment[]
@@ -272,6 +276,8 @@ model AcademicYear {
   classrooms  Classroom[]
   fees        Fee[]
   attendanceRecords Attendance[]
+  expenses    Expense[]
+  expenseBudgets ExpenseBudget[]
 
   @@unique([schoolId, name])
 }
@@ -333,21 +339,41 @@ model Student {
 
 // ===== المصروفات =====
 model Expense {
-  id           String   @id @default(cuid())
-  schoolId     String
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  categoryId   String?
-  category     ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  title        String   // بيان المصروف
-  amount       Float    // المبلغ
-  expenseDate  DateTime // تاريخ الصرف
-  paymentMethod String  @default("نقدي") // نقدي، تحويل، شيك
-  recipient    String?  // المستلم
-  reference    String?  // رقم المرجع / الإيصال
-  notes        String?  // ملاحظات
-  createdBy    String?  // من أنشأ السجل
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId  String?
+  academicYear    AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  category        ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  vendorId        String?
+  vendor          ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  recurringExpenseId String?
+  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+  title           String   // بيان المصروف
+  amount          Float    // المبلغ
+  expenseDate     DateTime // تاريخ الصرف
+  paymentMethod   String   @default("نقدي") // نقدي، تحويل، شيك، بطاقة
+  recipient       String?  // المستلم
+  reference       String?  // رقم المرجع / الإيصال
+  checkNumber     String?  // رقم الشيك
+  bankName        String?  // البنك
+  checkDate       DateTime? // تاريخ استحقاق الشيك (للشيكات المؤجلة)
+  attachments     String?  // JSON array of file URLs
+  notes           String?  // ملاحظات
+  status          String   @default("مدفوع") // مسودة، معلق، معتمد، مدفوع، مرفوض
+  createdBy       String?  // من أنشأ السجل
+  approvedBy      String?  // من اعتمد السجل
+  approvedAt      DateTime? // تاريخ الاعتماد
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  approvals       ExpenseApproval[]
+  pettyCashTx     PettyCashTransaction[]
+
+  @@index([schoolId, expenseDate])
+  @@index([schoolId, categoryId])
+  @@index([schoolId, status])
 }
 
 // ===== تصنيفات المصروفات =====
@@ -356,15 +382,156 @@ model ExpenseCategory {
   schoolId  String
   school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   name      String   // رواتب، صيانة، كهرباء، ماء، قرطاسية...
-  icon      String?  // أيقونة
-  color     String?  // لون
+  parentId  String?  // للتصنيفات الفرعية
+  parent    ExpenseCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  ExpenseCategory[] @relation("CategoryHierarchy")
+  icon      String?  // أيقونة (Lucide name)
+  color     String?  // لون (hex)
   sortOrder Int      @default(0)
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   expenses  Expense[]
+  budgets   ExpenseBudget[]
+  recurringExpenses RecurringExpense[]
 
   @@unique([schoolId, name])
+}
+
+// ===== الموردون / المستفيدون =====
+model ExpenseVendor {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name          String   // اسم المورد
+  type          String   @default("مورد") // مورد، مقاول، جهة حكومية، مستفيد
+  contactPerson String?  // المسؤول
+  phone         String?  // الهاتف
+  email         String?  // البريد
+  address       String?  // العنوان
+  taxNumber     String?  // البطاقة الضريبية
+  taxOffice     String?  // المأمورية
+  bankName      String?  // البنك
+  bankAccount   String?  // رقم الحساب
+  openingBalance Float   @default(0) // الرصيد الافتتاحي
+  notes         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  expenses      Expense[]
+  recurringExpenses RecurringExpense[]
+
+  @@unique([schoolId, name])
+}
+
+// ===== الميزانيات =====
+model ExpenseBudget {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId  String
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  period          String   // سنوي، ربعي، شهري
+  fiscalMonth     Int?     // 1-12 (للميزانية الشهرية)
+  fiscalQuarter   Int?     // 1-4 (للميزانية الربعية)
+  amount          Float    // المبلغ المخصص
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([schoolId, academicYearId, categoryId, period, fiscalMonth, fiscalQuarter])
+}
+
+// ===== المصروفات المتكررة =====
+model RecurringExpense {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryId      String?
+  category        ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  vendorId        String?
+  vendor          ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  title           String   // بيان المصروف
+  amount          Float    // المبلغ
+  frequency       String   // أسبوعي، شهري، ربعي، سنوي
+  startDate       DateTime // تاريخ بدء التكرار
+  endDate         DateTime? // تاريخ انتهاء التكرار (null = لا نهائي)
+  nextRunDate     DateTime // تاريخ التشغيل التالي
+  lastRunDate     DateTime? // تاريخ آخر تشغيل
+  paymentMethod   String   @default("نقدي")
+  recipient       String?
+  reference       String?
+  notes           String?
+  active          Boolean  @default(true)
+  autoGenerate    Boolean  @default(false) // إنشاء تلقائي دون تدخل
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  expenses        Expense[]
+
+  @@index([schoolId, nextRunDate])
+}
+
+// ===== العهد (الصندوق الصغير) =====
+model PettyCash {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name          String   // اسم الصندوق
+  custodianId   String?  // أمين العهد (Employee ID)
+  custodianName String?  // اسم أمين العهد (نص حر)
+  openingBalance Float   @default(0) // الرصيد الافتتاحي
+  currentBalance Float   @default(0) // الرصيد الحالي
+  maximumBalance Float?  // الحد الأقصى للصندوق
+  active        Boolean  @default(true)
+  openedAt      DateTime @default(now())
+  closedAt      DateTime?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions  PettyCashTransaction[]
+
+  @@unique([schoolId, name])
+}
+
+// ===== حركات العهد =====
+model PettyCashTransaction {
+  id            String   @id @default(cuid())
+  pettyCashId   String
+  pettyCash     PettyCash @relation(fields: [pettyCashId], references: [id], onDelete: Cascade)
+  schoolId      String
+  type          String   // صرف، تغذية، تسوية
+  amount        Float    // المبلغ
+  expenseId     String?  // ربط بالمصروف (للصرف)
+  expense       Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  recipient     String?  // المستلم
+  date          DateTime // تاريخ الحركة
+  reference     String?  // رقم الإيصال
+  notes         String?
+  balanceAfter  Float    // الرصيد بعد الحركة
+  createdBy     String?
+  createdAt     DateTime @default(now())
+
+  @@index([pettyCashId, date])
+}
+
+// ===== سجل اعتماد المصروفات =====
+model ExpenseApproval {
+  id            String   @id @default(cuid())
+  expenseId     String
+  expense       Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  schoolId      String
+  approverId    String?  // معرف المستخدم المعتمد
+  approverName  String   // اسم المعتمد
+  approverRole  String?  // دور المعتمد
+  action        String   // اعتماد، رفض، طلب تعديل
+  notes         String?  // ملاحظات الاعتماد
+  approvedAt    DateTime @default(now())
 }
 
 // ===== الباصات =====
