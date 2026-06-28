@@ -134,3 +134,15 @@ export const useAdminStore = create<AdminStore>()(
     }
   )
 )
+
+// ===== Robust hydration trigger (Zustand v5) =====
+// onRehydrateStorage may not fire in all environments (e.g. fresh browser
+// profiles, SSR). This ensures _hasHydrated is set after hydration completes.
+if (typeof window !== 'undefined') {
+  const setReady = () => useAdminStore.getState().setHasHydrated(true)
+  if (useAdminStore.persist.hasHydrated()) {
+    setReady()
+  } else {
+    useAdminStore.persist.onFinishHydration(setReady)
+  }
+}

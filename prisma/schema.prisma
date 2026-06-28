@@ -56,6 +56,9 @@ model School {
   salaries       Salary[]
   academicYears  AcademicYear[]
   classrooms     Classroom[]
+  conversations  Conversation[]
+  messages       Message[]
+  announcements  Announcement[]
 }
 
 // ===== الإعدادات =====
@@ -278,6 +281,7 @@ model AcademicYear {
   attendanceRecords Attendance[]
   expenses    Expense[]
   expenseBudgets ExpenseBudget[]
+  announcements Announcement[]
 
   @@unique([schoolId, name])
 }
@@ -808,4 +812,76 @@ model EmployeeAttendance {
   updatedAt      DateTime @updatedAt
 
   @@unique([schoolId, employeeId, date])
+}
+
+// ===== التواصل والإشعارات — المرحلة الأولى =====
+
+// المحادثات (فردية / مجموعة / إدارية)
+model Conversation {
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  type          String    @default("فردية") // فردية، مجموعة، إدارية
+  title         String    @default("") // عنوان المحادثة (للمجموعات)
+  participants  String    @default("[]") // JSON array of userIds
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  messages      Message[]
+
+  @@index([schoolId])
+}
+
+// الرسائل الخاصة بين المستخدمين
+model Message {
+  id             String    @id @default(cuid())
+  schoolId       String
+  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  senderId       String    // معرف المرسل
+  senderName     String    @default("") // اسم المرسل (نسخة سريعة)
+  senderRole     String    @default("") // دور المرسل (مدير، معلم، موظف...)
+  recipientId    String    // معرف المستلم
+  recipientName  String    @default("") // اسم المستلم
+  subject        String    @default("") // الموضوع
+  content        String    // نص الرسالة
+  attachments    String?   // JSON array of file URLs
+  priority       String    @default("عادي") // عادي، عاجل، هام
+  isRead         Boolean   @default(false)
+  readAt         DateTime?
+  isStarred      Boolean   @default(false) // تم التمييز بنجمة
+  isArchived     Boolean   @default(false) // مؤرشف
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([schoolId, recipientId])
+  @@index([schoolId, senderId])
+}
+
+// الإعلانات الموجهة
+model Announcement {
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String?
+  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  title         String    // عنوان الإعلان
+  content       String    // محتوى الإعلان
+  targetType    String    @default("الكل") // الكل، صف، مرحلة، موظفين، أولياء أمور، معلمين
+  targetIds     String    @default("[]") // JSON array للمعرفات المستهدفة (صفوف/مراحل)
+  authorId      String    // معرف المنشئ
+  authorName    String    @default("") // اسم المنشئ
+  imageUrl      String?   // صورة مرفقة
+  isPinned       Boolean   @default(false) // مثبت
+  isPublished   Boolean   @default(true) // منشور
+  publishedAt   DateTime? // تاريخ النشر
+  expiresAt     DateTime? // تاريخ الانتهاء
+  viewCount     Int       @default(0) // عدد المشاهدات
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([schoolId, isPublished])
+  @@index([schoolId, targetType])
 }

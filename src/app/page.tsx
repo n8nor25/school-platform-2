@@ -98,7 +98,7 @@ export default function HomePageWrapper() {
 }
 
 function HomePage() {
-  const { isAdminMode, selectedSchoolId, setSelectedSchoolId, setSchools, _hasHydrated } = useAdminStore()
+  const { isAdminMode, selectedSchoolId, setSelectedSchoolId, setSchools, _hasHydrated, setHasHydrated } = useAdminStore()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -126,6 +126,12 @@ function HomePage() {
   const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const hydrated = _hasHydrated
+
+  // Fallback: ensure hydration flag is set on the client (Zustand v5
+  // onRehydrateStorage may not fire in all environments).
+  useEffect(() => {
+    if (!_hasHydrated) setHasHydrated(true)
+  }, [_hasHydrated, setHasHydrated])
 
   // Resolve school from subdomain only (not from store's school list)
   useEffect(() => {

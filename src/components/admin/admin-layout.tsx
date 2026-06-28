@@ -9,6 +9,7 @@ import {
   FileText, Coins, Receipt, BarChart3, UsersRound, Briefcase,
   DollarSign, Palmtree, Printer, Wallet, Repeat, PiggyBank,
   Store, Tags, TrendingUp, LineChart,
+  Megaphone, Mail, MessageSquare,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,6 +51,8 @@ import { ExpenseBudgetsManagement } from './expense-budgets-management'
 import { RecurringExpensesManagement } from './recurring-expenses-management'
 import { PettyCashManagement } from './petty-cash-management'
 import { ExpenseReports } from './expense-reports'
+import { MessagesManagement } from './messages-management'
+import { AnnouncementsManagement } from './announcements-management'
 
 // ===== Nav Item Types =====
 interface NavItem {
@@ -124,6 +127,15 @@ const navEntries: NavEntry[] = [
       { key: 'expense-reports', label: 'التقارير والإحصائيات', icon: LineChart },
     ],
   },
+  {
+    key: 'communication',
+    label: 'التواصل والإشعارات',
+    icon: Megaphone,
+    children: [
+      { key: 'messages', label: 'الرسائل الداخلية', icon: Mail },
+      { key: 'announcements', label: 'الإعلانات', icon: Megaphone },
+    ],
+  },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -174,6 +186,8 @@ function renderView(view: string) {
     case 'recurring-expenses': return <RecurringExpensesManagement />
     case 'petty-cash': return <PettyCashManagement />
     case 'expense-reports': return <ExpenseReports />
+    case 'messages': return <MessagesManagement />
+    case 'announcements': return <AnnouncementsManagement />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />
