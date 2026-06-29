@@ -59,6 +59,11 @@ model School {
   conversations  Conversation[]
   messages       Message[]
   announcements  Announcement[]
+  events         Event[]
+  eventRegistrations EventRegistration[]
+  eventReminders EventReminder[]
+  eventGallery   EventGallery[]
+  eventFeedback  EventFeedback[]
 }
 
 // ===== الإعدادات =====
@@ -282,6 +287,7 @@ model AcademicYear {
   expenses    Expense[]
   expenseBudgets ExpenseBudget[]
   announcements Announcement[]
+  events        Event[]
 
   @@unique([schoolId, name])
 }
@@ -884,4 +890,108 @@ model Announcement {
 
   @@index([schoolId, isPublished])
   @@index([schoolId, targetType])
+}
+
+// ===== الفعاليات والأحداث =====
+
+model Event {
+  id            String    @id @default(cuid())
+  schoolId      String
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String?
+  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  title         String
+  description   String    @default("")
+  type          String    @default("نشاط")
+  status        String    @default("مجدولة")
+  startDate     DateTime
+  endDate       DateTime?
+  location      String    @default("")
+  coverImageUrl String?
+  organizerId   String
+  organizerName String    @default("")
+  targetAudience String   @default("الكل")
+  targetIds     String    @default("[]")
+  maxAttendees  Int?
+  isPublic      Boolean   @default(true)
+  program       String?
+  requirements  String?
+  budget        Float?
+  aiGenerated   Boolean   @default(false)
+  viewCount     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  registrations EventRegistration[]
+  reminders     EventReminder[]
+  gallery       EventGallery[]
+  feedback      EventFeedback[]
+
+  @@index([schoolId, status])
+  @@index([schoolId, type])
+  @@index([schoolId, startDate])
+}
+
+model EventRegistration {
+  id             String   @id @default(cuid())
+  schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registrantId   String
+  registrantName String   @default("")
+  registrantType String   @default("طالب")
+  status         String   @default("مسجل")
+  registeredAt   DateTime @default(now())
+  attendedAt     DateTime?
+  notes          String?
+
+  @@unique([schoolId, eventId, registrantId])
+  @@index([eventId])
+}
+
+model EventReminder {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sendAt      DateTime
+  channel     String   @default("داخلي")
+  message     String
+  sent        Boolean  @default(false)
+  sentAt      DateTime?
+  targetCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
+}
+
+model EventGallery {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  eventId    String
+  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  imageUrl   String
+  caption    String?
+  uploadedAt DateTime @default(now())
+
+  @@index([eventId])
+}
+
+model EventFeedback {
+  id           String   @id @default(cuid())
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  reviewerName String   @default("")
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@unique([schoolId, eventId, reviewerId])
+  @@index([eventId])
 }

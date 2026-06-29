@@ -10,6 +10,7 @@ import {
   DollarSign, Palmtree, Printer, Wallet, Repeat, PiggyBank,
   Store, Tags, TrendingUp, LineChart,
   Megaphone, Mail, MessageSquare,
+  CalendarDays, Trophy, Users as UsersIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -53,6 +54,10 @@ import { PettyCashManagement } from './petty-cash-management'
 import { ExpenseReports } from './expense-reports'
 import { MessagesManagement } from './messages-management'
 import { AnnouncementsManagement } from './announcements-management'
+import { EventsManagement } from './events-management'
+import { EventAttendance } from './event-attendance'
+import { EventsGallery } from './events-gallery'
+import { EventsReports } from './events-reports'
 
 // ===== Nav Item Types =====
 interface NavItem {
@@ -136,6 +141,17 @@ const navEntries: NavEntry[] = [
       { key: 'announcements', label: 'الإعلانات', icon: Megaphone },
     ],
   },
+  {
+    key: 'events',
+    label: 'الفعاليات والأحداث',
+    icon: CalendarDays,
+    children: [
+      { key: 'events-list', label: 'الفعاليات', icon: CalendarDays },
+      { key: 'events-attendance', label: 'كشف الحضور', icon: UsersIcon },
+      { key: 'events-gallery', label: 'معرض الفعاليات', icon: Image },
+      { key: 'events-reports', label: 'التقارير', icon: BarChart3 },
+    ],
+  },
   { key: 'sliders', label: 'إدارة السلايدر', icon: SlidersHorizontal },
   { key: 'sections', label: 'أقسام الصفحة', icon: LayoutGrid },
   { key: 'results', label: 'إدارة النتائج', icon: FileBarChart },
@@ -188,6 +204,10 @@ function renderView(view: string) {
     case 'expense-reports': return <ExpenseReports />
     case 'messages': return <MessagesManagement />
     case 'announcements': return <AnnouncementsManagement />
+    case 'events-list': return <EventsManagement />
+    case 'events-attendance': return <EventAttendance />
+    case 'events-gallery': return <EventsGallery />
+    case 'events-reports': return <EventsReports />
     case 'sliders': return <SliderManagement />
     case 'sections': return <SectionsManagement />
     case 'results': return <ResultsManagement />
