@@ -16,7 +16,13 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file');
-    const enableAI = formData.get('ai') !== 'false'; // افتراضياً true
+
+    // مصادر تفعيل AI (بالأولوية): formData.ai > query.ai
+    // افتراضياً true (مراجعة VLM مُفعّلة) ما لم يُصرَّح بـ ai=false صراحةً
+    const aiFromForm = formData.get('ai');
+    const aiFromQuery = new URL(req.url).searchParams.get('ai');
+    const aiValue = aiFromForm !== null ? aiFromForm : aiFromQuery;
+    const enableAI = aiValue !== 'false' && aiValue !== '0';
 
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
