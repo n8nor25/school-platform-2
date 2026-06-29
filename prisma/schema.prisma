@@ -64,6 +64,13 @@ model School {
   eventReminders EventReminder[]
   eventGallery   EventGallery[]
   eventFeedback  EventFeedback[]
+  exams          Exam[]
+  examQuestions  Question[]
+  examSubmissions Submission[]
+  examAnswers    Answer[]
+  examViolations ExamViolation[]
+  examAppeals    ExamAppeal[]
+  examModeration ExamModerationLog[]
 }
 
 // ===== الإعدادات =====
@@ -994,4 +1001,292 @@ model EventFeedback {
 
   @@unique([schoolId, eventId, reviewerId])
   @@index([eventId])
+}
+
+// ====================================================================
+// ===== وحدة إدارة الامتحانات (Exams Management) =====
+// كل العمليات الأمنية في الباك إند: فحص الملفات + تعقيم + إشراف AI
+// ====================================================================
+
+// ----- التعدادادات (Enums) -----
+enum ExamStatus {
+  DRAFT          // مسودة
+  PUBLISHED      // منشور
+  CLOSED         // مغلق
+  ARCHIVED       // مؤرشف
+}
+
+enum QuestionType {
+  MCQ            // اختيار من متعدد
+  TRUE_FALSE     // صح/خطأ
+  SHORT          // إجابة قصيرة
+  ESSAY          // مقال
+  IMAGE_ANSWER   // رفع صورة (خط يدوي)
+  FILE_PDF       // رفع PDF
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS    // قيد الحل
+  SUBMITTED      // تم التسليم
+  GRADED         // تم التصحيح
+  FLAGGED        // مُعلَّق للمراجعة
+  AUTO_CLOSED    // أُغلق تلقائياً (انتهى الوقت)
+}
+
+enum ModerationStatus {
+  PENDING        // بانتظار الفحص
+  SAFE           // آمن
+  FLAGGED        // مُعلَّق
+  BLOCKED        // مرفوض
+  ERROR          // خطأ في الفحص
+}
+
+enum ViolationType {
+  TAB_SWITCH            // مغادرة الصفحة
+  COPY_ATTEMPT          // محاولة نسخ
+  PASTE_ATTEMPT         // محاولة لصق
+  MULTIPLE_DEVICES      // تعدد الأجهزة
+  SUSPICIOUS_FILE       // ملف مشبوه
+  RATE_LIMIT_EXCEEDED   // تجاوز معدل الإرسال
+  FOCUS_LOSS            // فقدان التركيز
+  RIGHT_CLICK           // زر الفأرة الأيمن
+  SHORTCUT_KEY          // اختصار لوحة المفاتيح
+}
+
+enum AppealStatus {
+  PENDING        // قيد النظر
+  APPROVED       // مقبول
+  REJECTED       // مرفوض
+}
+
+enum ModerationAction {
+  AUTO_ALLOWED      // سماح تلقائي (آمن)
+  AUTO_BLOCKED      // رفض تلقائي (مرفوض)
+  AUTO_FLAGGED      // تعليق تلقائي للمراجعة البشرية
+  HUMAN_APPROVED    // سماح بشري بعد تعليق
+  HUMAN_REJECTED    // رفض بشري بعد تعليق
+}
+
+// ----- نماذج الامتحانات -----
+model Exam {
+  id              String    @id @default(cuid())
+  schoolId        String
+  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  title           String
+  description     String    @default("")
+  subject         String    // المادة (نص حر لتفادي الربط الإجباري)
+  subjectId       String?   // معرف المادة إن وُجد في جدول آخر
+  teacherId       String    // مُنشئ الامتحان
+  teacherName     String    @default("")  // اسم المعلم (للعرض السريع)
+  classroomId     String?   // الفصل المستهدف
+  classroomName   String    @default("")  // اسم الفصل (للعرض)
+  academicYearId  String?   // السنة الدراسية
+  startDate       DateTime  // وقت الفتح
+  endDate         DateTime  // وقت الإغلاق
+  durationMinutes Int       // المدة بالدقائق
+  passwordHash    String?   // كلمة سر الدخول (مشفرّة bcrypt)
+  shuffleQuestions Boolean   @default(false)
+  shuffleOptions   Boolean   @default(false)
+  allowReview      Boolean   @default(true)   // السماح للطالب بمراجعة إجاباته بعد التسليم
+  showResultImmediately Boolean @default(false) // إظهار النتيجة فوراً
+  parentVisible    Boolean   @default(false)   // هل يرى ولي الأمر الورقة؟
+  maxAttempts      Int       @default(1)
+  maxFileSizeMb    Int       @default(5)
+  allowTextAnswers Boolean   @default(true)
+  allowImageAnswers Boolean  @default(true)
+  allowPdfAnswers  Boolean   @default(false)
+  ipRestriction    String?   // قيد IP اختياري
+  antiCheatEnabled Boolean   @default(true)
+  status           ExamStatus @default(DRAFT)
+  totalPoints      Float     @default(0)
+  passingScore     Float?    // درجة النجاح
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  questions   Question[]
+  submissions Submission[]
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([classroomId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  schoolId      String
+  school        School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId        String
+  exam          Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  type          QuestionType
+  text          String       // نص السؤال (بعد الفلترة عند الإنشاء)
+  options       String?      // JSON array: ["خيار 1", "خيار 2", ...]
+  correctAnswer String?      // للـ MCQ/TRUE_FALSE: index أو "true"/"false"
+  correctText   String?      // للـ SHORT: نص نموذجي
+  rubric        String?      // لـ ESSAY: معايير التصحيح JSON
+  points        Float        @default(1)
+  order         Int          @default(0)
+  explanation   String?      // تفسير الإجابة (يظهر بعد التصحيح)
+  attachmentPath String?     // مسار صورة السؤال في secure-storage
+  attachmentUrl  String?     // URL للعرض (مؤقت)
+  textModeration  ModerationStatus @default(PENDING)
+  imageModeration  ModerationStatus @default(PENDING)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  answers Answer[]
+
+  @@index([examId])
+  @@index([schoolId])
+}
+
+model Submission {
+  id              String           @id @default(cuid())
+  schoolId        String
+  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  examId          String
+  exam            Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId       String
+  studentName     String           @default("")
+  attemptNumber   Int              @default(1)
+  startedAt       DateTime         @default(now())
+  submittedAt     DateTime?
+  autoClosedAt    DateTime?        // متى أُغلق تلقائياً
+  status          SubmissionStatus @default(IN_PROGRESS)
+  totalScore      Float?
+  maxScore        Float?
+  percentage      Float?
+  passed          Boolean?
+  ipHash          String           @default("")  // بصمة الجهاز
+  userAgentHash   String           @default("")
+  focusEvents     Int              @default(0)
+  tabSwitches     Int              @default(0)
+  copyAttempts    Int              @default(0)
+  lastActivityAt  DateTime?
+  gradedAt        DateTime?
+  gradedById      String?
+  gradedByName    String           @default("")
+  notes           String           @default("")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  answers     Answer[]
+  violations  ExamViolation[]
+  appeals     ExamAppeal[]
+
+  @@unique([examId, studentId, attemptNumber])
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+  @@index([schoolId])
+}
+
+model Answer {
+  id              String           @id @default(cuid())
+  schoolId        String
+  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  submissionId    String
+  submission      Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  textAnswer      String?          // النص بعد الفلترة والتعقيم
+  textOriginalLength Int           @default(0)  // الطول الأصلي قبل التعقيم (للإحصاء)
+  imageAnswerPath String?          // مسار الصورة في secure-storage (آمن)
+  imageAnswerUrl  String?          // URL مؤقت للعرض
+  fileAnswerPath  String?          // مسار PDF في secure-storage
+  fileAnswerUrl   String?          // URL مؤقت للعرض
+  imageHash       String?          // hash بصري للصورة (anti-cheat)
+  textModeration  ModerationStatus @default(PENDING)
+  imageModeration ModerationStatus @default(PENDING)
+  fileModeration  ModerationStatus @default(PENDING)
+  moderationNotes String?          // JSON: أسباب قرار الـ AI
+  moderatedAt     DateTime?
+  score           Float?
+  maxScore        Float            @default(1)
+  isCorrect       Boolean?
+  teacherNote     String?
+  aiSuggestedScore Float?          // اقتراح AI للدرجة
+  aiConfidence    Float?           // ثقة AI (0-1)
+  gradedAt        DateTime?
+  gradedById      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  appeals     ExamAppeal[]
+  moderationLogs ExamModerationLog[]
+
+  @@index([submissionId])
+  @@index([questionId])
+  @@index([schoolId])
+  @@index([textModeration])
+  @@index([imageModeration])
+}
+
+model ExamViolation {
+  id            String        @id @default(cuid())
+  schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  submissionId  String
+  submission    Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  examId        String
+  studentId     String
+  type          ViolationType
+  severity      Int           @default(1)  // 1=منخفض، 2=متوسط، 3=عالي
+  details       String        @default("")
+  userAgent     String        @default("")
+  ipHash        String        @default("")
+  createdAt     DateTime      @default(now())
+
+  @@index([submissionId])
+  @@index([examId])
+  @@index([studentId])
+  @@index([type])
+  @@index([schoolId])
+}
+
+model ExamAppeal {
+  id            String      @id @default(cuid())
+  schoolId      String
+  school        School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  answerId      String
+  answer        Answer      @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  submissionId  String
+  submission    Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  studentId     String
+  studentName   String      @default("")
+  reason        String
+  requestedScore Float?
+  status        AppealStatus @default(PENDING)
+  teacherReply  String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([answerId])
+  @@index([submissionId])
+  @@index([status])
+  @@index([schoolId])
+}
+
+model ExamModerationLog {
+  id            String           @id @default(cuid())
+  schoolId      String
+  school        School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  answerId      String?
+  answer        Answer?          @relation(fields: [answerId], references: [id], onDelete: SetNull)
+  questionId    String?
+  action        ModerationAction
+  targetType    String           @default("text")  // text|image|pdf|file
+  reason        String           @default("")
+  aiConfidence  Float?
+  reviewerId    String?
+  reviewerName  String           @default("")
+  metadata      String?          // JSON إضافي
+  createdAt     DateTime         @default(now())
+
+  @@index([answerId])
+  @@index([action])
+  @@index([schoolId])
 }
