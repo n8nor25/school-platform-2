@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // ② تعقيم (إن كان مسموحاً)
     let sanitizeResult: Record<string, unknown> | null = null;
-    let moderatedBuffer = buffer;
+    let moderatedBuffer: Buffer = buffer;
 
     if (validation.valid && validation.kind === 'image') {
       const r = await sanitizeImage(buffer, validation.mimeType);
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         cleaned: r.cleaned,
         error: r.error,
       };
-      if (r.ok && r.buffer) moderatedBuffer = r.buffer;
+      if (r.ok && r.buffer) moderatedBuffer = r.buffer as Buffer;
     } else if (validation.valid && validation.kind === 'pdf') {
       const r = await sanitizePdf(buffer);
       sanitizeResult = {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         cleaned: r.cleaned,
         error: r.error,
       };
-      if (r.ok && r.buffer) moderatedBuffer = r.buffer;
+      if (r.ok && r.buffer) moderatedBuffer = r.buffer as Buffer;
     }
 
     // ③ مراجعة AI للصور (اختياري)
