@@ -1,11 +1,13 @@
 /**
  * ============================================================
  *  مسار: POST /api/exams/security/scan-text
- *  ============================================================
+ * ============================================================
  *  يختبر Pipeline مراجعة النصوص على نص مُرسَل.
  *
- *  Body: { "text": "إجابة الطالب هنا", "ai": true }
- *  ai اختياري (افتراضي true) — يفعّل مراجعة LLM
+ *  Body: { "text": "إجابة الطالب هنا", "useAI"?: boolean, "ai"?: boolean }
+ *  Query: ?useAI=true|false
+ *  - أولوية التفعيل: body.useAI > body.ai > query.useAI > افتراضي (false)
+ *  - الافتراضي: محلي فقط (local) للسرعة. مرّر useAI=true لتفعيل LLM.
  * ============================================================
  */
 
@@ -16,7 +18,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const text: string = typeof body.text === 'string' ? body.text : '';
-    const enableAI: boolean = body.ai !== false;
+
+    // مصادر التفعيل (بالأولوية): body.useAI > body.ai > query.useAI > false
+    const url = new URL(req.url);
+    const useAIFromQuery = url.searchParams.get('useAI');
+    const useAIFromBody = body.useAI;
+    const legacyAIFromBody = body.ai;
+
+    let enableAI: boolean;
+    if (typeof useAIFromBody === 'boolean') {
+      enableAI = useAIFromBody;
+    } else if (typeof legacyAIFromBody === 'boolean') {
+      enableAI = legacyAIFromBody;
+    } else if (useAIFromQuery !== null) {
+      enableAI = useAIFromQuery === 'true' || useAIFromQuery === '1';
+    } else {
+      enableAI = false; // افتراضي: محلي فقط للسرعة
+    }
 
     if (!text.trim()) {
       return NextResponse.json(
@@ -38,6 +56,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      mode: enableAI ? 'ai' : 'local',
       originalLength: result.originalLength,
       cleanedLength: result.cleanedLength,
       decision: result.decision,
@@ -46,6 +65,13 @@ export async function POST(req: NextRequest) {
       categories: result.categories,
       confidence: result.confidence,
       modelUsed: result.modelUsed,
+      moderationDetails: {
+        categories: result.categories,
+        confidence: result.confidence,
+        decision: result.decision,
+        modelUsed: result.modelUsed,
+        reasons: result.reasons,
+      },
     });
   } catch (e) {
     console.error('[exams/security/scan-text] error:', e);
@@ -59,16 +85,31 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     endpoint: 'POST /api/exams/security/scan-text',
-    description: 'يختبر Pipeline مراجعة النصوص (فلتر محلي + LLM)',
+    description: 'يختبر Pipeline مراجعة النصوص (فلتر محلي + LLM اختياري)',
     usage: {
       method: 'POST',
       contentType: 'application/json',
       body: {
         text: 'النص للفحص (مطلوب)',
-        ai: 'false لتعطيل LLM (اختياري، افتراضي true)',
+        useAI: 'true لتفعيل LLM (اختياري، افتراضي false — محلي فقط)',
+        ai: '(مهجور) نفس useAI',
+      },
+      query: {
+        useAI: 'true|false — يضبط تفعيل LLM',
       },
     },
     decisions: ['SAFE', 'FLAGGED', 'BLOCKED', 'ERROR'],
-    categories: ['profanity', 'violence', 'nudity', 'hate', 'cheating', 'personal_info', 'inappropriate', 'external-links', 'blocked-words', 'other'],
+    categories: [
+      'profanity',
+      'violence',
+      'nudity',
+      'hate',
+      'cheating',
+      'personal_info',
+      'inappropriate',
+      'external-links',
+      'blocked-words',
+      'other',
+    ],
   });
 }

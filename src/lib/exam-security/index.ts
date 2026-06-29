@@ -28,6 +28,16 @@ import { sanitizePdf } from './pdf-sanitizer';
 import { moderateImageWithAI, moderateImageLocal } from './image-moderator';
 import { moderateTextWithAI, moderateTextLocal } from './text-moderator';
 import { storeSecureFile, readSecureFile, deleteSecureFile, buildSecureFileUrl, buildAnswerFileUrl } from './storage';
+import {
+  gradeAssistText,
+  gradeAssistImage,
+  suggestQuestionImprovement,
+  type GradeAssistResult,
+  type GradeAssistTextParams,
+  type GradeAssistImageParams,
+  type QuestionImprovementParams,
+  type QuestionImprovementResult,
+} from './grade-assist';
 import type {
   AllowedFileKind,
   SecureUploadResult,
@@ -203,6 +213,9 @@ export {
   deleteSecureFile,
   buildSecureFileUrl,
   buildAnswerFileUrl,
+  gradeAssistText,
+  gradeAssistImage,
+  suggestQuestionImprovement,
 };
 
 // إعادة تصدير الأنواع
@@ -217,3 +230,11 @@ export type {
   SecureUploadResult,
   SecureUploadOptions,
 } from './types';
+
+export type {
+  GradeAssistResult,
+  GradeAssistTextParams,
+  GradeAssistImageParams,
+  QuestionImprovementParams,
+  QuestionImprovementResult,
+} from './grade-assist';

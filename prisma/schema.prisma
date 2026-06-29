@@ -1212,6 +1212,8 @@ model Answer {
   teacherNote     String?
   aiSuggestedScore Float?          // اقتراح AI للدرجة
   aiConfidence    Float?           // ثقة AI (0-1)
+  aiAssisted      Boolean          @default(false)  // هل استُخدم AI في التصحيح
+  lastAiAssistAt  DateTime?        // متى آخر اقتراح AI
   gradedAt        DateTime?
   gradedById      String?
   createdAt       DateTime         @default(now())

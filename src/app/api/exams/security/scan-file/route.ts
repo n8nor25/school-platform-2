@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
 
     // ③ مراجعة AI للصور (اختياري)
     let moderationResult: Record<string, unknown> | null = null;
+    let moderationDetails: Record<string, unknown> | null = null;
     if (validation.valid && validation.kind === 'image' && sanitizeResult && (sanitizeResult as { ok: boolean }).ok && enableAI) {
       try {
         const m = await moderateImageWithAI(
@@ -77,11 +78,32 @@ export async function POST(req: NextRequest) {
           confidence: m.confidence,
           modelUsed: m.modelUsed,
         };
+        moderationDetails = {
+          decision: m.decision,
+          categories: m.categories,
+          confidence: m.confidence,
+          modelUsed: m.modelUsed,
+          reasons: m.reasons,
+        };
       } catch (e) {
         moderationResult = {
           error: `فشل VLM: ${(e as Error).message}`,
         };
+        moderationDetails = {
+          error: `فشل VLM: ${(e as Error).message}`,
+          modelUsed: 'vlm-error',
+          confidence: 0,
+        };
       }
+    } else if (validation.valid && validation.kind === 'image' && sanitizeResult && (sanitizeResult as { ok: boolean }).ok && !enableAI) {
+      // محلي فقط
+      moderationDetails = {
+        decision: 'SAFE',
+        categories: [],
+        confidence: 0.5,
+        modelUsed: 'local-only',
+        reasons: ['المراجعة المحلية فقط — لم يُفعَّل AI'],
+      };
     }
 
     // ④ بصمة الملف
@@ -104,10 +126,12 @@ export async function POST(req: NextRequest) {
       },
       sanitize: sanitizeResult,
       moderation: moderationResult,
+      moderationDetails,
+      modelUsed: (moderationResult as { modelUsed?: string } | null)?.modelUsed ?? null,
       pipeline: [
         '① file-validation',
         validation.valid ? '② sanitize' : '② skipped (invalid)',
-        validation.valid && validation.kind === 'image' && enableAI ? '③ AI moderation' : '③ skipped',
+        validation.valid && validation.kind === 'image' && enableAI ? '③ AI moderation (VLM)' : '③ skipped',
         validation.valid ? '④ ready for storage' : '④ rejected',
       ],
     });
