@@ -19,6 +19,7 @@ const ResultsPage = dynamic(() => import('@/components/results-page'), { loading
 const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
 const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
 const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
+const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -82,6 +83,7 @@ const navLinks = [
 ]
 
 const serviceItems = [
+  { label: 'الامتحانات الإلكترونية', icon: '📝', action: 'exams' },
   { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
   { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
   { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
@@ -120,6 +122,7 @@ function HomePage() {
   const [showSchedulesPage, setShowSchedulesPage] = useState(false)
   const [showLibraryPage, setShowLibraryPage] = useState(false)
   const [showParentsPage, setShowParentsPage] = useState(false)
+  const [showExamsPage, setShowExamsPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -253,6 +256,7 @@ function HomePage() {
     if (action === 'schedules') setShowSchedulesPage(true)
     if (action === 'library') setShowLibraryPage(true)
     if (action === 'parents') setShowParentsPage(true)
+    if (action === 'exams') setShowExamsPage(true)
   }
 
   const school = schoolData?.school || defaultSchoolData.school
@@ -270,6 +274,7 @@ function HomePage() {
   if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
   if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
   if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} />
+  if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
 
   if (!hydrated) {
     return (
