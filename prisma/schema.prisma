@@ -71,6 +71,8 @@ model School {
   examViolations ExamViolation[]
   examAppeals    ExamAppeal[]
   examModeration ExamModerationLog[]
+  questionBank   QuestionBank[]
+  examTeacherProfile ExamTeacherProfile[]
 }
 
 // ===== الإعدادات =====
@@ -1132,6 +1134,8 @@ model Question {
   attachmentUrl  String?     // URL للعرض (مؤقت)
   textModeration  ModerationStatus @default(PENDING)
   imageModeration  ModerationStatus @default(PENDING)
+  moderationNotes String?          // JSON: أسباب قرار الـ AI
+  moderatedAt     DateTime?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -1289,4 +1293,62 @@ model ExamModerationLog {
   @@index([answerId])
   @@index([action])
   @@index([schoolId])
+}
+
+// ----- بنك الأسئلة (Question Bank) -----
+// أسئلة قابلة لإعادة الاستخدام عبر الامتحانات، يصنعها المعلم ويصنّفها.
+model QuestionBank {
+  id            String       @id @default(cuid())
+  schoolId      String
+  school        School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacherId     String
+  teacherName   String       @default("")
+  subject       String       @default("")   // المادة (لتصفية بنك الأسئلة)
+  classroomName String       @default("")   // الصف المستهدف (اختياري)
+  type          QuestionType
+  text          String       // نص السؤال (بعد الفلترة)
+  options       String?      // JSON array
+  correctAnswer String?
+  correctText   String?
+  rubric        String?      // معايير التصحيح JSON
+  points        Float        @default(1)
+  explanation   String?
+  tags          String       @default("[]") // JSON array of tags
+  difficulty    String       @default("medium")  // easy|medium|hard
+  usageCount    Int          @default(0)   // عدد مرات الاستخدام في امتحانات
+  isPublic      Boolean      @default(false) // مرئي لمعلمي المدرسة الآخرين؟
+  textModeration  ModerationStatus @default(PENDING)
+  imageModeration  ModerationStatus @default(PENDING)
+  moderationNotes String?
+  moderatedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([subject])
+  @@index([type])
+  @@index([isPublic])
+}
+
+// ----- ملف المعلم للامتحانات -----
+// يخزّن إعدادات المعلم الافتراضية + إحصاءات سريعة.
+model ExamTeacherProfile {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacherId       String   @unique
+  teacherName     String   @default("")
+  defaultSubject  String   @default("")
+  defaultDurationMinutes Int @default(30)
+  defaultMaxAttempts Int   @default(1)
+  defaultPassingScore Float @default(50)
+  defaultAllowText Boolean  @default(true)
+  defaultAllowImage Boolean @default(true)
+  defaultAllowPdf  Boolean  @default(false)
+  defaultAntiCheat Boolean  @default(true)
+  totalExamsCreated Int    @default(0)
+  totalQuestionsInBank Int @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
