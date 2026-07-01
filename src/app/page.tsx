@@ -22,6 +22,7 @@ const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page
 const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
 const ParentAnalyticsPage = dynamic(() => import('@/components/parent-analytics-page'), { loading: PageLoader })
 const TeacherExamsPage = dynamic(() => import('@/components/teacher-exams-page'), { loading: PageLoader })
+const CoordinatorDashboardPage = dynamic(() => import('@/components/coordinator-dashboard-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -91,6 +92,7 @@ const serviceItems = [
   { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
   { label: 'امتحانات الطالب', icon: '📝', action: 'exams' },
   { label: 'واجهة المعلم', icon: '👨‍🏫', action: 'teacher' },
+  { label: 'لوحة المنسّق', icon: '🎛️', action: 'coordinator' },
 ]
 
 // ===== Main Component =====
@@ -129,6 +131,7 @@ function HomePage() {
   const [showExamsPage, setShowExamsPage] = useState(false)
   const [showAnalyticsPage, setShowAnalyticsPage] = useState(false)
   const [showTeacherPage, setShowTeacherPage] = useState(false)
+  const [showCoordinatorPage, setShowCoordinatorPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -271,6 +274,7 @@ function HomePage() {
       else if (urlAction === 'library') setShowLibraryPage(true)
       else if (urlAction === 'parents') setShowParentsPage(true)
       else if (urlAction === 'teacher') setShowTeacherPage(true)
+      else if (urlAction === 'coordinator') setShowCoordinatorPage(true)
     })
   }, [urlAction, hydrated, router])
 
@@ -282,6 +286,7 @@ function HomePage() {
     if (action === 'parents') setShowParentsPage(true)
     if (action === 'exams') setShowExamsPage(true)
     if (action === 'teacher') setShowTeacherPage(true)
+    if (action === 'coordinator') setShowCoordinatorPage(true)
   }
 
   // الانتقال من بوابة أولياء الأمور إلى صفحة الامتحانات الإلكترونية
@@ -314,6 +319,7 @@ function HomePage() {
   if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
   if (showAnalyticsPage) return <ParentAnalyticsPage onBack={() => setShowAnalyticsPage(false)} schoolId={selectedSchoolId} />
   if (showTeacherPage) return <TeacherExamsPage onBack={() => setShowTeacherPage(false)} schoolId={selectedSchoolId} />
+  if (showCoordinatorPage) return <CoordinatorDashboardPage onBack={() => setShowCoordinatorPage(false)} schoolId={selectedSchoolId} />
 
   if (!hydrated) {
     return (
@@ -618,6 +624,7 @@ function HomePage() {
                   { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
                   { icon: '📝', title: 'امتحانات الطالب', desc: 'الامتحانات الإلكترونية للطلاب', action: 'exams', color: '#047857' },
                   { icon: '👨‍🏫', title: 'واجهة المعلم', desc: 'إدارة الامتحانات والتصحيح والتظلّمات', action: 'teacher', color: '#7C3AED' },
+                  { icon: '🎛️', title: 'لوحة المنسّق', desc: 'إدارة كل امتحانات المدرسة والإشراف عليها', action: 'coordinator', color: '#0F766E' },
                   { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
                 ].map(service => (
                   <div key={service.title}

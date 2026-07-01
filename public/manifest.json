@@ -66,6 +66,13 @@
       "description": "إدارة الامتحانات الإلكترونية للمعلمين",
       "url": "/?action=teacher",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "لوحة المنسّق",
+      "short_name": "المنسّق",
+      "description": "إدارة كل امتحانات المدرسة والإشراف عليها",
+      "url": "/?action=coordinator",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "prefer_related_applications": false
