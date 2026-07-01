@@ -20,6 +20,7 @@ const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loa
 const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
 const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
 const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
+const ParentAnalyticsPage = dynamic(() => import('@/components/parent-analytics-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -124,6 +125,7 @@ function HomePage() {
   const [showLibraryPage, setShowLibraryPage] = useState(false)
   const [showParentsPage, setShowParentsPage] = useState(false)
   const [showExamsPage, setShowExamsPage] = useState(false)
+  const [showAnalyticsPage, setShowAnalyticsPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -283,6 +285,12 @@ function HomePage() {
     setShowExamsPage(true)
   }, [])
 
+  // الانتقال من بوابة أولياء الأمور إلى صفحة التحليلات المقارنة
+  const handleOpenAnalyticsFromParents = useCallback(() => {
+    setShowParentsPage(false)
+    setShowAnalyticsPage(true)
+  }, [])
+
   const school = schoolData?.school || defaultSchoolData.school
   const settings = schoolData?.settings || defaultSchoolData.settings
   const stats = schoolData?.stats || defaultSchoolData.stats
@@ -297,8 +305,9 @@ function HomePage() {
   if (showResultsPage) return <ResultsPage onBack={() => setShowResultsPage(false)} schoolId={selectedSchoolId} />
   if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
   if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
-  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} onOpenExams={handleOpenExamsFromParents} />
+  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} onOpenExams={handleOpenExamsFromParents} onOpenAnalytics={handleOpenAnalyticsFromParents} />
   if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
+  if (showAnalyticsPage) return <ParentAnalyticsPage onBack={() => setShowAnalyticsPage(false)} schoolId={selectedSchoolId} />
 
   if (!hydrated) {
     return (

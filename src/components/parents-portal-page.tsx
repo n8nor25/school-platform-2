@@ -5,7 +5,7 @@ import {
   ArrowRight, Search, CalendarDays, Phone, Mail, MapPin,
   Megaphone, BookOpenCheck, Users, Heart, Lightbulb,
   Monitor, Brain, ClipboardCheck, GraduationCap, MessageSquare,
-  Shield, Clock, ChevronLeft, Sparkles, Star, Bell
+  Shield, Clock, ChevronLeft, Sparkles, Star, Bell, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,6 +16,8 @@ interface ParentsPortalPageProps {
   schoolId: string;
   /** فتح بوابة نتائج الامتحانات الإلكترونية */
   onOpenExams?: () => void;
+  /** فتح صفحة التحليلات المقارنة لأداء الطالب */
+  onOpenAnalytics?: () => void;
 }
 
 const quickActions = [
@@ -27,6 +29,15 @@ const quickActions = [
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     borderColor: 'border-emerald-200 dark:border-emerald-800',
     action: 'exams' as const,
+  },
+  {
+    title: 'تحليلات الأداء المقارنة',
+    description: 'رسوم بيانية وترتيب ابنك مقارنة بزملائه',
+    icon: <BarChart3 className="w-7 h-7" />,
+    color: 'from-purple-500 to-violet-600',
+    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    borderColor: 'border-purple-200 dark:border-purple-800',
+    action: 'analytics' as const,
   },
   {
     title: 'جداول الحصص',
@@ -123,13 +134,15 @@ const announcements = [
   },
 ];
 
-export default function ParentsPortalPage({ onBack, schoolId, onOpenExams }: ParentsPortalPageProps) {
+export default function ParentsPortalPage({ onBack, schoolId, onOpenExams, onOpenAnalytics }: ParentsPortalPageProps) {
   const [fadeIn, setFadeIn] = useState(false);
   const [visibleCards, setVisibleCards] = useState<number[]>([]);
 
   const handleAction = (action: string) => {
     if (action === 'exams' && onOpenExams) {
       onOpenExams();
+    } else if (action === 'analytics' && onOpenAnalytics) {
+      onOpenAnalytics();
     }
   };
 
@@ -245,13 +258,13 @@ export default function ParentsPortalPage({ onBack, schoolId, onOpenExams }: Par
           </div>
         </div>
 
-        {/* Quick Actions - 2x2 Grid */}
+        {/* Quick Actions - 2x3 Grid (5 cards) */}
         <div className="mb-10">
           <div className="flex items-center gap-2 mb-5">
             <Star className="w-6 h-6 text-emerald-600" />
             <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">الخدمات السريعة</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {quickActions.map((action, index) => (
               <Card
                 key={action.title}
@@ -260,7 +273,7 @@ export default function ParentsPortalPage({ onBack, schoolId, onOpenExams }: Par
                   visibleCards.includes(index)
                     ? 'opacity-100 translate-y-0'
                     : 'opacity-0 translate-y-8'
-                } ${action.action === 'exams' && onOpenExams ? 'ring-2 ring-emerald-300/60' : ''}`}
+                } ${action.action === 'exams' && onOpenExams ? 'ring-2 ring-emerald-300/60' : ''} ${action.action === 'analytics' && onOpenAnalytics ? 'ring-2 ring-purple-300/60' : ''}`}
               >
                 <CardContent className="p-0">
                   <div className="flex items-center gap-5 p-6">
