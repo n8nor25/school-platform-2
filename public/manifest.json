@@ -59,6 +59,13 @@
       "description": "الاستعلام عن نتائج الطلاب",
       "url": "/?action=results",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "واجهة المعلم",
+      "short_name": "المعلم",
+      "description": "إدارة الامتحانات الإلكترونية للمعلمين",
+      "url": "/?action=teacher",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "prefer_related_applications": false
