@@ -83,11 +83,11 @@ const navLinks = [
 ]
 
 const serviceItems = [
-  { label: 'الامتحانات الإلكترونية', icon: '📝', action: 'exams' },
   { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
   { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
   { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
   { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
+  { label: 'امتحانات الطالب', icon: '📝', action: 'exams' },
 ]
 
 // ===== Main Component =====
@@ -105,6 +105,7 @@ function HomePage() {
   const router = useRouter()
   const pathname = usePathname()
   const urlSubdomain = searchParams.get('school')
+  const urlAction = searchParams.get('action')
   const hasAppliedUrlSchool = useRef(false)
 
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null)
@@ -250,6 +251,23 @@ function HomePage() {
     if (logoClickCount.current >= 5) { logoClickCount.current = 0; setShowAdminLogin(true) }
   }, [])
 
+  // معالجة اختصارات PWA (?action=...) عند فتح التطبيق من الشاشة الرئيسية
+  const urlActionProcessed = useRef(false)
+  useEffect(() => {
+    if (!urlAction || !hydrated || urlActionProcessed.current) return
+    urlActionProcessed.current = true
+    // تنظيف الـ URL من معامل action بعد تفعيله
+    router.replace('/')
+    // استخدام microtask لتجنّب تحذير set-state-in-effect
+    queueMicrotask(() => {
+      if (urlAction === 'exams') { setShowExamsPage(true) }
+      else if (urlAction === 'results') setShowResultsPage(true)
+      else if (urlAction === 'schedules') setShowSchedulesPage(true)
+      else if (urlAction === 'library') setShowLibraryPage(true)
+      else if (urlAction === 'parents') setShowParentsPage(true)
+    })
+  }, [urlAction, hydrated, router])
+
   const handleServiceAction = (action: string) => {
     setServicesOpen(false); setMobileMenuOpen(false)
     if (action === 'results') setShowResultsPage(true)
@@ -258,6 +276,12 @@ function HomePage() {
     if (action === 'parents') setShowParentsPage(true)
     if (action === 'exams') setShowExamsPage(true)
   }
+
+  // الانتقال من بوابة أولياء الأمور إلى صفحة الامتحانات الإلكترونية
+  const handleOpenExamsFromParents = useCallback(() => {
+    setShowParentsPage(false)
+    setShowExamsPage(true)
+  }, [])
 
   const school = schoolData?.school || defaultSchoolData.school
   const settings = schoolData?.settings || defaultSchoolData.settings
@@ -273,7 +297,7 @@ function HomePage() {
   if (showResultsPage) return <ResultsPage onBack={() => setShowResultsPage(false)} schoolId={selectedSchoolId} />
   if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
   if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
-  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} />
+  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} onOpenExams={handleOpenExamsFromParents} />
   if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
 
   if (!hydrated) {
@@ -575,9 +599,9 @@ function HomePage() {
                 {[
                   { icon: '📋', title: 'الاستعلام عن النتائج', desc: 'استعلم عن نتائجك الأكاديمية بسهولة وسرعة', action: 'results', color: '#2196F3' },
                   { icon: '📅', title: 'جداول الحصص', desc: 'عرض جداول الحصص والمواعيد الدراسية', action: 'schedules', color: '#FF9800' },
-                  { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم الأكاديمي والسلوكي', action: 'parents', color: '#4CAF50' },
+                  { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم ونتائج الامتحانات الإلكترونية', action: 'parents', color: '#4CAF50' },
                   { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
-                  { icon: '💻', title: 'التحول الرقمي', desc: 'خدمات التحول الرقمي المتقدمة', action: 'schedules', color: '#00BCD4' },
+                  { icon: '📝', title: 'امتحانات الطالب', desc: 'الامتحانات الإلكترونية للطلاب', action: 'exams', color: '#047857' },
                   { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
                 ].map(service => (
                   <div key={service.title}

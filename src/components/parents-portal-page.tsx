@@ -14,16 +14,19 @@ import { Badge } from '@/components/ui/badge';
 interface ParentsPortalPageProps {
   onBack: () => void;
   schoolId: string;
+  /** فتح بوابة نتائج الامتحانات الإلكترونية */
+  onOpenExams?: () => void;
 }
 
 const quickActions = [
   {
-    title: 'متابعة النتائج',
-    description: 'استعلم عن نتائج ابنك',
+    title: 'نتائج الامتحانات الإلكترونية',
+    description: 'تابع نتائج وأداء أبنائك في الامتحانات الإلكترونية',
     icon: <Search className="w-7 h-7" />,
     color: 'from-emerald-500 to-emerald-600',
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     borderColor: 'border-emerald-200 dark:border-emerald-800',
+    action: 'exams' as const,
   },
   {
     title: 'جداول الحصص',
@@ -32,6 +35,7 @@ const quickActions = [
     color: 'from-amber-500 to-orange-500',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
     borderColor: 'border-amber-200 dark:border-amber-800',
+    action: 'schedules' as const,
   },
   {
     title: 'التواصل مع المدرسة',
@@ -40,6 +44,7 @@ const quickActions = [
     color: 'from-sky-500 to-blue-600',
     bgColor: 'bg-sky-50 dark:bg-sky-900/20',
     borderColor: 'border-sky-200 dark:border-sky-800',
+    action: 'contact' as const,
   },
   {
     title: 'الإعلانات المدرسية',
@@ -48,6 +53,7 @@ const quickActions = [
     color: 'from-rose-500 to-red-500',
     bgColor: 'bg-rose-50 dark:bg-rose-900/20',
     borderColor: 'border-rose-200 dark:border-rose-800',
+    action: 'announcements' as const,
   },
 ];
 
@@ -117,9 +123,15 @@ const announcements = [
   },
 ];
 
-export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPageProps) {
+export default function ParentsPortalPage({ onBack, schoolId, onOpenExams }: ParentsPortalPageProps) {
   const [fadeIn, setFadeIn] = useState(false);
   const [visibleCards, setVisibleCards] = useState<number[]>([]);
+
+  const handleAction = (action: string) => {
+    if (action === 'exams' && onOpenExams) {
+      onOpenExams();
+    }
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setFadeIn(true), 100);
@@ -243,11 +255,12 @@ export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPag
             {quickActions.map((action, index) => (
               <Card
                 key={action.title}
+                onClick={() => handleAction(action.action)}
                 className={`border-0 shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer group overflow-hidden ${
                   visibleCards.includes(index)
                     ? 'opacity-100 translate-y-0'
                     : 'opacity-0 translate-y-8'
-                }`}
+                } ${action.action === 'exams' && onOpenExams ? 'ring-2 ring-emerald-300/60' : ''}`}
               >
                 <CardContent className="p-0">
                   <div className="flex items-center gap-5 p-6">
@@ -282,7 +295,7 @@ export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPag
           </div>
         </div>
 
-        {/* Results Query Card (Standalone) */}
+        {/* Electronic Exam Results Card (Standalone) — البوابة الرئيسية للنتائج */}
         <div
           className={`mb-10 transition-all duration-700 delay-500 ${
             fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
@@ -297,19 +310,27 @@ export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPag
                       <Search className="w-10 h-10 text-white" />
                     </div>
                     <div className="flex-1 text-center md:text-right">
-                      <h3 className="text-2xl font-bold text-[#2A374E] dark:text-white mb-2">
-                        استعلم عن نتائج ابنك
-                      </h3>
+                      <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
+                        <h3 className="text-2xl font-bold text-[#2A374E] dark:text-white">
+                          نتائج الامتحانات الإلكترونية
+                        </h3>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
+                          تفاعلي
+                        </Badge>
+                      </div>
                       <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
-                        يمكنك الآن الاستعلام عن نتائج ابنك بسهولة. اختر الصف الدراسي وأدخل رقم الجلوس لعرض النتائج التفصيلية والنسب المئوية وحالة النجاح.
+                        تابع نتائج أبنائك في الامتحانات الإلكترونية، اعرف النسب المئوية وحالة النجاح،
+                        وراجع الإجابات التفصيلية وملاحظات المعلم. سجّل الدخول بمعرّف ولي الأمر للوصول إلى بيانات أبنائك.
                       </p>
                     </div>
                     <div className="shrink-0">
                       <Button
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all"
+                        onClick={() => handleAction('exams')}
+                        disabled={!onOpenExams}
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Search className="w-5 h-5 ml-2" />
-                        استعلام الآن
+                        دخول النتائج
                       </Button>
                     </div>
                   </div>
