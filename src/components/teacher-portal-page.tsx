@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
   ArrowRight, ArrowLeft, LogOut, LogIn, Mail, Phone, User, BookOpen,
   Users, GraduationCap, ClipboardCheck, CalendarDays, Megaphone,
@@ -14,6 +15,30 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+
+// Dynamic import of the exams page (avoid blocking initial bundle)
+const TeacherExamsPage = dynamic(() => import('./teacher-exams-page'), {
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">جارٍ التحميل...</p>
+      </div>
+    </div>
+  ),
+});
+
+// Dynamic import of the grading page (avoid blocking initial bundle)
+const TeacherGradingPage = dynamic(() => import('./teacher-grading-page'), {
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-fuchsia-200 border-t-fuchsia-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">جارٍ التحميل...</p>
+      </div>
+    </div>
+  ),
+});
 
 interface TeacherPortalPageProps {
   onBack: () => void;
@@ -234,6 +259,10 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
 
+  // Sub-page navigation
+  const [showExamsPage, setShowExamsPage] = useState(false);
+  const [showGradingPage, setShowGradingPage] = useState(false);
+
   // ===== Restore session on mount =====
   useEffect(() => {
     let restored: LoginResponse | null = null;
@@ -371,6 +400,16 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
   };
 
   const handleQuickAction = (title: string) => {
+    if (title === 'إدارة الامتحانات') {
+      const t = setTimeout(() => setShowExamsPage(true), 0);
+      void t;
+      return;
+    }
+    if (title === 'تصحيح الدرجات') {
+      const t = setTimeout(() => setShowGradingPage(true), 0);
+      void t;
+      return;
+    }
     toast.info(`${title} — قريباً`, {
       description: 'هذه الخدمة قيد التطوير وستتوفر في الإصدار القادم.',
     });
@@ -518,6 +557,36 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
           </div>
         </footer>
       </div>
+    );
+  }
+
+  // ===== Render: Exams Management Sub-page =====
+  if (showExamsPage && session) {
+    return (
+      <TeacherExamsPage
+        onBack={() => {
+          const t = setTimeout(() => setShowExamsPage(false), 0);
+          void t;
+        }}
+        schoolId={schoolId}
+        teacherId={session.teacherId}
+        teacherName={session.name}
+      />
+    );
+  }
+
+  // ===== Render: Grading Sub-page =====
+  if (showGradingPage && session) {
+    return (
+      <TeacherGradingPage
+        onBack={() => {
+          const t = setTimeout(() => setShowGradingPage(false), 0);
+          void t;
+        }}
+        schoolId={schoolId}
+        teacherId={session.teacherId}
+        teacherName={session.name}
+      />
     );
   }
 

@@ -21,6 +21,7 @@ const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-pa
 const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
 const TeacherPortalPage = dynamic(() => import('@/components/teacher-portal-page'), { loading: PageLoader })
 const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
+const ParentExamsPage = dynamic(() => import('@/components/parent-exams-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -126,6 +127,14 @@ function HomePage() {
   const [showParentsPage, setShowParentsPage] = useState(false)
   const [showTeacherPage, setShowTeacherPage] = useState(false)
   const [showExamsPage, setShowExamsPage] = useState(false)
+  const [showParentExamsPage, setShowParentExamsPage] = useState(false)
+  const [parentExamsChild, setParentExamsChild] = useState<{
+    id: string;
+    name: string;
+    studentNumber: string;
+    classroomName?: string | null;
+    gradeName?: string | null;
+  } | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -277,7 +286,28 @@ function HomePage() {
   if (showResultsPage) return <ResultsPage onBack={() => setShowResultsPage(false)} schoolId={selectedSchoolId} />
   if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
   if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
-  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} />
+  if (showParentExamsPage && parentExamsChild) {
+    return (
+      <ParentExamsPage
+        onBack={() => {
+          setShowParentExamsPage(false)
+          setParentExamsChild(null)
+        }}
+        schoolId={selectedSchoolId}
+        child={parentExamsChild}
+      />
+    )
+  }
+  if (showParentsPage) return (
+    <ParentsPortalPage
+      onBack={() => setShowParentsPage(false)}
+      schoolId={selectedSchoolId}
+      onOpenExams={(child) => {
+        setParentExamsChild(child)
+        setShowParentExamsPage(true)
+      }}
+    />
+  )
   if (showTeacherPage) return <TeacherPortalPage onBack={() => setShowTeacherPage(false)} schoolId={selectedSchoolId} />
   if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
 

@@ -68,23 +68,38 @@ export async function extractTeacherContext(
   });
 
   if (!profile) {
-    // في وضع الاختبار نسمح بـ teacherId يبدأ بـ "test-"
-    // في الإنتاج، يجب أن يأتي المعرف من جلسة موثّقة
-    if (!teacherId.startsWith('test-')) {
-      // نحاول إنشاء ملف تلقائياً للمعلمين الجدد (سيتطلب نظام auth حقيقياً لاحقاً)
-      // حالياً نرفض المعرفات غير المسجّلة وغير الاختبارية
+    // ثلاث حالات نسمح بها:
+    //   1. teacherId يبدأ بـ "test-" (وضع اختبار)
+    //   2. teacherId يطابق معلماً حقيقياً في جدول Teacher بنفس schoolId
+    //      (هذا يسمح لبوابة المعلم باستخدام APIs الامتحانات مباشرةً بعد تسجيل الدخول)
+    //   3. غير ذلك: رفض
+    const isTest = teacherId.startsWith('test-');
+
+    let realTeacher: { id: string; name: string; subject: string } | null = null;
+    if (!isTest) {
+      realTeacher = await db.teacher.findFirst({
+        where: { id: teacherId, schoolId, archived: false },
+        select: { id: true, name: true, subject: true },
+      });
+    }
+
+    if (!isTest && !realTeacher) {
       return {
         teacher: null,
         error: 'المعلم غير مُسجّل في النظام. سجّل الدخول أولاً.',
         status: 401,
       };
     }
-    // إنشاء ملف اختباري تلقائياً
+
+    // إنشاء ملف تلقائياً (اختباري أو حقيقي)
     profile = await db.examTeacherProfile.create({
       data: {
         schoolId,
         teacherId,
-        teacherName: teacherName || 'معلم تجريبي',
+        teacherName:
+          teacherName ||
+          realTeacher?.name ||
+          'معلم تجريبي',
       },
     });
   }
