@@ -2,6 +2,62 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { resolveSchoolId } from '@/lib/school-utils'
 
+// Helper: create a News alert for absence/late attendance
+// Failure here MUST NOT fail the attendance recording itself
+async function notifyAbsence(
+  student: {
+    id: string
+    studentNumber: string
+    name: string
+    classroom: { name: string; gradeLevel: string } | null
+  },
+  status: string,
+  date: Date,
+  schoolId: string,
+  notes?: string | null
+) {
+  try {
+    const dateStr = date.toISOString().slice(0, 10) // YYYY-MM-DD
+    const classroomName = student.classroom?.name ?? '—'
+    const statusLabel = status
+    // Unique per student + date + status (prevents duplicates on re-recording)
+    const slug = `att-${student.studentNumber}-${dateStr}-${status}`
+
+    // Skip if a notification with the same slug already exists
+    const existing = await db.news.findUnique({
+      where: { schoolId_slug: { schoolId, slug } },
+    })
+    if (existing) return
+
+    const title = `تنبيه حضور: ${student.name} - ${statusLabel} بتاريخ ${dateStr}`
+    const excerpt = `${student.name} (${classroomName}) — ${statusLabel} يوم ${dateStr}.${notes ? ' ملاحظة: ' + notes : ''}`
+    const content =
+      `تنبيه تلقائي من نظام الحضور والانصراف\n\n` +
+      `الطالب: ${student.name}\n` +
+      `رقم الطالب: ${student.studentNumber}\n` +
+      `الفصل: ${classroomName}\n` +
+      `الحالة: ${statusLabel}\n` +
+      `التاريخ: ${dateStr}` +
+      (notes ? `\nملاحظة: ${notes}` : '')
+
+    await db.news.create({
+      data: {
+        schoolId,
+        title,
+        slug,
+        excerpt,
+        content,
+        category: 'تنبيه',
+        active: true,
+        archived: false,
+      },
+    })
+  } catch (error) {
+    // Non-fatal: log and continue so attendance recording is not affected
+    console.error('[attendance] notifyAbsence failed (non-fatal):', error)
+  }
+}
+
 // GET /api/attendance - List attendance records with filters
 export async function GET(request: NextRequest) {
   try {
@@ -122,12 +178,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    const finalStatus = body.status || 'حاضر'
+
     if (existing) {
       // Update the existing record instead
       const updated = await db.attendance.update({
         where: { id: existing.id },
         data: {
-          status: body.status || 'حاضر',
+          status: finalStatus,
           arrivalTime: body.arrivalTime || null,
           notes: body.notes || null,
           classroomId: body.classroomId || existing.classroomId,
@@ -135,6 +193,27 @@ export async function POST(request: NextRequest) {
           recordedBy: body.recordedBy || null,
         },
       })
+
+      // Send absence/late notification to parent portal (non-fatal)
+      if (finalStatus === 'غائب' || finalStatus === 'متأخر') {
+        try {
+          const student = await db.student.findUnique({
+            where: { id: body.studentId },
+            select: {
+              id: true,
+              studentNumber: true,
+              name: true,
+              classroom: { select: { name: true, gradeLevel: true } },
+            },
+          })
+          if (student) {
+            await notifyAbsence(student, finalStatus, dateObj, schoolId, body.notes || null)
+          }
+        } catch (e) {
+          console.error('[attendance] notifyAbsence dispatch failed (non-fatal):', e)
+        }
+      }
+
       return NextResponse.json(updated)
     }
 
@@ -145,12 +224,32 @@ export async function POST(request: NextRequest) {
         classroomId: body.classroomId || null,
         academicYearId: body.academicYearId || null,
         date: dateObj,
-        status: body.status || 'حاضر',
+        status: finalStatus,
         arrivalTime: body.arrivalTime || null,
         notes: body.notes || null,
         recordedBy: body.recordedBy || null,
       },
     })
+
+    // Send absence/late notification to parent portal (non-fatal)
+    if (finalStatus === 'غائب' || finalStatus === 'متأخر') {
+      try {
+        const student = await db.student.findUnique({
+          where: { id: body.studentId },
+          select: {
+            id: true,
+            studentNumber: true,
+            name: true,
+            classroom: { select: { name: true, gradeLevel: true } },
+          },
+        })
+        if (student) {
+          await notifyAbsence(student, finalStatus, dateObj, schoolId, body.notes || null)
+        }
+      } catch (e) {
+        console.error('[attendance] notifyAbsence dispatch failed (non-fatal):', e)
+      }
+    }
 
     return NextResponse.json(record, { status: 201 })
   } catch (error) {

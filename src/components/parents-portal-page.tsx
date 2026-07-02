@@ -1,143 +1,236 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * ============================================================
+ *  بوابة أولياء الأمور
+ *  Parents Portal Page
+ * ============================================================
+ *  المكوّنات:
+ *    ① ParentLogin     — تسجيل دخول ولي الأمر (رقم الطالب + الهاتف)
+ *    ② ParentDashboard — لوحة المتابعة بعد الدخول
+ *
+ *  التكامل:
+ *    • POST /api/parent/login?schoolId=X  body {schoolId, studentNumber, parentPhone}
+ *    • GET  /api/parent/attendance?schoolId&studentNumber&parentPhone&limit=90
+ *    • GET  /api/news?schoolId&limit=30
+ *
+ *  الجلسة: sessionStorage key = "parents-portal-session"
+ *
+ *  ملاحظات تصميمية:
+ *    • تخطيط RTL، ألوان زمردی/تركوازی (لا أزرق ولا بنفسجي كلون أساسي)
+ *    • تذييل لاصق في أسفل الشاشة (min-h-screen flex flex-col + mt-auto)
+ *    • set-state-in-effect: setState داخل useEffect عبر setTimeout(0)
+ *    • لا تكرار: "متابعة النتائج" كإجراء سريع فقط (بدون بطاقة "استعلم عن نتائج ابنك")
+ * ============================================================
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  ArrowRight, Search, CalendarDays, Phone, Mail, MapPin,
+  ArrowRight, CalendarDays, Phone, Mail, MapPin,
   Megaphone, BookOpenCheck, Users, Heart, Lightbulb,
-  Monitor, Brain, ClipboardCheck, GraduationCap, MessageSquare,
-  Shield, Clock, ChevronLeft, Sparkles, Star, Bell
+  Monitor, ClipboardCheck, GraduationCap, MessageSquare,
+  Shield, Sparkles, LogOut,
+  Loader2, AlertTriangle, FlaskConical, BookOpen,
+  Search, TrendingUp, ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+import ParentAttendanceSection from './parent-attendance-section';
+
+// ===== Types =====
+
+interface ChildInfo {
+  id: string;
+  studentNumber: string;
+  name: string;
+  classroomId?: string | null;
+  classroomName?: string | null;
+  gradeName?: string | null;
+}
+
+interface ParentSession {
+  parentName: string;
+  parentPhone: string;
+  children: ChildInfo[];
+  testMode?: boolean;
+  fakeStudent?: boolean;
+  originalStudentNumber?: string | null;
+  warning?: string | null;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  excerpt?: string | null;
+  content?: string | null;
+  image?: string | null;
+  category?: string | null;
+  active?: boolean;
+  createdAt: string;
+}
 
 interface ParentsPortalPageProps {
   onBack: () => void;
   schoolId: string;
+  onOpenExams?: (child: ChildInfo) => void;
+  onOpenAnalytics?: (child: ChildInfo) => void;
 }
 
-const quickActions = [
-  {
-    title: 'متابعة النتائج',
-    description: 'استعلم عن نتائج ابنك',
-    icon: <Search className="w-7 h-7" />,
-    color: 'from-emerald-500 to-emerald-600',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-    borderColor: 'border-emerald-200 dark:border-emerald-800',
-  },
-  {
-    title: 'جداول الحصص',
-    description: 'عرض جداول الحصص الأسبوعية',
-    icon: <CalendarDays className="w-7 h-7" />,
-    color: 'from-amber-500 to-orange-500',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-  },
-  {
-    title: 'التواصل مع المدرسة',
-    description: 'تواصل مع إدارة المدرسة',
-    icon: <MessageSquare className="w-7 h-7" />,
-    color: 'from-sky-500 to-blue-600',
-    bgColor: 'bg-sky-50 dark:bg-sky-900/20',
-    borderColor: 'border-sky-200 dark:border-sky-800',
-  },
-  {
-    title: 'الإعلانات المدرسية',
-    description: 'آخر الأخبار والتنبيهات',
-    icon: <Megaphone className="w-7 h-7" />,
-    color: 'from-rose-500 to-red-500',
-    bgColor: 'bg-rose-50 dark:bg-rose-900/20',
-    borderColor: 'border-rose-200 dark:border-rose-800',
-  },
-];
+// ===== Constants =====
 
-const parentTips = [
+const SESSION_KEY = 'parents-portal-session';
+
+const NEWS_CATEGORY_META: Record<string, { label: string; cls: string }> = {
+  'تنبيه':   { label: 'تنبيه',   cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800' },
+  'فعاليات': { label: 'فعاليات', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800' },
+  'أخبار':   { label: 'أخبار',   cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' },
+  'إعلان':   { label: 'إعلان',   cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800' },
+  'عام':     { label: 'عام',     cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800' },
+};
+
+function getNewsCategoryMeta(category?: string | null) {
+  if (!category) return { label: 'عام', cls: NEWS_CATEGORY_META['عام'].cls };
+  return NEWS_CATEGORY_META[category] ?? { label: category, cls: NEWS_CATEGORY_META['عام'].cls };
+}
+
+const PARENT_TIPS = [
   {
     title: 'متابعة الواجبات يومياً',
     description: 'تأكد من إنجاز ابنك لواجباته المدرسية يومياً وراجعها معه لتعزيز الفهم والاستيعاب',
-    icon: <ClipboardCheck className="w-6 h-6" />,
-    color: 'from-emerald-500 to-teal-500',
-    emoji: '📋',
+    icon: ClipboardCheck,
+    gradient: 'from-emerald-500 to-teal-500',
   },
   {
     title: 'التواصل المستمر مع المعلمين',
     description: 'حافظ على تواصل دوري مع معلمي ابنك لمتابعة مستواه الأكاديمي والسلوكي',
-    icon: <Users className="w-6 h-6" />,
-    color: 'from-blue-500 to-indigo-500',
-    emoji: '🤝',
+    icon: Users,
+    gradient: 'from-teal-500 to-emerald-500',
   },
   {
     title: 'توفير بيئة دراسية مناسبة',
     description: 'أمّن لابنك مكاناً هادئاً ومريحاً للدراسة بعيداً عن المشتتات والإزعاج',
-    icon: <BookOpenCheck className="w-6 h-6" />,
-    color: 'from-amber-500 to-yellow-500',
-    emoji: '🏠',
+    icon: BookOpenCheck,
+    gradient: 'from-amber-500 to-yellow-500',
   },
   {
     title: 'تشجيع القراءة والاطلاع',
     description: 'شجّع ابنك على القراءة اليومية ووفّر له كتباً وقصصاً تناسب عمره واهتماماته',
-    icon: <Lightbulb className="w-6 h-6" />,
-    color: 'from-purple-500 to-violet-500',
-    emoji: '📚',
+    icon: Lightbulb,
+    gradient: 'from-purple-500 to-violet-500',
   },
   {
     title: 'مراقبة استخدام التكنولوجيا',
     description: 'راقب وقت شاشة ابنك وتأكد من استخدام التقنية بطريقة مفيدة وآمنة للتعلم',
-    icon: <Monitor className="w-6 h-6" />,
-    color: 'from-rose-500 to-pink-500',
-    emoji: '💻',
+    icon: Monitor,
+    gradient: 'from-rose-500 to-pink-500',
   },
   {
     title: 'الاهتمام بالصحة النفسية',
     description: 'اهتم بالصحة النفسية لابنك واستمع لمشاعره وكون له دائماً سنداً وداعماً',
-    icon: <Heart className="w-6 h-6" />,
-    color: 'from-red-500 to-rose-500',
-    emoji: '❤️',
+    icon: Heart,
+    gradient: 'from-red-500 to-rose-500',
   },
 ];
 
-const announcements = [
-  {
-    title: 'بدء التسجيل للفصل الدراسي الثاني',
-    date: 'قبل يومين',
-    badge: 'تسجيل',
-    badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  },
-  {
-    title: 'اجتماع أولياء الأمور يوم الخميس',
-    date: 'قبل 3 أيام',
-    badge: 'اجتماع',
-    badgeColor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  },
-  {
-    title: 'مسابقة القراءة الكبرى',
-    date: 'قبل 5 أيام',
-    badge: 'مسابقة',
-    badgeColor: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  },
-];
+// ===== Helpers =====
 
-export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPageProps) {
-  const [fadeIn, setFadeIn] = useState(false);
-  const [visibleCards, setVisibleCards] = useState<number[]>([]);
+function timeAgo(iso: string): string {
+  try {
+    const date = new Date(iso);
+    const now = Date.now();
+    const diff = Math.max(0, now - date.getTime());
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days >= 30) return date.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+    if (days >= 1) return `قبل ${days} ${days === 1 ? 'يوم' : days === 2 ? 'يومين' : 'أيام'}`;
+    if (hours >= 1) return `قبل ${hours} ${hours === 1 ? 'ساعة' : hours === 2 ? 'ساعتين' : 'ساعات'}`;
+    if (minutes >= 1) return `قبل ${minutes} ${minutes === 1 ? 'دقيقة' : 'دقائق'}`;
+    return 'الآن';
+  } catch {
+    return '';
+  }
+}
 
+// ===== Main Component =====
+
+export default function ParentsPortalPage({ onBack, schoolId, onOpenExams, onOpenAnalytics }: ParentsPortalPageProps) {
+  const [session, setSession] = useState<ParentSession | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+
+  // Restore session from sessionStorage on mount (deferred to avoid lint warning)
   useEffect(() => {
-    const timer = setTimeout(() => setFadeIn(true), 100);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { session: ParentSession; selectedChildId?: string };
+          if (parsed?.session && Array.isArray(parsed.session.children) && parsed.session.children.length > 0) {
+            setSession(parsed.session);
+            const firstChildId = parsed.session.children[0].id;
+            setSelectedChildId(parsed.selectedChildId || firstChildId);
+          }
+        }
+      } catch {
+        // ignore
+      } finally {
+        setRestored(true);
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
-  // Staggered card animation
-  useEffect(() => {
-    const timeouts: NodeJS.Timeout[] = [];
-    quickActions.forEach((_, index) => {
-      timeouts.push(
-        setTimeout(() => {
-          setVisibleCards((prev) => [...prev, index]);
-        }, 300 + index * 150)
-      );
-    });
-    return () => timeouts.forEach(clearTimeout);
+  const handleLogin = useCallback((s: ParentSession) => {
+    setSession(s);
+    const firstChildId = s.children?.[0]?.id ?? null;
+    setSelectedChildId(firstChildId);
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ session: s, selectedChildId: firstChildId }));
+    } catch {
+      // ignore
+    }
   }, []);
+
+  const handleLogout = useCallback(() => {
+    setSession(null);
+    setSelectedChildId(null);
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSwitchChild = useCallback((childId: string) => {
+    setSelectedChildId(childId);
+    if (session) {
+      try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify({ session, selectedChildId: childId }));
+      } catch {
+        // ignore
+      }
+    }
+  }, [session]);
+
+  // ===== Render =====
+
+  if (!restored) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900" dir="rtl">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -146,415 +239,658 @@ export default function ParentsPortalPage({ onBack, schoolId }: ParentsPortalPag
     >
       {/* Header */}
       <header className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white shadow-xl sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+        <div className="container mx-auto px-4 py-4 max-w-[1280px]">
+          <div className="flex items-center justify-between gap-3">
             <button
               onClick={onBack}
               className="flex items-center gap-2 text-white hover:text-emerald-300 transition-colors"
             >
               <ArrowRight className="w-5 h-5" />
-              <span className="font-medium">العودة للرئيسية</span>
+              <span className="font-medium hidden sm:inline">العودة للرئيسية</span>
             </button>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center shadow-lg">
                 <Users className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">بوابة أولياء الأمور</h1>
-                <p className="text-emerald-200 text-xs">متابعة وتواصل مع المدرسة</p>
+                <h1 className="text-lg sm:text-xl font-bold">بوابة أولياء الأمور</h1>
+                <p className="text-emerald-200 text-xs hidden sm:block">متابعة وتواصل مع المدرسة</p>
               </div>
             </div>
-            <div className="w-28" />
+            {session ? (
+              <Button
+                onClick={handleLogout}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/10 hover:text-white"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">خروج</span>
+              </Button>
+            ) : (
+              <div className="w-8 sm:w-28" />
+            )}
           </div>
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
-        {/* Hero Section */}
-        <div
-          className={`mb-8 transition-all duration-700 ${
-            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-          }`}
-        >
-          <div className="relative overflow-hidden rounded-2xl">
-            <div className="absolute -inset-[2px] bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 rounded-2xl blur-[1px] opacity-60" />
-            <Card className="relative border-0 shadow-2xl rounded-2xl overflow-hidden">
-              <CardContent className="p-0">
-                <div className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] p-8 md:p-12 text-white relative overflow-hidden">
-                  {/* Decorative elements */}
-                  <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
-                  <div className="absolute bottom-0 right-0 w-48 h-48 bg-teal-500/10 rounded-full translate-x-1/4 translate-y-1/4" />
-                  <div className="absolute top-1/2 left-1/3 w-32 h-32 bg-white/5 rounded-full" />
+      <main className="flex-1 container mx-auto px-4 py-6 max-w-[1280px] w-full">
+        {!session ? (
+          <ParentLogin schoolId={schoolId} onLogin={handleLogin} />
+        ) : (
+          <ParentDashboard
+            session={session}
+            schoolId={schoolId}
+            selectedChildId={selectedChildId}
+            onSwitchChild={handleSwitchChild}
+            onLogout={handleLogout}
+            onOpenExams={onOpenExams}
+            onOpenAnalytics={onOpenAnalytics}
+          />
+        )}
+      </main>
 
-                  <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
-                    {/* Icon */}
-                    <div className="shrink-0">
-                      <div className="w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center shadow-2xl ring-4 ring-white/20">
-                        <Users className="w-12 h-12 md:w-14 md:h-14 text-white" />
-                      </div>
-                    </div>
+      {/* Sticky Footer */}
+      <footer className="mt-auto bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white py-6">
+        <div className="container mx-auto px-4 max-w-[1280px] text-center">
+          <p className="text-sm text-emerald-100">
+            © {new Date().getFullYear()} بوابة أولياء الأمور — جميع الحقوق محفوظة
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
 
-                    {/* Text */}
-                    <div className="flex-1 text-center md:text-right">
-                      <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                        <Sparkles className="w-5 h-5 text-emerald-300" />
-                        <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-xs">
-                          منصة تفاعلية
-                        </Badge>
-                      </div>
-                      <h2 className="text-3xl md:text-4xl font-bold mb-3 leading-tight">
-                        بوابة أولياء الأمور
-                      </h2>
-                      <p className="text-emerald-100/90 text-base md:text-lg leading-relaxed max-w-2xl">
-                        منصة متكاملة لمتابعة أداء أبنائكم الدراسي والتواصل المباشر مع المدرسة.
-                        نوفر لكم كل ما تحتاجون لمساندة أبنائكم في رحلتهم التعليمية.
-                      </p>
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-5">
-                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
-                          <Shield className="w-4 h-4" />
-                          <span>بيانات آمنة</span>
-                        </div>
-                        <span className="text-emerald-400">|</span>
-                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
-                          <Clock className="w-4 h-4" />
-                          <span>تحديث فوري</span>
-                        </div>
-                        <span className="text-emerald-400">|</span>
-                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
-                          <GraduationCap className="w-4 h-4" />
-                          <span>متابعة شاملة</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+// ============================================================
+// ① Parent Login
+// ============================================================
+
+function ParentLogin({
+  schoolId, onLogin,
+}: {
+  schoolId: string;
+  onLogin: (s: ParentSession) => void;
+}) {
+  const [studentNumber, setStudentNumber] = useState('');
+  const [parentPhone, setParentPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fadeIn, setFadeIn] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setFadeIn(true), 100);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentNumber.trim() || !parentPhone.trim()) {
+      setError('يرجى إدخال رقم الطالب وهاتف ولي الأمر');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/parent/login?schoolId=${encodeURIComponent(schoolId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schoolId,
+          studentNumber: studentNumber.trim(),
+          parentPhone: parentPhone.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data?.error || (res.status === 404 ? 'رقم الطالب أو هاتف ولي الأمر غير صحيح' : 'تعذّر تسجيل الدخول');
+        throw new Error(typeof msg === 'string' ? msg : 'تعذّر تسجيل الدخول');
+      }
+      if (!data?.children || !Array.isArray(data.children) || data.children.length === 0) {
+        throw new Error('لم يتم العثور على أبناء مرتبطين بهذا الحساب');
+      }
+      const sessionData: ParentSession = {
+        parentName: data.parentName || 'ولي الأمر',
+        parentPhone: data.parentPhone || parentPhone.trim(),
+        children: data.children,
+        testMode: !!data.testMode,
+        fakeStudent: !!data.fakeStudent,
+        originalStudentNumber: data.originalStudentNumber ?? null,
+        warning: data.warning ?? null,
+      };
+      onLogin(sessionData);
+      toast.success(`مرحباً ${sessionData.parentName}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'تعذّر تسجيل الدخول';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={`max-w-md mx-auto transition-all duration-700 ${fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+      <Card className="overflow-hidden border-0 shadow-2xl">
+        {/* Gradient header */}
+        <div className="bg-gradient-to-l from-emerald-600 via-emerald-600 to-teal-600 p-6 text-white relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-40 h-40 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-teal-300/10 rounded-full translate-x-1/4 translate-y-1/4" />
+          <div className="relative z-10 text-center">
+            <div className="w-16 h-16 mx-auto bg-white/20 rounded-full flex items-center justify-center mb-3 backdrop-blur">
+              <Users className="w-9 h-9 text-white" />
+            </div>
+            <h2 className="text-xl font-bold mb-1">تسجيل دخول ولي الأمر</h2>
+            <p className="text-emerald-50 text-sm">أدخل بيانات الطالب للوصول إلى لوحة المتابعة</p>
           </div>
         </div>
 
-        {/* Quick Actions - 2x2 Grid */}
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-5">
-            <Star className="w-6 h-6 text-emerald-600" />
-            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">الخدمات السريعة</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {quickActions.map((action, index) => (
-              <Card
-                key={action.title}
-                className={`border-0 shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer group overflow-hidden ${
-                  visibleCards.includes(index)
-                    ? 'opacity-100 translate-y-0'
-                    : 'opacity-0 translate-y-8'
-                }`}
-              >
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-5 p-6">
-                    {/* Icon */}
-                    <div
-                      className={`w-16 h-16 rounded-2xl bg-gradient-to-r ${action.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-lg`}
-                    >
-                      {action.icon}
-                    </div>
+        <CardContent className="p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="studentNumber" className="text-sm font-semibold">
+                رقم الطالب
+              </Label>
+              <Input
+                id="studentNumber"
+                value={studentNumber}
+                onChange={(e) => setStudentNumber(e.target.value)}
+                placeholder="مثال: 2024002"
+                disabled={loading}
+                autoComplete="off"
+                inputMode="numeric"
+                className="text-base h-11"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="parentPhone" className="text-sm font-semibold">
+                هاتف ولي الأمر
+              </Label>
+              <Input
+                id="parentPhone"
+                value={parentPhone}
+                onChange={(e) => setParentPhone(e.target.value)}
+                placeholder="مثال: 01023456789"
+                disabled={loading}
+                autoComplete="off"
+                inputMode="tel"
+                className="text-base h-11"
+                dir="ltr"
+              />
+            </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {action.title}
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {action.description}
-                      </p>
-                    </div>
-
-                    {/* Arrow */}
-                    <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 transition-colors">
-                      <ChevronLeft className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
-                    </div>
-                  </div>
-
-                  {/* Bottom accent */}
-                  <div className={`h-1 bg-gradient-to-l ${action.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Results Query Card (Standalone) */}
-        <div
-          className={`mb-10 transition-all duration-700 delay-500 ${
-            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-          }`}
-        >
-          <Card className="border-0 shadow-xl overflow-hidden">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-l from-emerald-500 to-teal-600 p-[2px] rounded-t-xl">
-                <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-t-xl">
-                  <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                      <Search className="w-10 h-10 text-white" />
-                    </div>
-                    <div className="flex-1 text-center md:text-right">
-                      <h3 className="text-2xl font-bold text-[#2A374E] dark:text-white mb-2">
-                        استعلم عن نتائج ابنك
-                      </h3>
-                      <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
-                        يمكنك الآن الاستعلام عن نتائج ابنك بسهولة. اختر الصف الدراسي وأدخل رقم الجلوس لعرض النتائج التفصيلية والنسب المئوية وحالة النجاح.
-                      </p>
-                    </div>
-                    <div className="shrink-0">
-                      <Button
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all"
-                      >
-                        <Search className="w-5 h-5 ml-2" />
-                        استعلام الآن
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+            {error && (
+              <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            )}
 
-        {/* Announcements Section */}
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-5">
-            <Bell className="w-6 h-6 text-rose-600" />
-            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">الإعلانات المدرسية</h2>
-          </div>
-          <Card className="border-0 shadow-lg overflow-hidden">
-            <CardContent className="p-0">
-              {/* Header bar */}
-              <div className="bg-gradient-to-l from-rose-500 to-red-500 p-4">
-                <div className="flex items-center gap-2 text-white">
-                  <Megaphone className="w-5 h-5" />
-                  <h3 className="font-bold">آخر الأخبار والتنبيهات</h3>
-                  <Badge className="bg-white/20 text-white border-white/30 text-xs mr-auto">
-                    3 إعلانات جديدة
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-11 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  جاري التحقق...
+                </>
+              ) : (
+                <>
+                  <Shield className="w-5 h-5" />
+                  دخول البوابة
+                </>
+              )}
+            </Button>
+          </form>
+
+          {/* Test mode hint */}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+            <div className="flex items-start gap-2">
+              <FlaskConical className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">وضع التجربة</p>
+                <p className="text-amber-700 dark:text-amber-400 text-xs leading-relaxed">
+                  لإضافة بادئة <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">test-</code> قبل رقم الطالب
+                  لعرض بيانات تجريبية. مثلاً:
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border-amber-200 dark:border-amber-800 font-mono">
+                    2024002 / 01023456789
+                  </Badge>
+                  <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 border-amber-200 dark:border-amber-800 font-mono">
+                    test-001
                   </Badge>
                 </div>
               </div>
-              {/* Announcements list */}
-              <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                {announcements.map((announcement, index) => (
-                  <div
-                    key={index}
-                    className="p-5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-2 h-2 rounded-full bg-rose-500 shrink-0 group-hover:scale-150 transition-transform" />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-gray-800 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                          {announcement.title}
-                        </h4>
-                      </div>
-                      <Badge className={`text-xs shrink-0 ${announcement.badgeColor}`}>
-                        {announcement.badge}
-                      </Badge>
-                      <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{announcement.date}</span>
-                    </div>
-                  </div>
-                ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================
+// ② Parent Dashboard
+// ============================================================
+
+function ParentDashboard({
+  session, schoolId, selectedChildId, onSwitchChild, onLogout,
+  onOpenExams, onOpenAnalytics,
+}: {
+  session: ParentSession;
+  schoolId: string;
+  selectedChildId: string | null;
+  onSwitchChild: (id: string) => void;
+  onLogout: () => void;
+  onOpenExams?: (child: ChildInfo) => void;
+  onOpenAnalytics?: (child: ChildInfo) => void;
+}) {
+  const selectedChild = session.children.find((c) => c.id === selectedChildId) ?? session.children[0];
+
+  const announcementsRef = useRef<HTMLDivElement>(null);
+  const contactRef = useRef<HTMLDivElement>(null);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [showAllNews, setShowAllNews] = useState(false);
+
+  // Fetch news
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      (async () => {
+        try {
+          const res = await fetch(`/api/news?schoolId=${encodeURIComponent(schoolId)}&limit=30`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
+          });
+          if (!res.ok) throw new Error();
+          const data = await res.json();
+          if (!cancelled && Array.isArray(data)) {
+            setNews(data.filter((n: NewsItem) => n.active !== false));
+          }
+        } catch {
+          // silent
+        } finally {
+          if (!cancelled) setNewsLoading(false);
+        }
+      })();
+    }, 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [schoolId]);
+
+  const isFakeStudent = !!session.fakeStudent || (selectedChild?.id?.startsWith('test-student-') ?? false);
+
+  const handleAction = useCallback((action: string) => {
+    if (!selectedChild) return;
+    switch (action) {
+      case 'exams':
+        if (onOpenExams) {
+          onOpenExams(selectedChild);
+        } else {
+          toast.info('نتائج الامتحانات غير متاحة حالياً');
+        }
+        break;
+      case 'analytics':
+        if (onOpenAnalytics) {
+          onOpenAnalytics(selectedChild);
+        } else {
+          toast.info('تحليلات الأداء غير متاحة حالياً');
+        }
+        break;
+      case 'schedules':
+        toast.info('جداول الحصص — قريباً');
+        break;
+      case 'library':
+        toast.info('المكتبة الرقمية — قريباً');
+        break;
+      case 'announcements':
+        announcementsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+      case 'contact':
+        contactRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        break;
+    }
+  }, [selectedChild, onOpenExams, onOpenAnalytics]);
+
+  // Quick actions — NO duplicates. Results/announcements appear ONLY here.
+  const quickActions: { key: string; title: string; description: string; icon: typeof Search; gradient: string; bg: string; border: string }[] = [
+    {
+      key: 'exams',
+      title: 'نتائج الامتحانات',
+      description: 'استعلم عن نتائج ابنك',
+      icon: Search,
+      gradient: 'from-emerald-500 to-emerald-600',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+      border: 'border-emerald-200 dark:border-emerald-800',
+    },
+    {
+      key: 'analytics',
+      title: 'تحليلات الأداء',
+      description: 'تحليل أداء ابنك الأكاديمي',
+      icon: TrendingUp,
+      gradient: 'from-teal-500 to-emerald-500',
+      bg: 'bg-teal-50 dark:bg-teal-900/20',
+      border: 'border-teal-200 dark:border-teal-800',
+    },
+    {
+      key: 'schedules',
+      title: 'جداول الحصص',
+      description: 'عرض جداول الحصص الأسبوعية',
+      icon: CalendarDays,
+      gradient: 'from-amber-500 to-orange-500',
+      bg: 'bg-amber-50 dark:bg-amber-900/20',
+      border: 'border-amber-200 dark:border-amber-800',
+    },
+    {
+      key: 'library',
+      title: 'المكتبة الرقمية',
+      description: 'مراجع وكتب إلكترونية',
+      icon: BookOpen,
+      gradient: 'from-rose-500 to-pink-500',
+      bg: 'bg-rose-50 dark:bg-rose-900/20',
+      border: 'border-rose-200 dark:border-rose-800',
+    },
+    {
+      key: 'announcements',
+      title: 'الإعلانات المدرسية',
+      description: 'آخر الأخبار والتنبيهات',
+      icon: Megaphone,
+      gradient: 'from-emerald-500 to-teal-500',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+      border: 'border-emerald-200 dark:border-emerald-800',
+    },
+    {
+      key: 'contact',
+      title: 'التواصل مع المدرسة',
+      description: 'تواصل مع إدارة المدرسة',
+      icon: MessageSquare,
+      gradient: 'from-teal-500 to-emerald-600',
+      bg: 'bg-teal-50 dark:bg-teal-900/20',
+      border: 'border-teal-200 dark:border-teal-800',
+    },
+  ].filter((a) => a.key !== 'exams' || onOpenExams).filter((a) => a.key !== 'analytics' || onOpenAnalytics);
+
+  const visibleNews = showAllNews ? news : news.slice(0, 4);
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome banner */}
+      <div className="relative overflow-hidden rounded-2xl shadow-xl">
+        <div className="bg-gradient-to-l from-emerald-600 via-emerald-600 to-teal-600 p-6 text-white relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-48 h-48 bg-teal-300/10 rounded-full translate-x-1/4 translate-y-1/4" />
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+              <GraduationCap className="w-9 h-9 text-white" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h2 className="text-xl md:text-2xl font-bold">مرحباً، {session.parentName}</h2>
+                {session.testMode && (
+                  <Badge className="bg-amber-400 text-amber-900 border-0 font-semibold">
+                    <FlaskConical className="w-3 h-3" />
+                    وضع التجربة
+                  </Badge>
+                )}
               </div>
-              {/* Footer */}
-              <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 text-center">
-                <Button variant="ghost" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-medium">
-                  عرض جميع الإعلانات
-                  <ChevronLeft className="w-4 h-4 mr-1" />
+              {selectedChild && (
+                <p className="text-emerald-50 text-sm md:text-base">
+                  متابعة الطالب: <span className="font-semibold">{selectedChild.name}</span>
+                  {selectedChild.classroomName && (
+                    <span className="text-emerald-100/80"> — {selectedChild.classroomName}</span>
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fake student warning banner */}
+      {isFakeStudent && (
+        <Card className="border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-200 dark:bg-amber-800 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-700 dark:text-amber-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-1">تنبيه: بيانات تجريبية</h3>
+                <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">
+                  أنت تستخدم بيانات طالب تجريبي. قد لا تطابق السجلات الواقع. يُنصح بتسجيل الخروج وإدخال رقم طالب صحيح.
+                </p>
+                {session.originalStudentNumber && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                    رقم الطالب الأصلي: <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">{session.originalStudentNumber}</code>
+                    {selectedChild?.studentNumber && selectedChild.studentNumber !== session.originalStudentNumber && (
+                      <>
+                        {' '}— الرقم الحالي: <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">{selectedChild.studentNumber}</code>
+                      </>
+                    )}
+                  </p>
+                )}
+                <Button
+                  onClick={onLogout}
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  <LogOut className="w-4 h-4" />
+                  تسجيل الخروج وإدخال رقم طالب صحيح
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Child selector (if multiple children) */}
+      {session.children.length > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="font-semibold text-sm">اختر الطالب</h3>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {session.children.map((child) => (
+                <button
+                  key={child.id}
+                  onClick={() => onSwitchChild(child.id)}
+                  className={`shrink-0 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
+                    child.id === selectedChild?.id
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                  }`}
+                >
+                  {child.name}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick actions grid */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <h3 className="font-bold text-base">الإجراءات السريعة</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.key}
+                onClick={() => handleAction(action.key)}
+                className={`group text-right p-4 rounded-xl border-2 ${action.border} ${action.bg} hover:shadow-md transition-all hover:-translate-y-0.5`}
+              >
+                <div className={`w-11 h-11 rounded-lg bg-gradient-to-br ${action.gradient} flex items-center justify-center mb-2 shadow-sm group-hover:scale-105 transition-transform`}>
+                  <Icon className="w-6 h-6 text-white" />
+                </div>
+                <p className="font-semibold text-sm mb-0.5">{action.title}</p>
+                <p className="text-xs text-muted-foreground">{action.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Attendance section */}
+      {selectedChild && (
+        <ParentAttendanceSection
+          schoolId={schoolId}
+          studentNumber={selectedChild.studentNumber}
+          parentPhone={session.parentPhone}
+          childName={selectedChild.name}
+        />
+      )}
+
+      {/* Announcements section */}
+      <div ref={announcementsRef} className="scroll-mt-20">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Megaphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="font-bold text-base">الإعلانات المدرسية</h3>
+          </div>
+          {!newsLoading && news.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{news.length} إعلان</Badge>
+          )}
         </div>
 
-        {/* Tips for Parents Section */}
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-5">
-            <Brain className="w-6 h-6 text-purple-600" />
-            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">نصائح لأولياء الأمور</h2>
+        {newsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 rounded-xl" />
+            ))}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {parentTips.map((tip, index) => (
-              <Card
-                key={tip.title}
-                className="border-0 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group overflow-hidden"
+        ) : news.length === 0 ? (
+          <Card>
+            <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              لا توجد إعلانات حالياً
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {visibleNews.map((item) => {
+                const meta = getNewsCategoryMeta(item.category);
+                return (
+                  <Card key={item.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.title}
+                            className="w-16 h-16 rounded-lg object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shrink-0">
+                            <Megaphone className="w-7 h-7 text-white" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <Badge className={`text-[10px] ${meta.cls} border`}>{meta.label}</Badge>
+                            <span className="text-[11px] text-muted-foreground">{timeAgo(item.createdAt)}</span>
+                          </div>
+                          <h4 className="font-semibold text-sm leading-snug mb-1 line-clamp-2">{item.title}</h4>
+                          {item.excerpt && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{item.excerpt}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            {news.length > 4 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAllNews((v) => !v)}
+                className="w-full mt-3 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/10"
               >
-                <CardContent className="p-0">
-                  {/* Top gradient accent */}
-                  <div className={`h-1.5 bg-gradient-to-l ${tip.color}`} />
-                  <div className="p-5">
-                    <div className="flex items-start gap-4">
-                      {/* Icon */}
-                      <div
-                        className={`w-12 h-12 rounded-xl bg-gradient-to-r ${tip.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-md`}
-                      >
-                        {tip.icon}
-                      </div>
+                {showAllNews ? 'عرض أقل' : `عرض جميع الإعلانات (${news.length})`}
+                <ChevronDown className={`w-4 h-4 transition-transform ${showAllNews ? 'rotate-180' : ''}`} />
+              </Button>
+            )}
+          </>
+        )}
+      </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-gray-800 dark:text-white mb-2 text-base">
-                          {tip.title}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                          {tip.description}
-                        </p>
-                      </div>
+      {/* Tips for parents */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Lightbulb className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <h3 className="font-bold text-base">نصائح لأولياء الأمور</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {PARENT_TIPS.map((tip) => {
+            const Icon = tip.icon;
+            return (
+              <Card key={tip.title} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${tip.gradient} flex items-center justify-center shrink-0 shadow-sm`}>
+                      <Icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm mb-1">{tip.title}</h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{tip.description}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
+            );
+          })}
         </div>
+      </div>
 
-        {/* Contact School Section */}
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-5">
-            <Phone className="w-6 h-6 text-sky-600" />
-            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">التواصل مع المدرسة</h2>
-          </div>
-          <Card className="border-0 shadow-xl overflow-hidden">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-l from-sky-500 to-blue-600 p-[2px] rounded-t-xl">
-                <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-t-xl">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Phone */}
-                    <div className="flex items-center gap-4 p-5 bg-sky-50 dark:bg-sky-900/10 rounded-2xl border border-sky-100 dark:border-sky-800/30">
-                      <div className="w-14 h-14 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
-                        <Phone className="w-7 h-7" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">الهاتف</h4>
-                        <p className="text-lg font-bold text-[#2A374E] dark:text-white" dir="ltr">+20 123 456 7890</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">السبت - الخميس: 8 ص - 3 م</p>
-                      </div>
-                    </div>
-
-                    {/* Email */}
-                    <div className="flex items-center gap-4 p-5 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
-                      <div className="w-14 h-14 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
-                        <Mail className="w-7 h-7" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">البريد الإلكتروني</h4>
-                        <p className="text-base font-bold text-[#2A374E] dark:text-white break-all">info@school.edu.eg</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">نرد خلال 24 ساعة</p>
-                      </div>
-                    </div>
-
-                    {/* Address */}
-                    <div className="flex items-center gap-4 p-5 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-800/30">
-                      <div className="w-14 h-14 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
-                        <MapPin className="w-7 h-7" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">العنوان</h4>
-                        <p className="text-base font-bold text-[#2A374E] dark:text-white">شارع المدارس، المدينة</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">بجوار حديقة الأمل</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Additional info */}
-                  <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600">
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-[#2A374E] to-[#3d4f6e] rounded-lg flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm text-[#2A374E] dark:text-white">ساعات العمل الرسمية</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">السبت - الخميس: 7:30 صباحاً - 3:00 مساءً</p>
-                        </div>
-                      </div>
-                      <Button
-                        className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all"
-                      >
-                        <MessageSquare className="w-4 h-4 ml-2" />
-                        إرسال رسالة
-                      </Button>
-                    </div>
-                  </div>
+      {/* Contact section */}
+      <div ref={contactRef} className="scroll-mt-20">
+        <div className="flex items-center gap-2 mb-3">
+          <Phone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <h3 className="font-bold text-base">تواصل مع المدرسة</h3>
+        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+                  <Phone className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">الهاتف</p>
+                  <p className="text-sm font-semibold truncate" dir="ltr">01000000000</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Schedule Preview Card */}
-        <div className="mb-10">
-          <Card className="border-0 shadow-lg overflow-hidden">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-l from-amber-500 to-orange-500 p-4">
-                <div className="flex items-center gap-2 text-white">
-                  <CalendarDays className="w-5 h-5" />
-                  <h3 className="font-bold">جداول الحصص</h3>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-teal-50 dark:bg-teal-900/10">
+                <div className="w-10 h-10 rounded-lg bg-teal-600 flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">البريد الإلكتروني</p>
+                  <p className="text-sm font-semibold truncate" dir="ltr">info@school.edu</p>
                 </div>
               </div>
-              <div className="p-6">
-                <div className="flex flex-col md:flex-row items-center gap-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                    <CalendarDays className="w-10 h-10 text-white" />
-                  </div>
-                  <div className="flex-1 text-center md:text-right">
-                    <h3 className="text-xl font-bold text-[#2A374E] dark:text-white mb-2">
-                      عرض جداول الحصص الأسبوعية
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
-                      تابع جدول الحصص اليومي والأسبوعي لابنك. يمكنك معرفة مواعيد كل مادة والمعلم المسؤول والمواصفات التفصيلية لكل حصة.
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    <Button
-                      variant="outline"
-                      className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/20 font-bold px-6 py-5"
-                    >
-                      <CalendarDays className="w-5 h-5 ml-2" />
-                      عرض الجداول
-                    </Button>
-                  </div>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+                  <MapPin className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">العنوان</p>
+                  <p className="text-sm font-semibold truncate">العنوان البريدي للمدرسة</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Footer Motivational Quote */}
-        <div className="mb-6">
-          <Card className="border-0 shadow-lg overflow-hidden">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] p-6 md:p-8 text-white text-center">
-                <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Star className="w-7 h-7 text-white" />
-                </div>
-                <p className="text-xl md:text-2xl font-bold mb-2 leading-relaxed">
-                  &ldquo;الأسرة هي المدرسة الأولى، والوالدان هما المعلمان الأعظم&rdquo;
-                </p>
-                <p className="text-emerald-200 text-sm">معاً نصنع مستقبلاً مشرقاً لأبنائنا</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white mt-auto">
-        <div className="container mx-auto px-4 py-5">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-emerald-300" />
-              <span className="text-sm font-medium">بوابة أولياء الأمور</span>
             </div>
-            <p className="text-sm text-blue-200/70">
-              © {new Date().getFullYear()} جميع الحقوق محفوظة - المنصة التعليمية
-            </p>
-          </div>
-        </div>
-      </footer>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

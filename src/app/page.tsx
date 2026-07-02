@@ -19,6 +19,7 @@ const ResultsPage = dynamic(() => import('@/components/results-page'), { loading
 const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
 const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
 const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
+const TeacherPortalPage = dynamic(() => import('@/components/teacher-portal-page'), { loading: PageLoader })
 const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
@@ -87,6 +88,7 @@ const serviceItems = [
   { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
   { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
   { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
+  { label: 'بوابة المعلم', icon: '👨‍🏫', action: 'teacher' },
   { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
 ]
 
@@ -122,6 +124,7 @@ function HomePage() {
   const [showSchedulesPage, setShowSchedulesPage] = useState(false)
   const [showLibraryPage, setShowLibraryPage] = useState(false)
   const [showParentsPage, setShowParentsPage] = useState(false)
+  const [showTeacherPage, setShowTeacherPage] = useState(false)
   const [showExamsPage, setShowExamsPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -256,6 +259,7 @@ function HomePage() {
     if (action === 'schedules') setShowSchedulesPage(true)
     if (action === 'library') setShowLibraryPage(true)
     if (action === 'parents') setShowParentsPage(true)
+    if (action === 'teacher') setShowTeacherPage(true)
     if (action === 'exams') setShowExamsPage(true)
   }
 
@@ -274,6 +278,7 @@ function HomePage() {
   if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
   if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
   if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} />
+  if (showTeacherPage) return <TeacherPortalPage onBack={() => setShowTeacherPage(false)} schoolId={selectedSchoolId} />
   if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
 
   if (!hydrated) {
@@ -575,6 +580,7 @@ function HomePage() {
                 {[
                   { icon: '📋', title: 'الاستعلام عن النتائج', desc: 'استعلم عن نتائجك الأكاديمية بسهولة وسرعة', action: 'results', color: '#2196F3' },
                   { icon: '📅', title: 'جداول الحصص', desc: 'عرض جداول الحصص والمواعيد الدراسية', action: 'schedules', color: '#FF9800' },
+                  { icon: '👨‍🏫', title: 'بوابة المعلم', desc: 'لوحة تحكم المعلم لإدارة الفصول والامتحانات', action: 'teacher', color: '#7C3AED' },
                   { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم الأكاديمي والسلوكي', action: 'parents', color: '#4CAF50' },
                   { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
                   { icon: '💻', title: 'التحول الرقمي', desc: 'خدمات التحول الرقمي المتقدمة', action: 'schedules', color: '#00BCD4' },
