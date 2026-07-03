@@ -1,0 +1,19 @@
+[
+  {
+    "subscription": {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/ds051lfjctY:APA91bHxbceVR0pYkuGjAiUP4d68PHeRSOnQvMZcBb9K1IiKNDjK0QGbii_L1xiV3RKmVR_SxI0bqWamOuKs3fhO8_e-2Zefmflnp2LIc06Caxp3lbqwYIy9kJ0ZpaGuc0OPXFmFth9B",
+      "expirationTime": null,
+      "keys": {
+        "p256dh": "BILq4SFFkmPJvFu_I__1_JQqSR-XH4esDCLbqDy397ayz_94i9HwCY_cMSffSJznj-_s9mFWZO_UiHS5RNMLG1A",
+        "auth": "g1XtNTG2FFfaYApu6h-Kjw"
+      }
+    },
+    "schoolId": "cmqu1mqhq0000mj5fuoui57sz",
+    "parentPhone": "test-001",
+    "studentNumbers": [
+      "400"
+    ],
+    "createdAt": "2026-07-01T21:04:35.031Z",
+    "lastSeenAt": "2026-07-01T21:04:44.715Z"
+  }
+]

@@ -1,0 +1,784 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  ArrowRight, Search, CalendarDays, Phone, Mail, MapPin,
+     6→  Megaphone, BookOpenCheck, Users, Heart, Lightbulb,
+     7→  Monitor, Brain, ClipboardCheck, GraduationCap, MessageSquare,
+     8→  Shield, Clock, ChevronLeft, Sparkles, Star, Bell, BarChart3,
+     9→  AlertTriangle, Newspaper, X, RefreshCw, Inbox,
+    10→} from 'lucide-react';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Card, CardContent } from '@/components/ui/card';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    16→import { ScrollArea } from '@/components/ui/scroll-area';
+    17→import { NotificationBell } from '@/components/notification-bell';
+    18→import { toast } from 'sonner';
+    19→
+    20→interface ParentsPortalPageProps {
+    21→  onBack: () => void;
+    22→  schoolId: string;
+    23→  /** فتح بوابة نتائج الامتحانات الإلكترونية */
+    24→  onOpenExams?: () => void;
+    25→  /** فتح صفحة التحليلات المقارنة لأداء الطالب */
+    26→  onOpenAnalytics?: () => void;
+    27→}
+    28→
+    29→const quickActions = [
+    30→  {
+    31→    title: 'نتائج الامتحانات الإلكترونية',
+    32→    description: 'تابع نتائج وأداء أبنائك في الامتحانات الإلكترونية',
+    33→    icon: <Search className="w-7 h-7" />,
+    34→    color: 'from-emerald-500 to-emerald-600',
+    35→    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    36→    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    37→    action: 'exams' as const,
+    38→  },
+    39→  {
+    40→    title: 'تحليلات الأداء المقارنة',
+    41→    description: 'رسوم بيانية وترتيب ابنك مقارنة بزملائه',
+    42→    icon: <BarChart3 className="w-7 h-7" />,
+    43→    color: 'from-purple-500 to-violet-600',
+    44→    bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    45→    borderColor: 'border-purple-200 dark:border-purple-800',
+    46→    action: 'analytics' as const,
+    47→  },
+    48→  {
+    49→    title: 'جداول الحصص',
+    50→    description: 'عرض جداول الحصص الأسبوعية',
+    51→    icon: <CalendarDays className="w-7 h-7" />,
+    52→    color: 'from-amber-500 to-orange-500',
+    53→    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    54→    borderColor: 'border-amber-200 dark:border-amber-800',
+    55→    action: 'schedules' as const,
+    56→  },
+    57→  {
+    58→    title: 'التواصل مع المدرسة',
+    59→    description: 'تواصل مع إدارة المدرسة',
+    60→    icon: <MessageSquare className="w-7 h-7" />,
+    61→    color: 'from-sky-500 to-blue-600',
+    62→    bgColor: 'bg-sky-50 dark:bg-sky-900/20',
+    63→    borderColor: 'border-sky-200 dark:border-sky-800',
+    64→    action: 'contact' as const,
+    65→  },
+    66→  {
+    67→    title: 'الإعلانات المدرسية',
+    68→    description: 'آخر الأخبار والتنبيهات',
+    69→    icon: <Megaphone className="w-7 h-7" />,
+    70→    color: 'from-rose-500 to-red-500',
+    71→    bgColor: 'bg-rose-50 dark:bg-rose-900/20',
+    72→    borderColor: 'border-rose-200 dark:border-rose-800',
+    73→    action: 'announcements' as const,
+    74→  },
+    75→];
+    76→
+    77→const parentTips = [
+    78→  {
+    79→    title: 'متابعة الواجبات يومياً',
+    80→    description: 'تأكد من إنجاز ابنك لواجباته المدرسية يومياً وراجعها معه لتعزيز الفهم والاستيعاب',
+    81→    icon: <ClipboardCheck className="w-6 h-6" />,
+    82→    color: 'from-emerald-500 to-teal-500',
+    83→    emoji: '📋',
+    84→  },
+    85→  {
+    86→    title: 'التواصل المستمر مع المعلمين',
+    87→    description: 'حافظ على تواصل دوري مع معلمي ابنك لمتابعة مستواه الأكاديمي والسلوكي',
+    88→    icon: <Users className="w-6 h-6" />,
+    89→    color: 'from-blue-500 to-indigo-500',
+    90→    emoji: '🤝',
+    91→  },
+    92→  {
+    93→    title: 'توفير بيئة دراسية مناسبة',
+    94→    description: 'أمّن لابنك مكاناً هادئاً ومريحاً للدراسة بعيداً عن المشتتات والإزعاج',
+    95→    icon: <BookOpenCheck className="w-6 h-6" />,
+    96→    color: 'from-amber-500 to-yellow-500',
+    97→    emoji: '🏠',
+    98→  },
+    99→  {
+   100→    title: 'تشجيع القراءة والاطلاع',
+   101→    description: 'شجّع ابنك على القراءة اليومية ووفّر له كتباً وقصصاً تناسب عمره واهتماماته',
+   102→    icon: <Lightbulb className="w-6 h-6" />,
+   103→    color: 'from-purple-500 to-violet-500',
+   104→    emoji: '📚',
+   105→  },
+   106→  {
+   107→    title: 'مراقبة استخدام التكنولوجيا',
+   108→    description: 'راقب وقت شاشة ابنك وتأكد من استخدام التقنية بطريقة مفيدة وآمنة للتعلم',
+   109→    icon: <Monitor className="w-6 h-6" />,
+   110→    color: 'from-rose-500 to-pink-500',
+   111→    emoji: '💻',
+   112→  },
+   113→  {
+   114→    title: 'الاهتمام بالصحة النفسية',
+   115→    description: 'اهتم بالصحة النفسية لابنك واستمع لمشاعره وكون له دائماً سنداً وداعماً',
+   116→    icon: <Heart className="w-6 h-6" />,
+   117→    color: 'from-red-500 to-rose-500',
+   118→    emoji: '❤️',
+   119→  },
+   120→];
+   121→
+   122→// ===== News / Announcement item (real data from /api/news) =====
+   123→interface NewsItem {
+   124→  id: string;
+   125→  title: string;
+   126→  excerpt: string | null;
+   127→  content: string | null;
+   128→  image: string | null;
+   129→  category: string;
+   130→  active: boolean;
+   131→  createdAt: string;
+   132→}
+   133→
+   134→const CATEGORY_META: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+   135→  'تنبيه': { icon: '⚠️', color: 'text-red-700', bg: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', label: 'تنبيه' },
+   136→  'فعاليات': { icon: '🎉', color: 'text-purple-700', bg: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', label: 'فعالية' },
+   137→  'أخبار': { icon: '📰', color: 'text-emerald-700', bg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', label: 'خبر' },
+   138→  'إعلان': { icon: '📢', color: 'text-amber-700', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', label: 'إعلان' },
+   139→  'عام': { icon: 'ℹ️', color: 'text-blue-700', bg: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', label: 'عام' },
+   140→};
+   141→
+   142→function getCategoryMeta(category: string) {
+   143→  return CATEGORY_META[category] || { icon: '📄', color: 'text-gray-700', bg: 'bg-gray-100 text-gray-700 dark:bg-gray-700/30 dark:text-gray-400', label: category || 'عام' };
+   144→}
+   145→
+   146→function timeAgo(dateStr: string): string {
+   147→  const date = new Date(dateStr);
+   148→  const diff = Math.max(0, Date.now() - date.getTime());
+   149→  const mins = Math.floor(diff / 60000);
+   150→  if (mins < 1) return 'الآن';
+   151→  if (mins < 60) return `قبل ${mins} دقيقة`;
+   152→  const hours = Math.floor(mins / 60);
+   153→  if (hours < 24) return `قبل ${hours} ساعة`;
+   154→  const days = Math.floor(hours / 24);
+   155→  if (days < 7) return `قبل ${days} يوم`;
+   156→  const weeks = Math.floor(days / 7);
+   157→  if (weeks < 4) return `قبل ${weeks} أسبوع`;
+   158→  return date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+   159→}
+   160→
+   161→export default function ParentsPortalPage({ onBack, schoolId, onOpenExams, onOpenAnalytics }: ParentsPortalPageProps) {
+   162→  const [fadeIn, setFadeIn] = useState(false);
+   163→  const [visibleCards, setVisibleCards] = useState<number[]>([]);
+   164→  // ===== Real announcements (from /api/news) =====
+   165→  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+   166→  const [newsLoading, setNewsLoading] = useState(true);
+   167→  const [newsError, setNewsError] = useState<string | null>(null);
+   168→  const [showAllAnnouncements, setShowAllAnnouncements] = useState(false);
+   169→  const [expandedNewsId, setExpandedNewsId] = useState<string | null>(null);
+   170→
+   171→  const fetchNews = useCallback(async () => {
+   172→    if (!schoolId) return;
+   173→    try {
+   174→      setNewsError(null);
+   175→      const res = await fetch(`/api/news?schoolId=${schoolId}&limit=30`);
+   176→      if (!res.ok) throw new Error('fetch failed');
+   177→      const data = await res.json();
+   178→      const arr: NewsItem[] = Array.isArray(data) ? data : (data.news || []);
+   179→      setNewsItems(arr);
+   180→    } catch {
+   181→      setNewsError('تعذر جلب الإعلانات');
+   182→    } finally {
+   183→      setNewsLoading(false);
+   184→    }
+   185→  }, [schoolId]);
+   186→
+   187→  useEffect(() => {
+   188→    setTimeout(() => fetchNews(), 0);
+   189→    const interval = setInterval(fetchNews, 120000); // refresh every 2 min
+   190→    return () => clearInterval(interval);
+   191→  }, [fetchNews]);
+   192→
+   193→  const handleAction = (action: string) => {
+   194→    if (action === 'exams' && onOpenExams) {
+   195→      onOpenExams();
+   196→    } else if (action === 'analytics' && onOpenAnalytics) {
+   197→      onOpenAnalytics();
+   198→    }
+   199→  };
+   200→
+   201→  useEffect(() => {
+   202→    const timer = setTimeout(() => setFadeIn(true), 100);
+   203→    return () => clearTimeout(timer);
+   204→  }, []);
+   205→
+   206→  // Staggered card animation
+   207→  useEffect(() => {
+   208→    const timeouts: NodeJS.Timeout[] = [];
+   209→    quickActions.forEach((_, index) => {
+   210→      timeouts.push(
+   211→        setTimeout(() => {
+   212→          setVisibleCards((prev) => [...prev, index]);
+   213→        }, 300 + index * 150)
+   214→      );
+   215→    });
+   216→    return () => timeouts.forEach(clearTimeout);
+   217→  }, []);
+   218→
+   219→  return (
+   220→    <div
+   221→      className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-emerald-50/20 to-slate-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"
+   222→      dir="rtl"
+   223→    >
+   224→      {/* Header */}
+   225→      <header className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white shadow-xl sticky top-0 z-50">
+   226→        <div className="container mx-auto px-4 py-4">
+   227→          <div className="flex items-center justify-between">
+   228→            <button
+   229→              onClick={onBack}
+   230→              className="flex items-center gap-2 text-white hover:text-emerald-300 transition-colors"
+   231→            >
+   232→              <ArrowRight className="w-5 h-5" />
+   233→              <span className="font-medium">العودة للرئيسية</span>
+   234→            </button>
+   235→            <div className="flex items-center gap-3">
+   236→              <NotificationBell schoolId={schoolId} variant="header" />
+   237→              <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full flex items-center justify-center shadow-lg">
+   238→                <Users className="w-6 h-6 text-white" />
+   239→              </div>
+   240→              <div>
+   241→                <h1 className="text-xl font-bold">بوابة أولياء الأمور</h1>
+   242→                <p className="text-emerald-200 text-xs">متابعة وتواصل مع المدرسة</p>
+   243→              </div>
+   244→            </div>
+   245→            <div className="w-28 hidden md:block" />
+   246→          </div>
+   247→        </div>
+   248→      </header>
+   249→
+   250→      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
+   251→        {/* Hero Section */}
+   252→        <div
+   253→          className={`mb-8 transition-all duration-700 ${
+   254→            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+   255→          }`}
+   256→        >
+   257→          <div className="relative overflow-hidden rounded-2xl">
+   258→            <div className="absolute -inset-[2px] bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 rounded-2xl blur-[1px] opacity-60" />
+   259→            <Card className="relative border-0 shadow-2xl rounded-2xl overflow-hidden">
+   260→              <CardContent className="p-0">
+   261→                <div className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] p-8 md:p-12 text-white relative overflow-hidden">
+   262→                  {/* Decorative elements */}
+   263→                  <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+   264→                  <div className="absolute bottom-0 right-0 w-48 h-48 bg-teal-500/10 rounded-full translate-x-1/4 translate-y-1/4" />
+   265→                  <div className="absolute top-1/2 left-1/3 w-32 h-32 bg-white/5 rounded-full" />
+   266→
+   267→                  <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+   268→                    {/* Icon */}
+   269→                    <div className="shrink-0">
+   270→                      <div className="w-24 h-24 md:w-28 md:h-28 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center shadow-2xl ring-4 ring-white/20">
+   271→                        <Users className="w-12 h-12 md:w-14 md:h-14 text-white" />
+   272→                      </div>
+   273→                    </div>
+   274→
+   275→                    {/* Text */}
+   276→                    <div className="flex-1 text-center md:text-right">
+   277→                      <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
+   278→                        <Sparkles className="w-5 h-5 text-emerald-300" />
+   279→                        <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-xs">
+   280→                          منصة تفاعلية
+   281→                        </Badge>
+   282→                      </div>
+   283→                      <h2 className="text-3xl md:text-4xl font-bold mb-3 leading-tight">
+   284→                        بوابة أولياء الأمور
+   285→                      </h2>
+   286→                      <p className="text-emerald-100/90 text-base md:text-lg leading-relaxed max-w-2xl">
+   287→                        منصة متكاملة لمتابعة أداء أبنائكم الدراسي والتواصل المباشر مع المدرسة.
+   288→                        نوفر لكم كل ما تحتاجون لمساندة أبنائكم في رحلتهم التعليمية.
+   289→                      </p>
+   290→                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-5">
+   291→                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
+   292→                          <Shield className="w-4 h-4" />
+   293→                          <span>بيانات آمنة</span>
+   294→                        </div>
+   295→                        <span className="text-emerald-400">|</span>
+   296→                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
+   297→                          <Clock className="w-4 h-4" />
+   298→                          <span>تحديث فوري</span>
+   299→                        </div>
+   300→                        <span className="text-emerald-400">|</span>
+   301→                        <div className="flex items-center gap-1.5 text-sm text-emerald-200">
+   302→                          <GraduationCap className="w-4 h-4" />
+   303→                          <span>متابعة شاملة</span>
+   304→                        </div>
+   305→                      </div>
+   306→                    </div>
+   307→                  </div>
+   308→                </div>
+   309→              </CardContent>
+   310→            </Card>
+   311→          </div>
+   312→        </div>
+   313→
+   314→        {/* Quick Actions - 2x3 Grid (5 cards) */}
+   315→        <div className="mb-10">
+   316→          <div className="flex items-center gap-2 mb-5">
+   317→            <Star className="w-6 h-6 text-emerald-600" />
+   318→            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">الخدمات السريعة</h2>
+   319→          </div>
+   320→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+   321→            {quickActions.map((action, index) => (
+   322→              <Card
+   323→                key={action.title}
+   324→                onClick={() => handleAction(action.action)}
+   325→                className={`border-0 shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer group overflow-hidden ${
+   326→                  visibleCards.includes(index)
+   327→                    ? 'opacity-100 translate-y-0'
+   328→                    : 'opacity-0 translate-y-8'
+   329→                } ${action.action === 'exams' && onOpenExams ? 'ring-2 ring-emerald-300/60' : ''} ${action.action === 'analytics' && onOpenAnalytics ? 'ring-2 ring-purple-300/60' : ''}`}
+   330→              >
+   331→                <CardContent className="p-0">
+   332→                  <div className="flex items-center gap-5 p-6">
+   333→                    {/* Icon */}
+   334→                    <div
+   335→                      className={`w-16 h-16 rounded-2xl bg-gradient-to-r ${action.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-lg`}
+   336→                    >
+   337→                      {action.icon}
+   338→                    </div>
+   339→
+   340→                    {/* Content */}
+   341→                    <div className="flex-1 min-w-0">
+   342→                      <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+   343→                        {action.title}
+   344→                      </h3>
+   345→                      <p className="text-sm text-gray-500 dark:text-gray-400">
+   346→                        {action.description}
+   347→                      </p>
+   348→                    </div>
+   349→
+   350→                    {/* Arrow */}
+   351→                    <div className="shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 transition-colors">
+   352→                      <ChevronLeft className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+   353→                    </div>
+   354→                  </div>
+   355→
+   356→                  {/* Bottom accent */}
+   357→                  <div className={`h-1 bg-gradient-to-l ${action.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+   358→                </CardContent>
+   359→              </Card>
+   360→            ))}
+   361→          </div>
+   362→        </div>
+   363→
+   364→        {/* Electronic Exam Results Card (Standalone) — البوابة الرئيسية للنتائج */}
+   365→        <div
+   366→          className={`mb-10 transition-all duration-700 delay-500 ${
+   367→            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+   368→          }`}
+   369→        >
+   370→          <Card className="border-0 shadow-xl overflow-hidden">
+   371→            <CardContent className="p-0">
+   372→              <div className="bg-gradient-to-l from-emerald-500 to-teal-600 p-[2px] rounded-t-xl">
+   373→                <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-t-xl">
+   374→                  <div className="flex flex-col md:flex-row items-center gap-6">
+   375→                    <div className="w-20 h-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
+   376→                      <Search className="w-10 h-10 text-white" />
+   377→                    </div>
+   378→                    <div className="flex-1 text-center md:text-right">
+   379→                      <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
+   380→                        <h3 className="text-2xl font-bold text-[#2A374E] dark:text-white">
+   381→                          نتائج الامتحانات الإلكترونية
+   382→                        </h3>
+   383→                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
+   384→                          تفاعلي
+   385→                        </Badge>
+   386→                      </div>
+   387→                      <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
+   388→                        تابع نتائج أبنائك في الامتحانات الإلكترونية، اعرف النسب المئوية وحالة النجاح،
+   389→                        وراجع الإجابات التفصيلية وملاحظات المعلم. سجّل الدخول بمعرّف ولي الأمر للوصول إلى بيانات أبنائك.
+   390→                      </p>
+   391→                    </div>
+   392→                    <div className="shrink-0">
+   393→                      <Button
+   394→                        onClick={() => handleAction('exams')}
+   395→                        disabled={!onOpenExams}
+   396→                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-8 py-6 text-lg font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+   397→                      >
+   398→                        <Search className="w-5 h-5 ml-2" />
+   399→                        دخول النتائج
+   400→                      </Button>
+   401→                    </div>
+   402→                  </div>
+   403→                </div>
+   404→              </div>
+   405→            </CardContent>
+   406→          </Card>
+   407→        </div>
+   408→
+   409→        {/* Announcements Section — real data from /api/news */}
+   410→        <div className="mb-10">
+   411→          <div className="flex items-center gap-2 mb-5">
+   412→            <Bell className="w-6 h-6 text-rose-600" />
+   413→            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">الإعلانات المدرسية</h2>
+   414→          </div>
+   415→          <Card className="border-0 shadow-lg overflow-hidden">
+   416→            <CardContent className="p-0">
+   417→              {/* Header bar */}
+   418→              <div className="bg-gradient-to-l from-rose-500 to-red-500 p-4">
+   419→                <div className="flex items-center gap-2 text-white">
+   420→                  <Megaphone className="w-5 h-5" />
+   421→                  <h3 className="font-bold">آخر الأخبار والتنبيهات</h3>
+   422→                  {!newsLoading && !newsError && newsItems.length > 0 && (
+   423→                    <Badge className="bg-white/20 text-white border-white/30 text-xs mr-auto">
+   424→                      {newsItems.length} إعلان
+   425→                    </Badge>
+   426→                  )}
+   427→                </div>
+   428→              </div>
+   429→              {/* Announcements list */}
+   430→              {newsLoading ? (
+   431→                <div className="p-5 space-y-3">
+   432→                  {[1, 2, 3].map((i) => (
+   433→                    <Skeleton key={i} className="h-12 w-full rounded-md" />
+   434→                  ))}
+   435→                </div>
+   436→              ) : newsError ? (
+   437→                <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+   438→                  <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+   439→                  <p>{newsError}</p>
+   440→                  <Button variant="ghost" size="sm" className="mt-2" onClick={fetchNews}>
+   441→                    <RefreshCw className="w-3.5 h-3.5 ml-1" />
+   442→                    إعادة المحاولة
+   443→                  </Button>
+   444→                </div>
+   445→              ) : newsItems.length === 0 ? (
+   446→                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+   447→                  <Inbox className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+   448→                  <p className="text-sm">لا توجد إعلانات حالياً</p>
+   449→                </div>
+   450→              ) : (
+   451→                <div className="divide-y divide-gray-100 dark:divide-gray-700">
+   452→                  {newsItems.slice(0, 5).map((item) => {
+   453→                    const meta = getCategoryMeta(item.category);
+   454→                    const expanded = expandedNewsId === item.id;
+   455→                    return (
+   456→                      <button
+   457→                        key={item.id}
+   458→                        type="button"
+   459→                        onClick={() => setExpandedNewsId(expanded ? null : item.id)}
+   460→                        className="w-full text-right p-5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group block"
+   461→                      >
+   462→                        <div className="flex items-center gap-4">
+   463→                          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-base border ${meta.bg.split(' ').slice(0, 2).join(' ')}`}>
+   464→                            {meta.icon}
+   465→                          </div>
+   466→                          <div className="flex-1 min-w-0">
+   467→                            <h4 className="font-bold text-gray-800 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+   468→                              {item.title}
+   469→                            </h4>
+   470→                            {item.excerpt && !expanded && (
+   471→                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+   472→                                {item.excerpt}
+   473→                              </p>
+   474→                            )}
+   475→                            {expanded && (
+   476→                              <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+   477→                                {item.excerpt && (
+   478→                                  <p className="text-sm text-gray-600 dark:text-gray-300">{item.excerpt}</p>
+   479→                                )}
+   480→                                {item.content && (
+   481→                                  <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{item.content}</p>
+   482→                                )}
+   483→                                {item.image && (
+   484→                                  <img src={item.image} alt="" className="w-full max-h-48 object-cover rounded-md" />
+   485→                                )}
+   486→                              </div>
+   487→                            )}
+   488→                          </div>
+   489→                          <Badge className={`text-xs shrink-0 ${meta.bg}`}>
+   490→                            {meta.label}
+   491→                          </Badge>
+   492→                          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 hidden sm:block">
+   493→                            {timeAgo(item.createdAt)}
+   494→                          </span>
+   495→                        </div>
+   496→                      </button>
+   497→                    );
+   498→                  })}
+   499→                </div>
+   500→              )}
+   501→              {/* Footer */}
+   502→              {!newsLoading && !newsError && newsItems.length > 0 && (
+   503→                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 text-center">
+   504→                  <Button
+   505→                    variant="ghost"
+   506→                    className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 font-medium"
+   507→                    onClick={() => setShowAllAnnouncements(true)}
+   508→                  >
+   509→                    عرض جميع الإعلانات ({newsItems.length})
+   510→                    <ChevronLeft className="w-4 h-4 mr-1" />
+   511→                  </Button>
+   512→                </div>
+   513→              )}
+   514→            </CardContent>
+   515→          </Card>
+   516→        </div>
+   517→
+   518→        {/* ===== All Announcements Dialog ===== */}
+   519→        <Dialog open={showAllAnnouncements} onOpenChange={setShowAllAnnouncements}>
+   520→          <DialogContent className="max-w-2xl max-h-[85vh] p-0 overflow-hidden" dir="rtl">
+   521→            <DialogHeader className="bg-gradient-to-l from-rose-500 to-red-500 text-white p-4 sm:p-6">
+   522→              <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+   523→                <Megaphone className="w-5 h-5" />
+   524→                جميع الإعلانات والأخبار
+   525→              </DialogTitle>
+   526→              <DialogDescription className="text-rose-100 text-xs sm:text-sm">
+   527→                إجمالي {newsItems.length} إعلان وخبر مدرسي
+   528→              </DialogDescription>
+   529→            </DialogHeader>
+   530→            <ScrollArea className="h-[60vh]">
+   531→              {newsItems.length === 0 ? (
+   532→                <div className="p-8 text-center text-gray-500">
+   533→                  <Inbox className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+   534→                  <p className="text-sm">لا توجد إعلانات</p>
+   535→                </div>
+   536→              ) : (
+   537→                <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+   538→                  {newsItems.map((item) => {
+   539→                    const meta = getCategoryMeta(item.category);
+   540→                    const expanded = expandedNewsId === item.id;
+   541→                    return (
+   542→                      <li key={item.id}>
+   543→                        <button
+   544→                          type="button"
+   545→                          onClick={() => setExpandedNewsId(expanded ? null : item.id)}
+   546→                          className="w-full text-right p-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors block"
+   547→                        >
+   548→                          <div className="flex items-start gap-3">
+   549→                            <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-base border ${meta.bg.split(' ').slice(0, 2).join(' ')}`}>
+   550→                              {meta.icon}
+   551→                            </div>
+   552→                            <div className="flex-1 min-w-0">
+   553→                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+   554→                                <Badge className={`text-[10px] ${meta.bg}`}>{meta.label}</Badge>
+   555→                                <span className="text-[11px] text-gray-400">{timeAgo(item.createdAt)}</span>
+   556→                              </div>
+   557→                              <h4 className="font-bold text-sm text-gray-800 dark:text-white mb-0.5">
+   558→                                {item.title}
+   559→                              </h4>
+   560→                              {item.excerpt && !expanded && (
+   561→                                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+   562→                                  {item.excerpt}
+   563→                                </p>
+   564→                              )}
+   565→                              {expanded && (
+   566→                                <div className="mt-2 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+   567→                                  {item.excerpt && (
+   568→                                    <p className="text-xs text-gray-600 dark:text-gray-300">{item.excerpt}</p>
+   569→                                  )}
+   570→                                  {item.content && (
+   571→                                    <p className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{item.content}</p>
+   572→                                  )}
+   573→                                  {item.image && (
+   574→                                    <img src={item.image} alt="" className="w-full max-h-40 object-cover rounded-md" />
+   575→                                  )}
+   576→                                </div>
+   577→                              )}
+   578→                            </div>
+   579→                          </div>
+   580→                        </button>
+   581→                      </li>
+   582→                    );
+   583→                  })}
+   584→                </ul>
+   585→              )}
+   586→            </ScrollArea>
+   587→            <div className="border-t border-gray-100 dark:border-gray-700 p-3 flex justify-end bg-gray-50 dark:bg-gray-800/50">
+   588→              <Button variant="ghost" size="sm" onClick={() => setShowAllAnnouncements(false)}>
+   589→                <X className="w-4 h-4 ml-1" />
+   590→                إغلاق
+   591→              </Button>
+   592→            </div>
+   593→          </DialogContent>
+   594→        </Dialog>
+   595→
+   596→        {/* Tips for Parents Section */}
+   597→        <div className="mb-10">
+   598→          <div className="flex items-center gap-2 mb-5">
+   599→            <Brain className="w-6 h-6 text-purple-600" />
+   600→            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">نصائح لأولياء الأمور</h2>
+   601→          </div>
+   602→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+   603→            {parentTips.map((tip, index) => (
+   604→              <Card
+   605→                key={tip.title}
+   606→                className="border-0 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group overflow-hidden"
+   607→              >
+   608→                <CardContent className="p-0">
+   609→                  {/* Top gradient accent */}
+   610→                  <div className={`h-1.5 bg-gradient-to-l ${tip.color}`} />
+   611→                  <div className="p-5">
+   612→                    <div className="flex items-start gap-4">
+   613→                      {/* Icon */}
+   614→                      <div
+   615→                        className={`w-12 h-12 rounded-xl bg-gradient-to-r ${tip.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-md`}
+   616→                      >
+   617→                        {tip.icon}
+   618→                      </div>
+   619→
+   620→                      {/* Content */}
+   621→                      <div className="flex-1 min-w-0">
+   622→                        <h3 className="font-bold text-gray-800 dark:text-white mb-2 text-base">
+   623→                          {tip.title}
+   624→                        </h3>
+   625→                        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+   626→                          {tip.description}
+   627→                        </p>
+   628→                      </div>
+   629→                    </div>
+   630→                  </div>
+   631→                </CardContent>
+   632→              </Card>
+   633→            ))}
+   634→          </div>
+   635→        </div>
+   636→
+   637→        {/* Contact School Section */}
+   638→        <div className="mb-10">
+   639→          <div className="flex items-center gap-2 mb-5">
+   640→            <Phone className="w-6 h-6 text-sky-600" />
+   641→            <h2 className="text-2xl font-bold text-[#2A374E] dark:text-white">التواصل مع المدرسة</h2>
+   642→          </div>
+   643→          <Card className="border-0 shadow-xl overflow-hidden">
+   644→            <CardContent className="p-0">
+   645→              <div className="bg-gradient-to-l from-sky-500 to-blue-600 p-[2px] rounded-t-xl">
+   646→                <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-t-xl">
+   647→                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+   648→                    {/* Phone */}
+   649→                    <div className="flex items-center gap-4 p-5 bg-sky-50 dark:bg-sky-900/10 rounded-2xl border border-sky-100 dark:border-sky-800/30">
+   650→                      <div className="w-14 h-14 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
+   651→                        <Phone className="w-7 h-7" />
+   652→                      </div>
+   653→                      <div>
+   654→                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">الهاتف</h4>
+   655→                        <p className="text-lg font-bold text-[#2A374E] dark:text-white" dir="ltr">+20 123 456 7890</p>
+   656→                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">السبت - الخميس: 8 ص - 3 م</p>
+   657→                      </div>
+   658→                    </div>
+   659→
+   660→                    {/* Email */}
+   661→                    <div className="flex items-center gap-4 p-5 bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+   662→                      <div className="w-14 h-14 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
+   663→                        <Mail className="w-7 h-7" />
+   664→                      </div>
+   665→                      <div>
+   666→                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">البريد الإلكتروني</h4>
+   667→                        <p className="text-base font-bold text-[#2A374E] dark:text-white break-all">info@school.edu.eg</p>
+   668→                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">نرد خلال 24 ساعة</p>
+   669→                      </div>
+   670→                    </div>
+   671→
+   672→                    {/* Address */}
+   673→                    <div className="flex items-center gap-4 p-5 bg-amber-50 dark:bg-amber-900/10 rounded-2xl border border-amber-100 dark:border-amber-800/30">
+   674→                      <div className="w-14 h-14 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg">
+   675→                        <MapPin className="w-7 h-7" />
+   676→                      </div>
+   677→                      <div>
+   678→                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-1">العنوان</h4>
+   679→                        <p className="text-base font-bold text-[#2A374E] dark:text-white">شارع المدارس، المدينة</p>
+   680→                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">بجوار حديقة الأمل</p>
+   681→                      </div>
+   682→                    </div>
+   683→                  </div>
+   684→
+   685→                  {/* Additional info */}
+   686→                  <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600">
+   687→                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+   688→                      <div className="flex items-center gap-3">
+   689→                        <div className="w-10 h-10 bg-gradient-to-r from-[#2A374E] to-[#3d4f6e] rounded-lg flex items-center justify-center">
+   690→                          <Clock className="w-5 h-5 text-white" />
+   691→                        </div>
+   692→                        <div>
+   693→                          <p className="font-bold text-sm text-[#2A374E] dark:text-white">ساعات العمل الرسمية</p>
+   694→                          <p className="text-xs text-gray-500 dark:text-gray-400">السبت - الخميس: 7:30 صباحاً - 3:00 مساءً</p>
+   695→                        </div>
+   696→                      </div>
+   697→                      <Button
+   698→                        className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all"
+   699→                      >
+   700→                        <MessageSquare className="w-4 h-4 ml-2" />
+   701→                        إرسال رسالة
+   702→                      </Button>
+   703→                    </div>
+   704→                  </div>
+   705→                </div>
+   706→              </div>
+   707→            </CardContent>
+   708→          </Card>
+   709→        </div>
+   710→
+   711→        {/* Schedule Preview Card */}
+   712→        <div className="mb-10">
+   713→          <Card className="border-0 shadow-lg overflow-hidden">
+   714→            <CardContent className="p-0">
+   715→              <div className="bg-gradient-to-l from-amber-500 to-orange-500 p-4">
+   716→                <div className="flex items-center gap-2 text-white">
+   717→                  <CalendarDays className="w-5 h-5" />
+   718→                  <h3 className="font-bold">جداول الحصص</h3>
+   719→                </div>
+   720→              </div>
+   721→              <div className="p-6">
+   722→                <div className="flex flex-col md:flex-row items-center gap-6">
+   723→                  <div className="w-20 h-20 bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shrink-0">
+   724→                    <CalendarDays className="w-10 h-10 text-white" />
+   725→                  </div>
+   726→                  <div className="flex-1 text-center md:text-right">
+   727→                    <h3 className="text-xl font-bold text-[#2A374E] dark:text-white mb-2">
+   728→                      عرض جداول الحصص الأسبوعية
+   729→                    </h3>
+   730→                    <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
+   731→                      تابع جدول الحصص اليومي والأسبوعي لابنك. يمكنك معرفة مواعيد كل مادة والمعلم المسؤول والمواصفات التفصيلية لكل حصة.
+   732→                    </p>
+   733→                  </div>
+   734→                  <div className="shrink-0">
+   735→                    <Button
+   736→                      variant="outline"
+   737→                      className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/20 font-bold px-6 py-5"
+   738→                    >
+   739→                      <CalendarDays className="w-5 h-5 ml-2" />
+   740→                      عرض الجداول
+   741→                    </Button>
+   742→                  </div>
+   743→                </div>
+   744→              </div>
+   745→            </CardContent>
+   746→          </Card>
+   747→        </div>
+   748→
+   749→        {/* Footer Motivational Quote */}
+   750→        <div className="mb-6">
+   751→          <Card className="border-0 shadow-lg overflow-hidden">
+   752→            <CardContent className="p-0">
+   753→              <div className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] p-6 md:p-8 text-white text-center">
+   754→                <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+   755→                  <Star className="w-7 h-7 text-white" />
+   756→                </div>
+   757→                <p className="text-xl md:text-2xl font-bold mb-2 leading-relaxed">
+   758→                  &ldquo;الأسرة هي المدرسة الأولى، والوالدان هما المعلمان الأعظم&rdquo;
+   759→                </p>
+   760→                <p className="text-emerald-200 text-sm">معاً نصنع مستقبلاً مشرقاً لأبنائنا</p>
+   761→              </div>
+   762→            </CardContent>
+   763→          </Card>
+   764→        </div>
+   765→      </main>
+   766→
+   767→      {/* Footer */}
+   768→      <footer className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white mt-auto">
+   769→        <div className="container mx-auto px-4 py-5">
+   770→          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+   771→            <div className="flex items-center gap-2">
+   772→              <GraduationCap className="w-5 h-5 text-emerald-300" />
+   773→              <span className="text-sm font-medium">بوابة أولياء الأمور</span>
+   774→            </div>
+   775→            <p className="text-sm text-blue-200/70">
+   776→              © {new Date().getFullYear()} جميع الحقوق محفوظة - المنصة التعليمية
+   777→            </p>
+   778→          </div>
+   779→        </div>
+   780→      </footer>
+   781→    </div>
+   782→  );
+   783→}
+   784→

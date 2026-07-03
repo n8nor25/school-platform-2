@@ -1,0 +1,1052 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect } from 'react'
+     4→import {
+     5→  Bus, Plus, Edit, Trash2, Search, Phone, ShieldCheck,
+     6→  User, Users, Route, AlertCircle, X, CheckCircle2,
+     7→  XCircle, MapPin, Truck, FileText, ClipboardList
+     8→} from 'lucide-react'
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Input } from '@/components/ui/input'
+    12→import { Label } from '@/components/ui/label'
+    13→import { Badge } from '@/components/ui/badge'
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    16→import { Textarea } from '@/components/ui/textarea'
+    17→import { Skeleton } from '@/components/ui/skeleton'
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    19→import { toast } from 'sonner'
+    20→import { useAdminStore } from '@/lib/admin-store'
+    21→import { BusPassengerReport } from './bus-passenger-report'
+    22→
+    23→
+    24→// ===== Types =====
+    25→interface BusRoute {
+    26→  id: string
+    27→  name: string
+    28→  area: string
+    29→}
+    30→
+    31→interface Bus {
+    32→  id: string
+    33→  schoolId: string
+    34→  plateNumber: string
+    35→  driverName: string
+    36→  driverPhone: string | null
+    37→  driverLicense: string | null
+    38→  supervisorName: string | null
+    39→  supervisorPhone: string | null
+    40→  capacity: number
+    41→  model: string | null
+    42→  color: string | null
+    43→  active: boolean
+    44→  notes: string | null
+    45→  createdAt: string
+    46→  updatedAt: string
+    47→  routes?: BusRoute[]
+    48→  _count?: { routes: number }
+    49→}
+    50→
+    51→interface BusForm {
+    52→  plateNumber: string
+    53→  driverName: string
+    54→  driverPhone: string
+    55→  driverLicense: string
+    56→  supervisorName: string
+    57→  supervisorPhone: string
+    58→  capacity: number
+    59→  model: string
+    60→  color: string
+    61→  active: boolean
+    62→  notes: string
+    63→}
+    64→
+    65→const defaultForm: BusForm = {
+    66→  plateNumber: '',
+    67→  driverName: '',
+    68→  driverPhone: '',
+    69→  driverLicense: '',
+    70→  supervisorName: '',
+    71→  supervisorPhone: '',
+    72→  capacity: 30,
+    73→  model: '',
+    74→  color: '#610000',
+    75→  active: true,
+    76→  notes: '',
+    77→}
+    78→
+    79→const predefinedColors = [
+    80→  { label: 'أحمر', value: '#EF4444' },
+    81→  { label: 'أزرق', value: '#3B82F6' },
+    82→  { label: 'أخضر', value: '#22C55E' },
+    83→  { label: 'أصفر', value: '#EAB308' },
+    84→  { label: 'برتقالي', value: '#F97316' },
+    85→  { label: 'أبيض', value: '#F8FAFC' },
+    86→  { label: 'رمادي', value: '#6B7280' },
+    87→  { label: 'أسود', value: '#1F2937' },
+    88→]
+    89→
+    90→export function BusFleetManagement() {
+    91→  const { selectedSchoolId } = useAdminStore()
+    92→
+    93→  // List state
+    94→  const [buses, setBuses] = useState<Bus[]>([])
+    95→  const [loading, setLoading] = useState(true)
+    96→  const [searchQuery, setSearchQuery] = useState('')
+    97→  const [activeFilter, setActiveFilter] = useState<string>('all')
+    98→
+    99→  // Tab state
+   100→  const [activeTab, setActiveTab] = useState('fleet')
+   101→
+   102→  // Edit dialog state
+   103→  const [editDialogOpen, setEditDialogOpen] = useState(false)
+   104→  const [editId, setEditId] = useState<string | null>(null)
+   105→  const [editForm, setEditForm] = useState<BusForm>(defaultForm)
+   106→  const [saving, setSaving] = useState(false)
+   107→
+   108→  // Add form state
+   109→  const [addForm, setAddForm] = useState<BusForm>(defaultForm)
+   110→
+   111→  // Delete dialog state
+   112→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   113→  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+   114→
+   115→  // Routes dialog state
+   116→  const [routesDialogOpen, setRoutesDialogOpen] = useState(false)
+   117→  const [routesTarget, setRoutesTarget] = useState<Bus | null>(null)
+   118→
+   119→  // Passenger report dialog state
+   120→  const [reportDialogOpen, setReportDialogOpen] = useState(false)
+   121→  const [reportBusId, setReportBusId] = useState<string | null>(null)
+   122→
+   123→  // Fetch buses
+   124→  useEffect(() => {
+   125→    let cancelled = false
+   126→    async function load() {
+   127→      if (!selectedSchoolId) {
+   128→        if (!cancelled) {
+   129→          setBuses([])
+   130→          setLoading(false)
+   131→        }
+   132→        return
+   133→      }
+   134→      if (!cancelled) setLoading(true)
+   135→      try {
+   136→        const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   137→        if (activeFilter === 'active') params.set('active', 'true')
+   138→        else if (activeFilter === 'inactive') params.set('active', 'false')
+   139→        if (searchQuery.trim()) params.set('search', searchQuery.trim())
+   140→
+   141→        const res = await fetch(`/api/buses?${params.toString()}`)
+   142→        if (!cancelled && res.ok) {
+   143→          const data = await res.json()
+   144→          setBuses(Array.isArray(data) ? data : [])
+   145→        }
+   146→      } catch {
+   147→        if (!cancelled) toast.error('فشل في تحميل بيانات الأسطول')
+   148→      } finally {
+   149→        if (!cancelled) setLoading(false)
+   150→      }
+   151→    }
+   152→    load()
+   153→    return () => { cancelled = true }
+   154→  }, [selectedSchoolId, searchQuery, activeFilter])
+   155→
+   156→  // Filter buses client-side for search (as backup if API doesn't support search)
+   157→  const filteredBuses = buses.filter((bus) => {
+   158→    if (!searchQuery.trim()) return true
+   159→    const q = searchQuery.toLowerCase()
+   160→    return (
+   161→      bus.plateNumber.toLowerCase().includes(q) ||
+   162→      bus.driverName.toLowerCase().includes(q)
+   163→    )
+   164→  })
+   165→
+   166→  // Open edit dialog
+   167→  const openEdit = (bus: Bus) => {
+   168→    setEditId(bus.id)
+   169→    setEditForm({
+   170→      plateNumber: bus.plateNumber,
+   171→      driverName: bus.driverName,
+   172→      driverPhone: bus.driverPhone || '',
+   173→      driverLicense: bus.driverLicense || '',
+   174→      supervisorName: bus.supervisorName || '',
+   175→      supervisorPhone: bus.supervisorPhone || '',
+   176→      capacity: bus.capacity,
+   177→      model: bus.model || '',
+   178→      color: bus.color || '#610000',
+   179→      active: bus.active,
+   180→      notes: bus.notes || '',
+   181→    })
+   182→    setEditDialogOpen(true)
+   183→  }
+   184→
+   185→  // Handle edit save
+   186→  const handleEditSave = async () => {
+   187→    if (!editForm.plateNumber.trim() || !editForm.driverName.trim()) {
+   188→      toast.error('يرجى إدخال رقم اللوحة واسم السائق')
+   189→      return
+   190→    }
+   191→    setSaving(true)
+   192→    try {
+   193→      const body = {
+   194→        schoolId: selectedSchoolId,
+   195→        plateNumber: editForm.plateNumber.trim(),
+   196→        driverName: editForm.driverName.trim(),
+   197→        driverPhone: editForm.driverPhone.trim() || null,
+   198→        driverLicense: editForm.driverLicense.trim() || null,
+   199→        supervisorName: editForm.supervisorName.trim() || null,
+   200→        supervisorPhone: editForm.supervisorPhone.trim() || null,
+   201→        capacity: editForm.capacity,
+   202→        model: editForm.model.trim() || null,
+   203→        color: editForm.color || null,
+   204→        active: editForm.active,
+   205→        notes: editForm.notes.trim() || null,
+   206→      }
+   207→
+   208→      const res = await fetch(`/api/buses/${editId}`, {
+   209→        method: 'PUT',
+   210→        headers: { 'Content-Type': 'application/json' },
+   211→        body: JSON.stringify(body),
+   212→      })
+   213→
+   214→      if (res.ok) {
+   215→        toast.success('تم تحديث بيانات الباص بنجاح')
+   216→        setEditDialogOpen(false)
+   217→        // Refresh the list
+   218→        refreshBuses()
+   219→      } else {
+   220→        toast.error('فشل في تحديث البيانات')
+   221→      }
+   222→    } catch {
+   223→      toast.error('فشل في تحديث البيانات')
+   224→    } finally {
+   225→      setSaving(false)
+   226→    }
+   227→  }
+   228→
+   229→  // Handle add bus
+   230→  const handleAddBus = async () => {
+   231→    if (!addForm.plateNumber.trim() || !addForm.driverName.trim()) {
+   232→      toast.error('يرجى إدخال رقم اللوحة واسم السائق')
+   233→      return
+   234→    }
+   235→    if (addForm.capacity < 1) {
+   236→      toast.error('يجب أن تكون سعة الباص أكبر من صفر')
+   237→      return
+   238→    }
+   239→    setSaving(true)
+   240→    try {
+   241→      const body = {
+   242→        schoolId: selectedSchoolId,
+   243→        plateNumber: addForm.plateNumber.trim(),
+   244→        driverName: addForm.driverName.trim(),
+   245→        driverPhone: addForm.driverPhone.trim() || null,
+   246→        driverLicense: addForm.driverLicense.trim() || null,
+   247→        supervisorName: addForm.supervisorName.trim() || null,
+   248→        supervisorPhone: addForm.supervisorPhone.trim() || null,
+   249→        capacity: addForm.capacity,
+   250→        model: addForm.model.trim() || null,
+   251→        color: addForm.color || null,
+   252→        active: addForm.active,
+   253→        notes: addForm.notes.trim() || null,
+   254→      }
+   255→
+   256→      const res = await fetch('/api/buses', {
+   257→        method: 'POST',
+   258→        headers: { 'Content-Type': 'application/json' },
+   259→        body: JSON.stringify(body),
+   260→      })
+   261→
+   262→      if (res.ok) {
+   263→        toast.success('تم إضافة الباص بنجاح')
+   264→        setAddForm(defaultForm)
+   265→        setActiveTab('fleet')
+   266→        refreshBuses()
+   267→      } else {
+   268→        const errData = await res.json().catch(() => ({}))
+   269→        toast.error(errData.error || 'فشل في إضافة الباص')
+   270→      }
+   271→    } catch {
+   272→      toast.error('فشل في إضافة الباص')
+   273→    } finally {
+   274→      setSaving(false)
+   275→    }
+   276→  }
+   277→
+   278→  // Handle delete (soft delete)
+   279→  const handleDelete = async (id: string) => {
+   280→    try {
+   281→      const res = await fetch(`/api/buses/${id}`, { method: 'DELETE' })
+   282→      if (res.ok) {
+   283→        toast.success('تم تعطيل الباص بنجاح')
+   284→        refreshBuses()
+   285→      } else {
+   286→        toast.error('فشل في تعطيل الباص')
+   287→      }
+   288→    } catch {
+   289→      toast.error('فشل في تعطيل الباص')
+   290→    } finally {
+   291→      setDeleteDialogOpen(false)
+   292→      setDeleteTarget(null)
+   293→    }
+   294→  }
+   295→
+   296→  // Refresh bus list
+   297→  const refreshBuses = async () => {
+   298→    if (!selectedSchoolId) return
+   299→    try {
+   300→      const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   301→      if (activeFilter === 'active') params.set('active', 'true')
+   302→      else if (activeFilter === 'inactive') params.set('active', 'false')
+   303→
+   304→      const res = await fetch(`/api/buses?${params.toString()}`)
+   305→      if (res.ok) {
+   306→        const data = await res.json()
+   307→        setBuses(Array.isArray(data) ? data : [])
+   308→      }
+   309→    } catch {
+   310→      toast.error('فشل في تحديث البيانات')
+   311→    }
+   312→  }
+   313→
+   314→  // View routes
+   315→  const openRoutes = (bus: Bus) => {
+   316→    setRoutesTarget(bus)
+   317→    setRoutesDialogOpen(true)
+   318→  }
+   319→
+   320→  // Open passenger report
+   321→  const openReport = (bus: Bus) => {
+   322→    setReportBusId(bus.id)
+   323→    setReportDialogOpen(true)
+   324→  }
+   325→
+   326→  return (
+   327→    <div className="space-y-6" dir="rtl">
+   328→      {/* Header */}
+   329→      <div className="flex justify-between items-center">
+   330→        <h2 className="text-lg font-bold text-[#1a1a2e] flex items-center gap-2">
+   331→          <Bus className="w-5 h-5 text-[#610000]" />
+   332→          إدارة أسطول الباصات
+   333→        </h2>
+   334→      </div>
+   335→
+   336→      {/* Tabs */}
+   337→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   338→        <TabsList className="h-11">
+   339→          <TabsTrigger value="fleet" className="min-h-[44px] px-4 text-sm">
+   340→            <Bus className="w-4 h-4 ml-1" />
+   341→            الأسطول
+   342→          </TabsTrigger>
+   343→          <TabsTrigger value="add" className="min-h-[44px] px-4 text-sm">
+   344→            <Plus className="w-4 h-4 ml-1" />
+   345→            إضافة باص
+   346→          </TabsTrigger>
+   347→        </TabsList>
+   348→
+   349→        {/* ===== Tab 1: Fleet List ===== */}
+   350→        <TabsContent value="fleet" className="space-y-4 mt-4">
+   351→          {/* Search and Filter */}
+   352→          <div className="flex flex-col sm:flex-row gap-3">
+   353→            <div className="relative flex-1">
+   354→              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   355→              <Input
+   356→                placeholder="البحث برقم اللوحة أو اسم السائق..."
+   357→                value={searchQuery}
+   358→                onChange={(e) => setSearchQuery(e.target.value)}
+   359→                className="h-11 pr-10"
+   360→              />
+   361→            </div>
+   362→            <Select value={activeFilter} onValueChange={setActiveFilter}>
+   363→              <SelectTrigger className="h-11 w-full sm:w-[180px]">
+   364→                <SelectValue placeholder="الحالة" />
+   365→              </SelectTrigger>
+   366→              <SelectContent>
+   367→                <SelectItem value="all">الكل</SelectItem>
+   368→                <SelectItem value="active">نشط</SelectItem>
+   369→                <SelectItem value="inactive">معطل</SelectItem>
+   370→              </SelectContent>
+   371→            </Select>
+   372→          </div>
+   373→
+   374→          {/* Bus Grid */}
+   375→          {loading ? (
+   376→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   377→              {Array.from({ length: 6 }).map((_, i) => (
+   378→                <Skeleton key={i} className="h-64 rounded-xl" />
+   379→              ))}
+   380→            </div>
+   381→          ) : filteredBuses.length === 0 ? (
+   382→            <Card>
+   383→              <CardContent className="py-12 text-center">
+   384→                <AlertCircle className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+   385→                <p className="text-gray-400 text-sm">لا يوجد باصات مسجلة</p>
+   386→                <Button
+   387→                  className="mt-4 bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   388→                  onClick={() => setActiveTab('add')}
+   389→                >
+   390→                  <Plus className="w-4 h-4 ml-1" />
+   391→                  إضافة باص جديد
+   392→                </Button>
+   393→              </CardContent>
+   394→            </Card>
+   395→          ) : (
+   396→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   397→              {filteredBuses.map((bus) => (
+   398→                <BusCard
+   399→                  key={bus.id}
+   400→                  bus={bus}
+   401→                  onEdit={() => openEdit(bus)}
+   402→                  onDelete={() => {
+   403→                    setDeleteTarget(bus.id)
+   404→                    setDeleteDialogOpen(true)
+   405→                  }}
+   406→                  onViewRoutes={() => openRoutes(bus)}
+   407→                  onViewReport={() => openReport(bus)}
+   408→                />
+   409→              ))}
+   410→            </div>
+   411→          )}
+   412→        </TabsContent>
+   413→
+   414→        {/* ===== Tab 2: Add Bus ===== */}
+   415→        <TabsContent value="add" className="mt-4">
+   416→          <div className="max-w-2xl mx-auto space-y-4">
+   417→            {/* Bus Info Section */}
+   418→            <Card>
+   419→              <CardHeader className="pb-3">
+   420→                <CardTitle className="text-base flex items-center gap-2">
+   421→                  <Truck className="w-4 h-4 text-[#610000]" />
+   422→                  بيانات الباص
+   423→                </CardTitle>
+   424→              </CardHeader>
+   425→              <CardContent className="space-y-4">
+   426→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   427→                  <div className="space-y-1.5">
+   428→                    <Label>رقم اللوحة *</Label>
+   429→                    <Input
+   430→                      value={addForm.plateNumber}
+   431→                      onChange={(e) => setAddForm({ ...addForm, plateNumber: e.target.value })}
+   432→                      className="h-11"
+   433→                      placeholder="أدخل رقم اللوحة"
+   434→                    />
+   435→                  </div>
+   436→                  <div className="space-y-1.5">
+   437→                    <Label>الموديل</Label>
+   438→                    <Input
+   439→                      value={addForm.model}
+   440→                      onChange={(e) => setAddForm({ ...addForm, model: e.target.value })}
+   441→                      className="h-11"
+   442→                      placeholder="مثال: تويوتا كوستار"
+   443→                    />
+   444→                  </div>
+   445→                </div>
+   446→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   447→                  <div className="space-y-1.5">
+   448→                    <Label>السعة *</Label>
+   449→                    <Input
+   450→                      type="number"
+   451→                      min={1}
+   452→                      value={addForm.capacity}
+   453→                      onChange={(e) => setAddForm({ ...addForm, capacity: parseInt(e.target.value) || 0 })}
+   454→                      className="h-11"
+   455→                      placeholder="عدد الركاب"
+   456→                    />
+   457→                  </div>
+   458→                  <div className="space-y-1.5">
+   459→                    <Label>لون الباص</Label>
+   460→                    <Select
+   461→                      value={addForm.color}
+   462→                      onValueChange={(value) => setAddForm({ ...addForm, color: value })}
+   463→                    >
+   464→                      <SelectTrigger className="h-11 w-full">
+   465→                        <div className="flex items-center gap-2">
+   466→                          <div
+   467→                            className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
+   468→                            style={{ backgroundColor: addForm.color || '#610000' }}
+   469→                          />
+   470→                          <SelectValue placeholder="اختر اللون" />
+   471→                        </div>
+   472→                      </SelectTrigger>
+   473→                      <SelectContent>
+   474→                        {predefinedColors.map((c) => (
+   475→                          <SelectItem key={c.value} value={c.value}>
+   476→                            <div className="flex items-center gap-2">
+   477→                              <div
+   478→                                className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
+   479→                                style={{ backgroundColor: c.value }}
+   480→                              />
+   481→                              {c.label}
+   482→                            </div>
+   483→                          </SelectItem>
+   484→                        ))}
+   485→                      </SelectContent>
+   486→                    </Select>
+   487→                  </div>
+   488→                </div>
+   489→              </CardContent>
+   490→            </Card>
+   491→
+   492→            {/* Driver Info Section */}
+   493→            <Card>
+   494→              <CardHeader className="pb-3">
+   495→                <CardTitle className="text-base flex items-center gap-2">
+   496→                  <User className="w-4 h-4 text-[#610000]" />
+   497→                  بيانات السائق
+   498→                </CardTitle>
+   499→              </CardHeader>
+   500→              <CardContent className="space-y-4">
+   501→                <div className="space-y-1.5">
+   502→                  <Label>اسم السائق *</Label>
+   503→                  <Input
+   504→                    value={addForm.driverName}
+   505→                    onChange={(e) => setAddForm({ ...addForm, driverName: e.target.value })}
+   506→                    className="h-11"
+   507→                    placeholder="اسم السائق بالكامل"
+   508→                  />
+   509→                </div>
+   510→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   511→                  <div className="space-y-1.5">
+   512→                    <Label>رقم الهاتف</Label>
+   513→                    <Input
+   514→                      value={addForm.driverPhone}
+   515→                      onChange={(e) => setAddForm({ ...addForm, driverPhone: e.target.value })}
+   516→                      className="h-11"
+   517→                      placeholder="05XXXXXXXX"
+   518→                      dir="ltr"
+   519→                    />
+   520→                  </div>
+   521→                  <div className="space-y-1.5">
+   522→                    <Label>رقم الرخصة</Label>
+   523→                    <Input
+   524→                      value={addForm.driverLicense}
+   525→                      onChange={(e) => setAddForm({ ...addForm, driverLicense: e.target.value })}
+   526→                      className="h-11"
+   527→                      placeholder="رقم رخصة القيادة"
+   528→                      dir="ltr"
+   529→                    />
+   530→                  </div>
+   531→                </div>
+   532→              </CardContent>
+   533→            </Card>
+   534→
+   535→            {/* Supervisor Info Section */}
+   536→            <Card>
+   537→              <CardHeader className="pb-3">
+   538→                <CardTitle className="text-base flex items-center gap-2">
+   539→                  <Users className="w-4 h-4 text-[#610000]" />
+   540→                  بيانات المشرف
+   541→                </CardTitle>
+   542→              </CardHeader>
+   543→              <CardContent className="space-y-4">
+   544→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   545→                  <div className="space-y-1.5">
+   546→                    <Label>اسم المشرف</Label>
+   547→                    <Input
+   548→                      value={addForm.supervisorName}
+   549→                      onChange={(e) => setAddForm({ ...addForm, supervisorName: e.target.value })}
+   550→                      className="h-11"
+   551→                      placeholder="اسم المشرف"
+   552→                    />
+   553→                  </div>
+   554→                  <div className="space-y-1.5">
+   555→                    <Label>رقم هاتف المشرف</Label>
+   556→                    <Input
+   557→                      value={addForm.supervisorPhone}
+   558→                      onChange={(e) => setAddForm({ ...addForm, supervisorPhone: e.target.value })}
+   559→                      className="h-11"
+   560→                      placeholder="05XXXXXXXX"
+   561→                      dir="ltr"
+   562→                    />
+   563→                  </div>
+   564→                </div>
+   565→              </CardContent>
+   566→            </Card>
+   567→
+   568→            {/* Other Info Section */}
+   569→            <Card>
+   570→              <CardHeader className="pb-3">
+   571→                <CardTitle className="text-base flex items-center gap-2">
+   572→                  <FileText className="w-4 h-4 text-[#610000]" />
+   573→                  أخرى
+   574→                </CardTitle>
+   575→              </CardHeader>
+   576→              <CardContent className="space-y-4">
+   577→                <div className="space-y-1.5">
+   578→                  <Label>ملاحظات</Label>
+   579→                  <Textarea
+   580→                    value={addForm.notes}
+   581→                    onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+   582→                    className="min-h-[80px]"
+   583→                    placeholder="أي ملاحظات إضافية..."
+   584→                  />
+   585→                </div>
+   586→              </CardContent>
+   587→            </Card>
+   588→
+   589→            {/* Submit Button */}
+   590→            <Button
+   591→              onClick={handleAddBus}
+   592→              disabled={saving}
+   593→              className="w-full bg-[#610000] hover:bg-[#8B0000] text-white min-h-[48px] text-base"
+   594→            >
+   595→              {saving ? (
+   596→                <span className="flex items-center gap-2">
+   597→                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+   598→                  جاري الحفظ...
+   599→                </span>
+   600→              ) : (
+   601→                <>
+   602→                  <Bus className="w-5 h-5 ml-2" />
+   603→                  إضافة الباص
+   604→                </>
+   605→              )}
+   606→            </Button>
+   607→          </div>
+   608→        </TabsContent>
+   609→      </Tabs>
+   610→
+   611→      {/* ===== Edit Dialog ===== */}
+   612→      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+   613→        <DialogContent dir="rtl" className="max-w-2xl max-h-[85vh] overflow-y-auto">
+   614→          <DialogHeader>
+   615→            <DialogTitle>تعديل بيانات الباص</DialogTitle>
+   616→            <DialogDescription>تعديل معلومات الباص والسائق والمشرف</DialogDescription>
+   617→          </DialogHeader>
+   618→          <div className="space-y-6 mt-4">
+   619→            {/* Bus Info */}
+   620→            <div className="space-y-3">
+   621→              <h4 className="font-semibold text-sm text-[#610000] flex items-center gap-1.5">
+   622→                <Truck className="w-3.5 h-3.5" />
+   623→                بيانات الباص
+   624→              </h4>
+   625→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   626→                <div className="space-y-1">
+   627→                  <Label className="text-xs">رقم اللوحة *</Label>
+   628→                  <Input
+   629→                    value={editForm.plateNumber}
+   630→                    onChange={(e) => setEditForm({ ...editForm, plateNumber: e.target.value })}
+   631→                    className="h-11"
+   632→                  />
+   633→                </div>
+   634→                <div className="space-y-1">
+   635→                  <Label className="text-xs">الموديل</Label>
+   636→                  <Input
+   637→                    value={editForm.model}
+   638→                    onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+   639→                    className="h-11"
+   640→                  />
+   641→                </div>
+   642→                <div className="space-y-1">
+   643→                  <Label className="text-xs">السعة *</Label>
+   644→                  <Input
+   645→                    type="number"
+   646→                    min={1}
+   647→                    value={editForm.capacity}
+   648→                    onChange={(e) => setEditForm({ ...editForm, capacity: parseInt(e.target.value) || 0 })}
+   649→                    className="h-11"
+   650→                  />
+   651→                </div>
+   652→                <div className="space-y-1">
+   653→                  <Label className="text-xs">لون الباص</Label>
+   654→                  <Select
+   655→                    value={editForm.color}
+   656→                    onValueChange={(value) => setEditForm({ ...editForm, color: value })}
+   657→                  >
+   658→                    <SelectTrigger className="h-11 w-full">
+   659→                      <div className="flex items-center gap-2">
+   660→                        <div
+   661→                          className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
+   662→                          style={{ backgroundColor: editForm.color || '#610000' }}
+   663→                        />
+   664→                        <SelectValue placeholder="اختر اللون" />
+   665→                      </div>
+   666→                    </SelectTrigger>
+   667→                    <SelectContent>
+   668→                      {predefinedColors.map((c) => (
+   669→                        <SelectItem key={c.value} value={c.value}>
+   670→                          <div className="flex items-center gap-2">
+   671→                            <div
+   672→                              className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
+   673→                              style={{ backgroundColor: c.value }}
+   674→                            />
+   675→                            {c.label}
+   676→                          </div>
+   677→                        </SelectItem>
+   678→                      ))}
+   679→                    </SelectContent>
+   680→                  </Select>
+   681→                </div>
+   682→              </div>
+   683→            </div>
+   684→
+   685→            {/* Driver Info */}
+   686→            <div className="space-y-3">
+   687→              <h4 className="font-semibold text-sm text-[#610000] flex items-center gap-1.5">
+   688→                <User className="w-3.5 h-3.5" />
+   689→                بيانات السائق
+   690→              </h4>
+   691→              <div className="space-y-3">
+   692→                <div className="space-y-1">
+   693→                  <Label className="text-xs">اسم السائق *</Label>
+   694→                  <Input
+   695→                    value={editForm.driverName}
+   696→                    onChange={(e) => setEditForm({ ...editForm, driverName: e.target.value })}
+   697→                    className="h-11"
+   698→                  />
+   699→                </div>
+   700→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   701→                  <div className="space-y-1">
+   702→                    <Label className="text-xs">رقم الهاتف</Label>
+   703→                    <Input
+   704→                      value={editForm.driverPhone}
+   705→                      onChange={(e) => setEditForm({ ...editForm, driverPhone: e.target.value })}
+   706→                      className="h-11"
+   707→                      dir="ltr"
+   708→                    />
+   709→                  </div>
+   710→                  <div className="space-y-1">
+   711→                    <Label className="text-xs">رقم الرخصة</Label>
+   712→                    <Input
+   713→                      value={editForm.driverLicense}
+   714→                      onChange={(e) => setEditForm({ ...editForm, driverLicense: e.target.value })}
+   715→                      className="h-11"
+   716→                      dir="ltr"
+   717→                    />
+   718→                  </div>
+   719→                </div>
+   720→              </div>
+   721→            </div>
+   722→
+   723→            {/* Supervisor Info */}
+   724→            <div className="space-y-3">
+   725→              <h4 className="font-semibold text-sm text-[#610000] flex items-center gap-1.5">
+   726→                <Users className="w-3.5 h-3.5" />
+   727→                بيانات المشرف
+   728→              </h4>
+   729→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   730→                <div className="space-y-1">
+   731→                  <Label className="text-xs">اسم المشرف</Label>
+   732→                  <Input
+   733→                    value={editForm.supervisorName}
+   734→                    onChange={(e) => setEditForm({ ...editForm, supervisorName: e.target.value })}
+   735→                    className="h-11"
+   736→                  />
+   737→                </div>
+   738→                <div className="space-y-1">
+   739→                  <Label className="text-xs">رقم هاتف المشرف</Label>
+   740→                  <Input
+   741→                    value={editForm.supervisorPhone}
+   742→                    onChange={(e) => setEditForm({ ...editForm, supervisorPhone: e.target.value })}
+   743→                    className="h-11"
+   744→                    dir="ltr"
+   745→                  />
+   746→                </div>
+   747→              </div>
+   748→            </div>
+   749→
+   750→            {/* Other */}
+   751→            <div className="space-y-3">
+   752→              <h4 className="font-semibold text-sm text-[#610000] flex items-center gap-1.5">
+   753→                <FileText className="w-3.5 h-3.5" />
+   754→                أخرى
+   755→              </h4>
+   756→              <div className="space-y-3">
+   757→                <div className="space-y-1">
+   758→                  <Label className="text-xs">حالة الباص</Label>
+   759→                  <Select
+   760→                    value={editForm.active ? 'true' : 'false'}
+   761→                    onValueChange={(val) => setEditForm({ ...editForm, active: val === 'true' })}
+   762→                  >
+   763→                    <SelectTrigger className="h-11 w-full">
+   764→                      <SelectValue />
+   765→                    </SelectTrigger>
+   766→                    <SelectContent>
+   767→                      <SelectItem value="true">نشط</SelectItem>
+   768→                      <SelectItem value="false">معطل</SelectItem>
+   769→                    </SelectContent>
+   770→                  </Select>
+   771→                </div>
+   772→                <div className="space-y-1">
+   773→                  <Label className="text-xs">ملاحظات</Label>
+   774→                  <Textarea
+   775→                    value={editForm.notes}
+   776→                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+   777→                    className="min-h-[80px]"
+   778→                  />
+   779→                </div>
+   780→              </div>
+   781→            </div>
+   782→          </div>
+   783→
+   784→          {/* Dialog Actions */}
+   785→          <div className="flex gap-3 justify-end mt-4 pt-4 border-t">
+   786→            <Button
+   787→              variant="outline"
+   788→              onClick={() => setEditDialogOpen(false)}
+   789→              className="min-h-[44px]"
+   790→            >
+   791→              <X className="w-4 h-4 ml-1" />
+   792→              إلغاء
+   793→            </Button>
+   794→            <Button
+   795→              onClick={handleEditSave}
+   796→              disabled={saving}
+   797→              className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   798→            >
+   799→              {saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+   800→            </Button>
+   801→          </div>
+   802→        </DialogContent>
+   803→      </Dialog>
+   804→
+   805→      {/* ===== Delete Confirmation Dialog ===== */}
+   806→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   807→        <DialogContent dir="rtl">
+   808→          <DialogHeader>
+   809→            <DialogTitle>تأكيد التعطيل</DialogTitle>
+   810→            <DialogDescription>
+   811→              هل أنت متأكد من تعطيل هذا الباص؟ سيتم تغيير حالته إلى معطل.
+   812→            </DialogDescription>
+   813→          </DialogHeader>
+   814→          <div className="flex gap-3 justify-end mt-4">
+   815→            <Button
+   816→              variant="outline"
+   817→              onClick={() => setDeleteDialogOpen(false)}
+   818→              className="min-h-[44px]"
+   819→            >
+   820→              إلغاء
+   821→            </Button>
+   822→            <Button
+   823→              variant="destructive"
+   824→              onClick={() => deleteTarget && handleDelete(deleteTarget)}
+   825→              className="min-h-[44px]"
+   826→            >
+   827→              <Trash2 className="w-4 h-4 ml-1" />
+   828→              تعطيل
+   829→            </Button>
+   830→          </div>
+   831→        </DialogContent>
+   832→      </Dialog>
+   833→
+   834→      {/* ===== Passenger Report Dialog ===== */}
+   835→      <BusPassengerReport
+   836→        open={reportDialogOpen}
+   837→        onOpenChange={setReportDialogOpen}
+   838→        busId={reportBusId}
+   839→        schoolId={selectedSchoolId || ''}
+   840→      />
+   841→
+   842→      {/* ===== Routes Dialog ===== */}
+   843→      <Dialog open={routesDialogOpen} onOpenChange={setRoutesDialogOpen}>
+   844→        <DialogContent dir="rtl">
+   845→          <DialogHeader>
+   846→            <DialogTitle>
+   847→              مسارات الباص - {routesTarget?.plateNumber || ''}
+   848→            </DialogTitle>
+   849→            <DialogDescription>
+   850→              المسارات المرتبطة بهذا الباص
+   851→            </DialogDescription>
+   852→          </DialogHeader>
+   853→          <div className="mt-4">
+   854→            {routesTarget?.routes && routesTarget.routes.length > 0 ? (
+   855→              <div className="space-y-2 max-h-64 overflow-y-auto">
+   856→                {routesTarget.routes.map((route) => (
+   857→                  <div
+   858→                    key={route.id}
+   859→                    className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border"
+   860→                  >
+   861→                    <Route className="w-4 h-4 text-[#610000] shrink-0" />
+   862→                    <div className="flex-1 min-w-0">
+   863→                      <p className="font-medium text-sm truncate">{route.name}</p>
+   864→                      {route.area && (
+   865→                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+   866→                          <MapPin className="w-3 h-3" />
+   867→                          {route.area}
+   868→                        </p>
+   869→                      )}
+   870→                    </div>
+   871→                  </div>
+   872→                ))}
+   873→              </div>
+   874→            ) : (
+   875→              <div className="py-8 text-center">
+   876→                <Route className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+   877→                <p className="text-sm text-gray-400">لا توجد مسارات مرتبطة بهذا الباص</p>
+   878→              </div>
+   879→            )}
+   880→          </div>
+   881→          <div className="flex justify-end mt-4 pt-4 border-t">
+   882→            <Button
+   883→              variant="outline"
+   884→              onClick={() => setRoutesDialogOpen(false)}
+   885→              className="min-h-[44px]"
+   886→            >
+   887→              إغلاق
+   888→            </Button>
+   889→          </div>
+   890→        </DialogContent>
+   891→      </Dialog>
+   892→    </div>
+   893→  )
+   894→}
+   895→
+   896→// ===== Bus Card Component =====
+   897→function BusCard({
+   898→  bus,
+   899→  onEdit,
+   900→  onDelete,
+   901→  onViewRoutes,
+   902→  onViewReport,
+   903→}: {
+   904→  bus: Bus
+   905→  onEdit: () => void
+   906→  onDelete: () => void
+   907→  onViewRoutes: () => void
+   908→  onViewReport: () => void
+   909→}) {
+   910→  const busColor = bus.color || '#610000'
+   911→  const routesCount = bus._count?.routes || bus.routes?.length || 0
+   912→
+   913→  return (
+   914→    <Card className="hover:shadow-lg transition-shadow overflow-hidden">
+   915→      {/* Color Bar */}
+   916→      <div className="h-1.5" style={{ backgroundColor: busColor }} />
+   917→
+   918→      <CardContent className="p-4 space-y-3">
+   919→        {/* Header: Plate + Status */}
+   920→        <div className="flex items-start justify-between gap-2">
+   921→          <div className="flex items-center gap-2.5 min-w-0">
+   922→            <div
+   923→              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+   924→              style={{ backgroundColor: busColor + '15' }}
+   925→            >
+   926→              <Bus className="w-5 h-5" style={{ color: busColor }} />
+   927→            </div>
+   928→            <div className="min-w-0">
+   929→              <h3 className="font-bold text-[#1a1a2e] text-base truncate" dir="ltr">
+   930→                {bus.plateNumber}
+   931→              </h3>
+   932→              {bus.model && (
+   933→                <p className="text-xs text-gray-500 truncate">{bus.model}</p>
+   934→              )}
+   935→            </div>
+   936→          </div>
+   937→          <Badge
+   938→            className={`shrink-0 text-xs ${
+   939→              bus.active
+   940→                ? 'bg-green-100 text-green-700 border-green-200'
+   941→                : 'bg-red-100 text-red-700 border-red-200'
+   942→            }`}
+   943→            variant="outline"
+   944→          >
+   945→            {bus.active ? (
+   946→              <CheckCircle2 className="w-3 h-3 ml-0.5" />
+   947→            ) : (
+   948→              <XCircle className="w-3 h-3 ml-0.5" />
+   949→            )}
+   950→            {bus.active ? 'نشط' : 'معطل'}
+   951→          </Badge>
+   952→        </div>
+   953→
+   954→        {/* Driver Info */}
+   955→        <div className="space-y-1.5">
+   956→          <div className="flex items-center gap-2 text-sm">
+   957→            <User className="w-3.5 h-3.5 text-[#610000] shrink-0" />
+   958→            <span className="text-gray-700 font-medium truncate">{bus.driverName}</span>
+   959→          </div>
+   960→          {bus.driverPhone && (
+   961→            <div className="flex items-center gap-2 text-xs text-gray-500 mr-5.5">
+   962→              <Phone className="w-3 h-3 shrink-0" />
+   963→              <span dir="ltr">{bus.driverPhone}</span>
+   964→            </div>
+   965→          )}
+   966→          {bus.driverLicense && (
+   967→            <div className="flex items-center gap-2 text-xs text-gray-500 mr-5.5">
+   968→              <ShieldCheck className="w-3 h-3 shrink-0" />
+   969→              <span dir="ltr">{bus.driverLicense}</span>
+   970→            </div>
+   971→          )}
+   972→        </div>
+   973→
+   974→        {/* Supervisor Info */}
+   975→        {bus.supervisorName && (
+   976→          <div className="space-y-1.5 pt-1 border-t border-dashed border-gray-200">
+   977→            <div className="flex items-center gap-2 text-sm">
+   978→              <Users className="w-3.5 h-3.5 text-[#610000] shrink-0" />
+   979→              <span className="text-gray-700 font-medium truncate">{bus.supervisorName}</span>
+   980→            </div>
+   981→            {bus.supervisorPhone && (
+   982→              <div className="flex items-center gap-2 text-xs text-gray-500 mr-5.5">
+   983→                <Phone className="w-3 h-3 shrink-0" />
+   984→                <span dir="ltr">{bus.supervisorPhone}</span>
+   985→              </div>
+   986→            )}
+   987→          </div>
+   988→        )}
+   989→
+   990→        {/* Footer: Capacity + Routes */}
+   991→        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+   992→          <div className="flex items-center gap-3">
+   993→            <div className="flex items-center gap-1 text-xs text-gray-500">
+   994→              <Users className="w-3 h-3" />
+   995→              <span>{bus.capacity} راكب</span>
+   996→            </div>
+   997→            {routesCount > 0 && (
+   998→              <Badge
+   999→                variant="secondary"
+  1000→                className="text-xs bg-[#610000]/10 text-[#610000] hover:bg-[#610000]/20 cursor-pointer"
+  1001→                onClick={onViewRoutes}
+  1002→              >
+  1003→                <Route className="w-3 h-3 ml-0.5" />
+  1004→                {routesCount} مسار
+  1005→              </Badge>
+  1006→            )}
+  1007→          </div>
+  1008→        </div>
+  1009→
+  1010→        {/* Actions */}
+  1011→        <div className="flex gap-2 pt-1">
+  1012→          <Button
+  1013→            variant="outline"
+  1014→            size="sm"
+  1015→            className="min-h-[44px] flex-1 text-xs"
+  1016→            onClick={onEdit}
+  1017→          >
+  1018→            <Edit className="w-3.5 h-3.5 ml-1" />
+  1019→            تعديل
+  1020→          </Button>
+  1021→          <Button
+  1022→            variant="outline"
+  1023→            size="sm"
+  1024→            className="min-h-[44px] flex-1 text-xs"
+  1025→            onClick={onViewRoutes}
+  1026→          >
+  1027→            <Route className="w-3.5 h-3.5 ml-1" />
+  1028→            المسارات
+  1029→          </Button>
+  1030→          <Button
+  1031→            variant="outline"
+  1032→            size="sm"
+  1033→            className="min-h-[44px] flex-1 text-xs bg-[#610000]/5 hover:bg-[#610000]/10 text-[#610000] border-[#610000]/20"
+  1034→            onClick={onViewReport}
+  1035→          >
+  1036→            <ClipboardList className="w-3.5 h-3.5 ml-1" />
+  1037→            كشف الركاب
+  1038→          </Button>
+  1039→          <Button
+  1040→            variant="outline"
+  1041→            size="sm"
+  1042→            className="min-h-[44px] text-red-500 hover:text-red-700 hover:bg-red-50 text-xs"
+  1043→            onClick={onDelete}
+  1044→          >
+  1045→            <Trash2 className="w-3.5 h-3.5" />
+  1046→          </Button>
+  1047→        </div>
+  1048→      </CardContent>
+  1049→    </Card>
+  1050→  )
+  1051→}
+  1052→

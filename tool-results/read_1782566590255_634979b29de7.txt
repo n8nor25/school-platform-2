@@ -1,0 +1,2002 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect } from 'react'
+     4→     4→import {
+     5→     5→  Plus, Search, Bus, MapPin, Users, DollarSign, CreditCard,
+     6→     6→  Eye, Edit, XCircle, CheckCircle2, AlertCircle, ArrowLeft,
+     7→     7→  Calendar, Receipt, Phone, GraduationCap, Route, ChevronLeft,
+     8→     8→  Wallet, TrendingUp, UserPlus, FileText, Ban, Save, X, Trash2
+     9→     9→} from 'lucide-react'
+    10→    10→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    11→    11→import { Button } from '@/components/ui/button'
+    12→    12→import { Input } from '@/components/ui/input'
+    13→    13→import { Label } from '@/components/ui/label'
+    14→    14→import { Badge } from '@/components/ui/badge'
+    15→    15→import {
+    16→    16→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+    17→    17→} from '@/components/ui/dialog'
+    18→    18→import {
+    19→    19→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+    20→    20→} from '@/components/ui/select'
+    21→    21→import { Textarea } from '@/components/ui/textarea'
+    22→    22→import { Skeleton } from '@/components/ui/skeleton'
+    23→    23→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    24→    24→import { Separator } from '@/components/ui/separator'
+    25→    25→import { Checkbox } from '@/components/ui/checkbox'
+    26→    26→import {
+    27→    27→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+    28→    28→} from '@/components/ui/table'
+    29→    29→import { toast } from 'sonner'
+    30→    30→import { useAdminStore } from '@/lib/admin-store'
+    31→    31→
+    32→    32→// ===== Types =====
+    33→    33→interface Subscription {
+    34→    34→  id: string
+    35→    35→  schoolId: string
+    36→    36→  studentId: string
+    37→    37→  routeId: string
+    38→    38→  startDate: string
+    39→    39→  endDate: string | null
+    40→    40→  direction: string
+    41→    41→  monthlyFee: number
+    42→    42→  status: string
+    43→    43→  notes: string | null
+    44→    44→  createdAt: string
+    45→    45→  student: {
+    46→    46→    id: string
+    47→    47→    name: string
+    48→    48→    studentNumber: string
+    49→    49→    phone: string | null
+    50→    50→    parentPhone: string | null
+    51→    51→    parentPhone2: string | null
+    52→    52→    address: string | null
+    53→    53→    parentName: string | null
+    54→    54→    classroom: { name: string; gradeLevel: string } | null
+    55→    55→  }
+    56→    56→  route: {
+    57→    57→    id: string
+    58→    58→    name: string
+    59→    59→    area: string
+    60→    60→    monthlyFee: number
+    61→    61→    bus: { id: string; plateNumber: string; driverName: string; color: string | null } | null
+    62→    62→  }
+    63→    63→  _count?: { payments: number }
+    64→    64→  payments?: TransportPayment[]
+    65→    65→}
+    66→    66→
+    67→    67→interface TransportPayment {
+    68→    68→  id: string
+    69→    69→  subscriptionId: string
+    70→    70→  month: number
+    71→    71→  year: number
+    72→    72→  amount: number
+    73→    73→  paymentDate: string
+    74→    74→  paymentMethod: string
+    75→    75→  receiptNumber: string | null
+    76→    76→  notes: string | null
+    77→    77→  createdBy: string | null
+    78→    78→  createdAt: string
+    79→    79→  subscription?: {
+    80→    80→    student: {
+    81→    81→      id: string
+    82→    82→      name: string
+    83→    83→      studentNumber: string
+    84→    84→      phone: string | null
+    85→    85→      parentPhone: string | null
+    86→    86→      parentPhone2: string | null
+    87→    87→      address: string | null
+    88→    88→      parentName: string | null
+    89→    89→      classroom: { name: string; gradeLevel: string } | null
+    90→    90→    }
+    91→    91→    route: {
+    92→    92→      id: string
+    93→    93→      name: string
+    94→    94→      area: string
+    95→    95→      monthlyFee: number
+    96→    96→      bus: { id: string; plateNumber: string; color: string | null } | null
+    97→    97→    }
+    98→    98→  }
+    99→    99→}
+   100→   100→
+   101→   101→interface BusRouteOption {
+   102→   102→  id: string
+   103→   103→  name: string
+   104→   104→  area: string
+   105→   105→  monthlyFee: number
+   106→   106→  bus: { id: string; plateNumber: string; color: string | null } | null
+   107→   107→}
+   108→   108→
+   109→   109→interface StudentOption {
+   110→   110→  id: string
+   111→   111→  studentNumber: string
+   112→   112→  name: string
+   113→   113→  phone: string | null
+   114→   114→  parentPhone: string | null
+   115→   115→  parentPhone2: string | null
+   116→   116→  address: string | null
+   117→   117→  parentName: string | null
+   118→   118→  classroom: { name: string; gradeLevel: string } | null
+   119→   119→}
+   120→   120→
+   121→   121→interface TransportStats {
+   122→   122→  totalSubscriptions: number
+   123→   123→  activeCount: number
+   124→   124→  totalMonthlyRevenue: number
+   125→   125→  collectedThisMonth: number
+   126→   126→}
+   127→   127→
+   128→   128→// ===== Constants =====
+   129→   129→const arabicMonths = [
+   130→   130→  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+   131→   131→  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+   132→   132→]
+   133→   133→
+   134→   134→const paymentMethods = ['نقدي', 'تحويل', 'بطاقة']
+   135→   135→
+   136→   136→const directionConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+   137→   137→  'ذهاب': { label: 'ذهاب', color: 'text-blue-700', bgColor: 'bg-blue-100 border-blue-300' },
+   138→   138→  'عودة': { label: 'عودة', color: 'text-green-700', bgColor: 'bg-green-100 border-green-300' },
+   139→   139→  'ذهاب وعودة': { label: 'ذهاب وعودة', color: 'text-purple-700', bgColor: 'bg-purple-100 border-purple-300' },
+   140→   140→}
+   141→   141→
+   142→   142→const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+   143→   143→  'نشط': { label: 'نشط', color: 'text-green-700', bgColor: 'bg-green-100 border-green-300' },
+   144→   144→  'ملغي': { label: 'ملغي', color: 'text-red-700', bgColor: 'bg-red-100 border-red-300' },
+   145→   145→  'متوقف': { label: 'متوقف', color: 'text-yellow-700', bgColor: 'bg-yellow-100 border-yellow-300' },
+   146→   146→}
+   147→   147→
+   148→   148→// ===== Helper Functions =====
+   149→   149→function formatCurrency(value: number): string {
+   150→   150→  return value.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+   151→   151→}
+   152→   152→
+   153→   153→function getCurrentMonth(): number {
+   154→   154→  return new Date().getMonth() + 1
+   155→   155→}
+   156→   156→
+   157→   157→function getCurrentYear(): number {
+   158→   158→  return new Date().getFullYear()
+   159→   159→}
+   160→   160→
+   161→   161→function getYearOptions(): number[] {
+   162→   162→  const current = getCurrentYear()
+   163→   163→  return Array.from({ length: 6 }, (_, i) => current - i)
+   164→   164→}
+   165→   165→
+   166→   166→function formatDate(dateStr: string | null): string {
+   167→   167→  if (!dateStr) return '—'
+   168→   168→  const d = new Date(dateStr)
+   169→   169→  return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })
+   170→   170→}
+   171→   171→
+   172→   172→// Calculate how many months a subscription should have payments for
+   173→   173→function getExpectedMonths(startDate: string, endDate: string | null): number {
+   174→   174→  const start = new Date(startDate)
+   175→   175→  const end = endDate ? new Date(endDate) : new Date()
+   176→   176→  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+   177→   177→  return Math.max(0, months)
+   178→   178→}
+   179→   179→
+   180→   180→// ===== Main Component =====
+   181→   181→export function TransportSubscriptionsManagement() {
+   182→   182→  const { selectedSchoolId } = useAdminStore()
+   183→   183→
+   184→   184→  // ===== State =====
+   185→   185→  const [activeTab, setActiveTab] = useState('subscriptions')
+   186→   186→
+   187→   187→  // Subscriptions tab
+   188→   188→  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+   189→   189→  const [stats, setStats] = useState<TransportStats | null>(null)
+   190→   190→  const [loading, setLoading] = useState(true)
+   191→   191→  const [searchQuery, setSearchQuery] = useState('')
+   192→   192→  const [routeFilter, setRouteFilter] = useState('all')
+   193→   193→  const [busFilter, setBusFilter] = useState('all')
+   194→   194→  const [statusFilter, setStatusFilter] = useState('all')
+   195→   195→
+   196→   196→  // Dropdown data
+   197→   197→  const [routeOptions, setRouteOptions] = useState<BusRouteOption[]>([])
+   198→   198→  const [busOptions, setBusOptions] = useState<{ id: string; plateNumber: string; color: string | null }[]>([])
+   199→   199→
+   200→   200→  // View payments dialog
+   201→   201→  const [viewPaymentsSub, setViewPaymentsSub] = useState<Subscription | null>(null)
+   202→   202→  const [subscriptionPayments, setSubscriptionPayments] = useState<TransportPayment[]>([])
+   203→   203→  const [paymentsLoading, setPaymentsLoading] = useState(false)
+   204→   204→  const [addPaymentOpen, setAddPaymentOpen] = useState(false)
+   205→   205→
+   206→   206→  // Edit subscription dialog
+   207→   207→  const [editSub, setEditSub] = useState<Subscription | null>(null)
+   208→   208→  const [editForm, setEditForm] = useState({
+   209→   209→    routeId: '',
+   210→   210→    direction: 'ذهاب وعودة',
+   211→   211→    monthlyFee: 0,
+   212→   212→    status: 'نشط',
+   213→   213→    endDate: '',
+   214→   214→    notes: '',
+   215→   215→  })
+   216→   216→  const [editLoading, setEditLoading] = useState(false)
+   217→   217→
+   218→   218→  // New subscription tab
+   219→   219→  const [newSubStep, setNewSubStep] = useState(1)
+   220→   220→  const [studentSearch, setStudentSearch] = useState('')
+   221→   221→  const [studentResults, setStudentResults] = useState<StudentOption[]>([])
+   222→   222→  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null)
+   223→   223→  const [selectedRoute, setSelectedRoute] = useState<BusRouteOption | null>(null)
+   224→   224→  const [newSubForm, setNewSubForm] = useState({
+   225→   225→    routeId: '',
+   226→   226→    direction: 'ذهاب وعودة',
+   227→   227→    startDate: new Date().toISOString().split('T')[0],
+   228→   228→    monthlyFee: 0,
+   229→   229→    notes: '',
+   230→   230→  })
+   231→   231→  const [newSubLoading, setNewSubLoading] = useState(false)
+   232→   232→  const [studentSearchLoading, setStudentSearchLoading] = useState(false)
+   233→   233→  const [existingSubscription, setExistingSubscription] = useState<Subscription | null>(null)
+   234→   234→
+   235→   235→  // Payment form
+   236→   236→  const [paymentForm, setPaymentForm] = useState({
+   237→   237→    month: getCurrentMonth(),
+   238→   238→    year: getCurrentYear(),
+   239→   239→    amount: 0,
+   240→   240→    paymentDate: new Date().toISOString().split('T')[0],
+   241→   241→    paymentMethod: 'نقدي',
+   242→   242→    receiptNumber: '',
+   243→   243→    notes: '',
+   244→   244→  })
+   245→   245→
+   246→   246→  // Payments tab
+   247→   247→  const [paymentMonth, setPaymentMonth] = useState(getCurrentMonth())
+   248→   248→  const [paymentYear, setPaymentYear] = useState(getCurrentYear())
+   249→   249→  const [paymentRouteFilter, setPaymentRouteFilter] = useState('all')
+   250→   250→  const [paymentBusFilter, setPaymentBusFilter] = useState('all')
+   251→   251→  const [paymentSubscriptions, setPaymentSubscriptions] = useState<Subscription[]>([])
+   252→   252→  const [paymentsLoading2, setPaymentsLoading2] = useState(false)
+   253→   253→  const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<string[]>([])
+   254→   254→  const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false)
+   255→   255→  const [bulkPaymentLoading, setBulkPaymentLoading] = useState(false)
+   256→   256→
+   257→   257→  // Stats for payments tab
+   258→   258→  const [paymentStats, setPaymentStats] = useState({
+   259→   259→    totalExpected: 0,
+   260→   260→    totalCollected: 0,
+   261→   261→    totalOutstanding: 0,
+   262→   262→  })
+   263→   263→
+   264→   264→  // Single payment dialog from payments tab
+   265→   265→  const [singlePaymentSub, setSinglePaymentSub] = useState<Subscription | null>(null)
+   266→   266→  const [singlePaymentLoading, setSinglePaymentLoading] = useState(false)
+   267→   267→
+   268→   268→  // Cancel subscription dialog
+   269→   269→  const [cancelSubId, setCancelSubId] = useState<string | null>(null)
+   270→   270→  const [cancelLoading, setCancelLoading] = useState(false)
+   271→   271→
+   272→   272→  // ===== Fetch subscriptions =====
+   273→   273→  useEffect(() => {
+   274→   274→    let cancelled = false
+   275→   275→    async function loadSubscriptions() {
+   276→   276→      if (!selectedSchoolId) return
+   277→   277→      setLoading(true)
+   278→   278→      try {
+   279→   279→        const params = new URLSearchParams({
+   280→   280→          schoolId: selectedSchoolId,
+   281→   281→          includeStats: 'true',
+   282→   282→        })
+   283→   283→        if (statusFilter !== 'all') params.set('status', statusFilter)
+   284→   284→        if (routeFilter !== 'all') params.set('routeId', routeFilter)
+   285→   285→        if (busFilter !== 'all') params.set('busId', busFilter)
+   286→   286→        if (searchQuery.trim()) params.set('search', searchQuery.trim())
+   287→   287→
+   288→   288→        const res = await fetch(`/api/transport?${params.toString()}`)
+   289→   289→        if (!res.ok) throw new Error('Failed to fetch')
+   290→   290→        const data = await res.json()
+   291→   291→
+   292→   292→        if (!cancelled) {
+   293→   293→          if (data.stats) {
+   294→   294→            setStats(data.stats)
+   295→   295→            setSubscriptions(data.subscriptions || [])
+   296→   296→          } else {
+   297→   297→            setSubscriptions(Array.isArray(data) ? data : [])
+   298→   298→          }
+   299→   299→        }
+   300→   300→      } catch {
+   301→   301→        if (!cancelled) {
+   302→   302→          toast.error('خطأ في تحميل الاشتراكات')
+   303→   303→        }
+   304→   304→      } finally {
+   305→   305→        if (!cancelled) setLoading(false)
+   306→   306→      }
+   307→   307→    }
+   308→   308→    loadSubscriptions()
+   309→   309→    return () => { cancelled = true }
+   310→   310→  }, [selectedSchoolId, statusFilter, routeFilter, busFilter, searchQuery])
+   311→   311→
+   312→   312→  // ===== Fetch route options =====
+   313→   313→  useEffect(() => {
+   314→   314→    let cancelled = false
+   315→   315→    async function loadRoutes() {
+   316→   316→      if (!selectedSchoolId) return
+   317→   317→      try {
+   318→   318→        const res = await fetch(`/api/bus-routes?schoolId=${selectedSchoolId}&active=true`)
+   319→   319→        if (!res.ok) throw new Error('Failed to fetch')
+   320→   320→        const data = await res.json()
+   321→   321→        if (!cancelled) {
+   322→   322→          const routes = Array.isArray(data) ? data : []
+   323→   323→          setRouteOptions(routes.map((r: BusRouteOption & { bus?: { id: string; plateNumber: string; color: string | null } | null }) => ({
+   324→   324→            id: r.id,
+   325→   325→            name: r.name,
+   326→   326→            area: r.area,
+   327→   327→            monthlyFee: r.monthlyFee,
+   328→   328→            bus: r.bus || null,
+   329→   329→          })))
+   330→   330→          // Extract unique buses from routes
+   331→   331→          const buses = new Map<string, { id: string; plateNumber: string; color: string | null }>()
+   332→   332→          routes.forEach((r: BusRouteOption & { bus?: { id: string; plateNumber: string; color: string | null } | null }) => {
+   333→   333→            if (r.bus && !buses.has(r.bus.id)) {
+   334→   334→              buses.set(r.bus.id, r.bus)
+   335→   335→            }
+   336→   336→          })
+   337→   337→          setBusOptions(Array.from(buses.values()))
+   338→   338→        }
+   339→   339→      } catch {
+   340→   340→        if (!cancelled) {
+   341→   341→          toast.error('خطأ في تحميل خطوط السير')
+   342→   342→        }
+   343→   343→      }
+   344→   344→    }
+   345→   345→    loadRoutes()
+   346→   346→    return () => { cancelled = true }
+   347→   347→  }, [selectedSchoolId])
+   348→   348→
+   349→   349→  // ===== Fetch payment subscriptions for payments tab =====
+   350→   350→  useEffect(() => {
+   351→   351→    let cancelled = false
+   352→   352→    async function loadPaymentData() {
+   353→   353→      if (!selectedSchoolId || activeTab !== 'payments') return
+   354→   354→      setPaymentsLoading2(true)
+   355→   355→      try {
+   356→   356→        const params = new URLSearchParams({
+   357→   357→          schoolId: selectedSchoolId,
+   358→   358→          status: 'نشط',
+   359→   359→        })
+   360→   360→        if (paymentRouteFilter !== 'all') params.set('routeId', paymentRouteFilter)
+   361→   361→        if (paymentBusFilter !== 'all') params.set('busId', paymentBusFilter)
+   362→   362→
+   363→   363→        const res = await fetch(`/api/transport?${params.toString()}`)
+   364→   364→        if (!res.ok) throw new Error('Failed to fetch')
+   365→   365→        const data = await res.json()
+   366→   366→        const subs: Subscription[] = data.subscriptions || (Array.isArray(data) ? data : [])
+   367→   367→
+   368→   368→        if (!cancelled) {
+   369→   369→          setPaymentSubscriptions(subs)
+   370→   370→          // Calculate payment stats
+   371→   371→          let totalExpected = 0
+   372→   372→          let totalCollected = 0
+   373→   373→          subs.forEach(sub => {
+   374→   374→            totalExpected += sub.monthlyFee
+   375→   375→          })
+   376→   376→          // Fetch payments for current month
+   377→   377→          const paymentParams = new URLSearchParams({
+   378→   378→            schoolId: selectedSchoolId,
+   379→   379→            type: 'payments',
+   380→   380→            month: paymentMonth.toString(),
+   381→   381→            year: paymentYear.toString(),
+   382→   382→          })
+   383→   383→          const payRes = await fetch(`/api/transport?${paymentParams.toString()}`)
+   384→   384→          if (payRes.ok) {
+   385→   385→            const payData = await payRes.json()
+   386→   386→            const payments: TransportPayment[] = Array.isArray(payData) ? payData : []
+   387→   387→            // Create a set of subscription IDs that have payments this month
+   388→   388→            const paidSubIds = new Set<string>()
+   389→   389→            payments.forEach(p => {
+   390→   390→              paidSubIds.add(p.subscriptionId)
+   391→   391→              totalCollected += p.amount
+   392→   392→            })
+   393→   393→            // Mark which subs have payments
+   394→   394→            const enrichedSubs = subs.map(sub => ({
+   395→   395→              ...sub,
+   396→   396→              _hasPayment: paidSubIds.has(sub.id),
+   397→   397→              _paymentAmount: payments.find(p => p.subscriptionId === sub.id)?.amount || 0,
+   398→   398→            }))
+   399→   399→            setPaymentSubscriptions(enrichedSubs as Subscription[])
+   400→   400→          }
+   401→   401→          setPaymentStats({
+   402→   402→            totalExpected,
+   403→   403→            totalCollected,
+   404→   404→            totalOutstanding: totalExpected - totalCollected,
+   405→   405→          })
+   406→   406→        }
+   407→   407→      } catch {
+   408→   408→        if (!cancelled) {
+   409→   409→          toast.error('خطأ في تحميل بيانات المدفوعات')
+   410→   410→        }
+   411→   411→      } finally {
+   412→   412→        if (!cancelled) setPaymentsLoading2(false)
+   413→   413→      }
+   414→   414→    }
+   415→   415→    loadPaymentData()
+   416→   416→    return () => { cancelled = true }
+   417→   417→  }, [selectedSchoolId, activeTab, paymentMonth, paymentYear, paymentRouteFilter, paymentBusFilter])
+   418→   418→
+   419→   419→  // ===== Fetch subscription payments =====
+   420→   420→  async function fetchSubscriptionPayments(subscriptionId: string) {
+   421→   421→    setPaymentsLoading(true)
+   422→   422→    try {
+   423→   423→      const res = await fetch(`/api/transport?type=payments&schoolId=${selectedSchoolId}&subscriptionId=${subscriptionId}`)
+   424→   424→      if (!res.ok) throw new Error('Failed to fetch')
+   425→   425→      const data = await res.json()
+   426→   426→      setSubscriptionPayments(Array.isArray(data) ? data : [])
+   427→   427→    } catch {
+   428→   428→      toast.error('خطأ في تحميل المدفوعات')
+   429→   429→    } finally {
+   430→   430→      setPaymentsLoading(false)
+   431→   431→    }
+   432→   432→  }
+   433→   433→
+   434→   434→  // ===== Search students =====
+   435→   435→  useEffect(() => {
+   436→   436→    let cancelled = false
+   437→   437→    async function searchStudents() {
+   438→   438→      if (!selectedSchoolId || !studentSearch.trim() || studentSearch.trim().length < 2) {
+   439→   439→        if (!cancelled) setStudentResults([])
+   440→   440→        return
+   441→   441→      }
+   442→   442→      setStudentSearchLoading(true)
+   443→   443→      try {
+   444→   444→        const res = await fetch(`/api/students?schoolId=${selectedSchoolId}&search=${encodeURIComponent(studentSearch.trim())}`)
+   445→   445→        if (!res.ok) throw new Error('Failed to fetch')
+   446→   446→        const data = await res.json()
+   447→   447→        if (!cancelled) {
+   448→   448→          setStudentResults(Array.isArray(data) ? data.slice(0, 20) : [])
+   449→   449→        }
+   450→   450→      } catch {
+   451→   451→        if (!cancelled) {
+   452→   452→          toast.error('خطأ في البحث عن الطلاب')
+   453→   453→        }
+   454→   454→      } finally {
+   455→   455→        if (!cancelled) setStudentSearchLoading(false)
+   456→   456→      }
+   457→   457→    }
+   458→   458→    searchStudents()
+   459→   459→    return () => { cancelled = true }
+   460→   460→  }, [selectedSchoolId, studentSearch])
+   461→   461→
+   462→   462→  // ===== Handle select student for new subscription =====
+   463→   463→  async function handleSelectStudent(student: StudentOption) {
+   464→   464→    setSelectedStudent(student)
+   465→   465→    // Check for existing subscription
+   466→   466→    try {
+   467→   467→      const res = await fetch(`/api/transport?schoolId=${selectedSchoolId}&search=${encodeURIComponent(student.name)}`)
+   468→   468→      if (res.ok) {
+   469→   469→        const data = await res.json()
+   470→   470→        const subs: Subscription[] = data.subscriptions || (Array.isArray(data) ? data : [])
+   471→   471→        const existing = subs.find((s: Subscription) => s.studentId === student.id && s.status === 'نشط')
+   472→   472→        setExistingSubscription(existing || null)
+   473→   473→      }
+   474→   474→    } catch {
+   475→   475→      // Ignore - not critical
+   476→   476→    }
+   477→   477→    setNewSubStep(2)
+   478→   478→  }
+   479→   479→
+   480→   480→  // ===== Handle select route for new subscription =====
+   481→   481→  function handleSelectRoute(routeId: string) {
+   482→   482→    const route = routeOptions.find(r => r.id === routeId)
+   483→   483→    if (route) {
+   484→   484→      setSelectedRoute(route)
+   485→   485→      setNewSubForm(prev => ({
+   486→   486→        ...prev,
+   487→   487→        routeId: route.id,
+   488→   488→        monthlyFee: route.monthlyFee,
+   489→   489→      }))
+   490→   490→    }
+   491→   491→  }
+   492→   492→
+   493→   493→  // ===== Create new subscription =====
+   494→   494→  async function handleCreateSubscription() {
+   495→   495→    if (!selectedStudent || !newSubForm.routeId) {
+   496→   496→      toast.error('يرجى اختيار الطالب وخط السير')
+   497→   497→      return
+   498→   498→    }
+   499→   499→    setNewSubLoading(true)
+   500→   500→    try {
+   501→   501→      const res = await fetch('/api/transport', {
+   502→   502→        method: 'POST',
+   503→   503→        headers: { 'Content-Type': 'application/json' },
+   504→   504→        body: JSON.stringify({
+   505→   505→          action: 'subscribe',
+   506→   506→          schoolId: selectedSchoolId,
+   507→   507→          studentId: selectedStudent.id,
+   508→   508→          routeId: newSubForm.routeId,
+   509→   509→          startDate: newSubForm.startDate,
+   510→   510→          direction: newSubForm.direction,
+   511→   511→          monthlyFee: newSubForm.monthlyFee,
+   512→   512→          notes: newSubForm.notes || null,
+   513→   513→        }),
+   514→   514→      })
+   515→   515→      if (!res.ok) {
+   516→   516→        const data = await res.json()
+   517→   517→        throw new Error(data.error || 'Failed to create subscription')
+   518→   518→      }
+   519→   519→      toast.success('تم تسجيل الاشتراك بنجاح')
+   520→   520→      // Reset form
+   521→   521→      setNewSubStep(1)
+   522→   522→      setSelectedStudent(null)
+   523→   523→      setSelectedRoute(null)
+   524→   524→      setStudentSearch('')
+   525→   525→      setStudentResults([])
+   526→   526→      setExistingSubscription(null)
+   527→   527→      setNewSubForm({
+   528→   528→        routeId: '',
+   529→   529→        direction: 'ذهاب وعودة',
+   530→   530→        startDate: new Date().toISOString().split('T')[0],
+   531→   531→        monthlyFee: 0,
+   532→   532→        notes: '',
+   533→   533→      })
+   534→   534→      // Switch to subscriptions tab - triggers re-fetch
+   535→   535→      setActiveTab('subscriptions')
+   536→   536→    } catch (error) {
+   537→   537→      toast.error(error instanceof Error ? error.message : 'خطأ في تسجيل الاشتراك')
+   538→   538→    } finally {
+   539→   539→      setNewSubLoading(false)
+   540→   540→    }
+   541→   541→  }
+   542→   542→
+   543→   543→  // ===== Edit subscription =====
+   544→   544→  async function handleEditSubscription() {
+   545→   545→    if (!editSub) return
+   546→   546→    setEditLoading(true)
+   547→   547→    try {
+   548→   548→      const res = await fetch(`/api/transport/${editSub.id}`, {
+   549→   549→        method: 'PUT',
+   550→   550→        headers: { 'Content-Type': 'application/json' },
+   551→   551→        body: JSON.stringify({
+   552→   552→          schoolId: selectedSchoolId,
+   553→   553→          routeId: editForm.routeId,
+   554→   554→          direction: editForm.direction,
+   555→   555→          monthlyFee: editForm.monthlyFee,
+   556→   556→          status: editForm.status,
+   557→   557→          endDate: editForm.endDate || null,
+   558→   558→          notes: editForm.notes || null,
+   559→   559→        }),
+   560→   560→      })
+   561→   561→      if (!res.ok) {
+   562→   562→        const data = await res.json()
+   563→   563→        throw new Error(data.error || 'Failed to update')
+   564→   564→      }
+   565→   565→      toast.success('تم تحديث الاشتراك بنجاح')
+   566→   566→      setEditSub(null)
+   567→   567→      // Trigger re-fetch by updating filter state
+   568→   568→      setStatusFilter(prev => prev)
+   569→   569→    } catch (error) {
+   570→   570→      toast.error(error instanceof Error ? error.message : 'خطأ في تحديث الاشتراك')
+   571→   571→    } finally {
+   572→   572→      setEditLoading(false)
+   573→   573→    }
+   574→   574→  }
+   575→   575→
+   576→   576→  // ===== Cancel subscription =====
+   577→   577→  async function handleCancelSubscription() {
+   578→   578→    if (!cancelSubId) return
+   579→   579→    setCancelLoading(true)
+   580→   580→    try {
+   581→   581→      const res = await fetch(`/api/transport/${cancelSubId}?schoolId=${selectedSchoolId}`, {
+   582→   582→        method: 'DELETE',
+   583→   583→      })
+   584→   584→      if (!res.ok) {
+   585→   585→        const data = await res.json()
+   586→   586→        throw new Error(data.error || 'Failed to cancel')
+   587→   587→      }
+   588→   588→      toast.success('تم إلغاء الاشتراك بنجاح')
+   589→   589→      setCancelSubId(null)
+   590→   590→      setStatusFilter(prev => prev)
+   591→   591→    } catch (error) {
+   592→   592→      toast.error(error instanceof Error ? error.message : 'خطأ في إلغاء الاشتراك')
+   593→   593→    } finally {
+   594→   594→      setCancelLoading(false)
+   595→   595→    }
+   596→   596→  }
+   597→   597→
+   598→   598→  // ===== Create payment =====
+   599→   599→  async function handleCreatePayment(subscriptionId: string, isFromPaymentsTab = false) {
+   600→   600→    setSinglePaymentLoading(true)
+   601→   601→    try {
+   602→   602→      const res = await fetch('/api/transport', {
+   603→   603→        method: 'POST',
+   604→   604→        headers: { 'Content-Type': 'application/json' },
+   605→   605→        body: JSON.stringify({
+   606→   606→          action: 'payment',
+   607→   607→          schoolId: selectedSchoolId,
+   608→   608→          subscriptionId,
+   609→   609→          month: paymentForm.month,
+   610→   610→          year: paymentForm.year,
+   611→   611→          amount: paymentForm.amount,
+   612→   612→          paymentDate: paymentForm.paymentDate,
+   613→   613→          paymentMethod: paymentForm.paymentMethod,
+   614→   614→          receiptNumber: paymentForm.receiptNumber || null,
+   615→   615→          notes: paymentForm.notes || null,
+   616→   616→        }),
+   617→   617→      })
+   618→   618→      if (!res.ok) {
+   619→   619→        const data = await res.json()
+   620→   620→        throw new Error(data.error || 'Failed to create payment')
+   621→   621→      }
+   622→   622→      toast.success('تم تسجيل الدفعة بنجاح')
+   623→   623→      setSinglePaymentSub(null)
+   624→   624→      setAddPaymentOpen(false)
+   625→   625→      // Reset payment form
+   626→   626→      setPaymentForm({
+   627→   627→        month: getCurrentMonth(),
+   628→   628→        year: getCurrentYear(),
+   629→   629→        amount: 0,
+   630→   630→        paymentDate: new Date().toISOString().split('T')[0],
+   631→   631→        paymentMethod: 'نقدي',
+   632→   632→        receiptNumber: '',
+   633→   633→        notes: '',
+   634→   634→      })
+   635→   635→      if (viewPaymentsSub) {
+   636→   636→        fetchSubscriptionPayments(viewPaymentsSub.id)
+   637→   637→      }
+   638→   638→      // Trigger payments tab refresh
+   639→   639→      if (isFromPaymentsTab) {
+   640→   640→        setPaymentMonth(prev => prev)
+   641→   641→      }
+   642→   642→    } catch (error) {
+   643→   643→      toast.error(error instanceof Error ? error.message : 'خطأ في تسجيل الدفعة')
+   644→   644→    } finally {
+   645→   645→      setSinglePaymentLoading(false)
+   646→   646→    }
+   647→   647→  }
+   648→   648→
+   649→   649→  // ===== Bulk payments =====
+   650→   650→  async function handleBulkPayment() {
+   651→   651→    if (selectedSubscriptionIds.length === 0) {
+   652→   652→      toast.error('يرجى اختيار طالب واحد على الأقل')
+   653→   653→      return
+   654→   654→    }
+   655→   655→    setBulkPaymentLoading(true)
+   656→   656→    let successCount = 0
+   657→   657→    let errorCount = 0
+   658→   658→    for (const subId of selectedSubscriptionIds) {
+   659→   659→      try {
+   660→   660→        const sub = paymentSubscriptions.find(s => s.id === subId)
+   661→   661→        const res = await fetch('/api/transport', {
+   662→   662→          method: 'POST',
+   663→   663→          headers: { 'Content-Type': 'application/json' },
+   664→   664→          body: JSON.stringify({
+   665→   665→            action: 'payment',
+   666→   666→            schoolId: selectedSchoolId,
+   667→   667→            subscriptionId: subId,
+   668→   668→            month: paymentMonth,
+   669→   669→            year: paymentYear,
+   670→   670→            amount: sub?.monthlyFee || 0,
+   671→   671→            paymentDate: new Date().toISOString().split('T')[0],
+   672→   672→            paymentMethod: 'نقدي',
+   673→   673→          }),
+   674→   674→        })
+   675→   675→        if (res.ok) {
+   676→   676→          successCount++
+   677→   677→        } else {
+   678→   678→          errorCount++
+   679→   679→        }
+   680→   680→      } catch {
+   681→   681→        errorCount++
+   682→   682→      }
+   683→   683→    }
+   684→   684→    if (successCount > 0) toast.success(`تم تسجيل ${successCount} دفعة بنجاح`)
+   685→   685→    if (errorCount > 0) toast.error(`فشل تسجيل ${errorCount} دفعة`)
+   686→   686→    setSelectedSubscriptionIds([])
+   687→   687→    setBulkPaymentOpen(false)
+   688→   688→    // Trigger refresh
+   689→   689→    setPaymentMonth(prev => prev)
+   690→   690→  }
+   691→   691→
+   692→   692→  // ===== Delete payment =====
+   693→   693→  async function handleDeletePayment(paymentId: string) {
+   694→   694→    try {
+   695→   695→      const res = await fetch(`/api/transport/${paymentId}?type=payment&schoolId=${selectedSchoolId}`, {
+   696→   696→        method: 'DELETE',
+   697→   697→      })
+   698→   698→      if (!res.ok) {
+   699→   699→        const data = await res.json()
+   700→   700→        throw new Error(data.error || 'Failed to delete')
+   701→   701→      }
+   702→   702→      toast.success('تم حذف الدفعة بنجاح')
+   703→   703→      if (viewPaymentsSub) {
+   704→   704→        fetchSubscriptionPayments(viewPaymentsSub.id)
+   705→   705→      }
+   706→   706→    } catch (error) {
+   707→   707→      toast.error(error instanceof Error ? error.message : 'خطأ في حذف الدفعة')
+   708→   708→    }
+   709→   709→  }
+   710→   710→
+   711→   711→  // ===== Open edit dialog =====
+   712→   712→  function openEditDialog(sub: Subscription) {
+   713→   713→    setEditSub(sub)
+   714→   714→    setEditForm({
+   715→   715→      routeId: sub.routeId,
+   716→   716→      direction: sub.direction,
+   717→   717→      monthlyFee: sub.monthlyFee,
+   718→   718→      status: sub.status,
+   719→   719→      endDate: sub.endDate ? new Date(sub.endDate).toISOString().split('T')[0] : '',
+   720→   720→      notes: sub.notes || '',
+   721→   721→    })
+   722→   722→  }
+   723→   723→
+   724→   724→  // ===== Open view payments dialog =====
+   725→   725→  function openViewPayments(sub: Subscription) {
+   726→   726→    setViewPaymentsSub(sub)
+   727→   727→    fetchSubscriptionPayments(sub.id)
+   728→   728→  }
+   729→   729→
+   730→   730→  // ===== Open single payment dialog from payments tab =====
+   731→   731→  function openSinglePayment(sub: Subscription) {
+   732→   732→    setSinglePaymentSub(sub)
+   733→   733→    setPaymentForm({
+   734→   734→      month: paymentMonth,
+   735→   735→      year: paymentYear,
+   736→   736→      amount: sub.monthlyFee,
+   737→   737→      paymentDate: new Date().toISOString().split('T')[0],
+   738→   738→      paymentMethod: 'نقدي',
+   739→   739→      receiptNumber: '',
+   740→   740→      notes: '',
+   741→   741→    })
+   742→   742→  }
+   743→   743→
+   744→   744→  // ===== Toggle subscription selection for bulk =====
+   745→   745→  function toggleSubscriptionSelection(subId: string) {
+   746→   746→    setSelectedSubscriptionIds(prev =>
+   747→   747→      prev.includes(subId)
+   748→   748→        ? prev.filter(id => id !== subId)
+   749→   749→        : [...prev, subId]
+   750→   750→    )
+   751→   751→  }
+   752→   752→
+   753→   753→  // ===== Render Loading Skeleton =====
+   754→   754→  function renderSkeleton() {
+   755→   755→    return (
+   756→   756→      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   757→   757→        {Array.from({ length: 6 }).map((_, i) => (
+   758→   758→          <Card key={i}>
+   759→   759→            <CardContent className="p-4 space-y-3">
+   760→   760→              <Skeleton className="h-5 w-3/4" />
+   761→   761→              <Skeleton className="h-4 w-1/2" />
+   762→   762→              <Skeleton className="h-4 w-2/3" />
+   763→   763→              <Skeleton className="h-8 w-1/3" />
+   764→   764→            </CardContent>
+   765→   765→          </Card>
+   766→   766→        ))}
+   767→   767→      </div>
+   768→   768→    )
+   769→   769→  }
+   770→   770→
+   771→   771→  // ===== Render Stats Cards =====
+   772→   772→  function renderStatsCards() {
+   773→   773→    if (!stats) return null
+   774→   774→    const cards = [
+   775→   775→      { label: 'إجمالي الاشتراكات', value: stats.totalSubscriptions, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+   776→   776→      { label: 'اشتراكات نشطة', value: stats.activeCount, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
+   777→   777→      { label: 'الإيراد الشهري', value: formatCurrency(stats.totalMonthlyRevenue), icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   778→   778→      { label: 'المحصل هذا الشهر', value: formatCurrency(stats.collectedThisMonth), icon: Wallet, color: 'text-purple-600', bg: 'bg-purple-50' },
+   779→   779→    ]
+   780→   780→    return (
+   781→   781→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+   782→   782→        {cards.map((card) => (
+   783→   783→          <Card key={card.label} className="border-0 shadow-sm">
+   784→   784→            <CardContent className="p-4">
+   785→   785→              <div className="flex items-center gap-3">
+   786→   786→                <div className={`w-10 h-10 rounded-lg ${card.bg} flex items-center justify-center shrink-0`}>
+   787→   787→                  <card.icon className={`w-5 h-5 ${card.color}`} />
+   788→   788→                </div>
+   789→   789→                <div className="min-w-0">
+   790→   790→                  <p className="text-xs text-gray-500 truncate">{card.label}</p>
+   791→   791→                  <p className={`text-lg font-bold ${card.color} truncate`}>{card.value}</p>
+   792→   792→                </div>
+   793→   793→              </div>
+   794→   794→            </CardContent>
+   795→   795→          </Card>
+   796→   796→        ))}
+   797→   797→      </div>
+   798→   798→    )
+   799→   799→  }
+   800→   800→
+   801→   801→  // ===== Render Subscription Card =====
+   802→   802→  function renderSubscriptionCard(sub: Subscription) {
+   803→   803→    const dir = directionConfig[sub.direction] || directionConfig['ذهاب وعودة']
+   804→   804→    const stat = statusConfig[sub.status] || statusConfig['نشط']
+   805→   805→    const expectedMonths = getExpectedMonths(sub.startDate, sub.endDate)
+   806→   806→    const paidCount = sub._count?.payments || 0
+   807→   807→
+   808→   808→    return (
+   809→   809→      <Card key={sub.id} className="border shadow-sm hover:shadow-md transition-shadow">
+   810→   810→        <CardContent className="p-4 space-y-3">
+   811→   811→          {/* Student Info */}
+   812→   812→          <div className="flex items-start justify-between gap-2">
+   813→   813→            <div className="min-w-0">
+   814→   814→              <h3 className="font-bold text-sm text-gray-900 truncate">{sub.student.name}</h3>
+   815→   815→              <p className="text-xs text-gray-500">#{sub.student.studentNumber}</p>
+   816→   816→              {sub.student.classroom && (
+   817→   817→                <div className="flex items-center gap-1 mt-1">
+   818→   818→                  <GraduationCap className="w-3 h-3 text-gray-400 shrink-0" />
+   819→   819→                  <span className="text-xs text-gray-500 truncate">{sub.student.classroom.name}</span>
+   820→   820→                </div>
+   821→   821→              )}
+   822→   822→            </div>
+   823→   823→            <Badge className={`${stat.bgColor} ${stat.color} border text-xs shrink-0`}>
+   824→   824→              {stat.label}
+   825→   825→            </Badge>
+   826→   826→          </div>
+   827→   827→
+   828→   828→          <Separator />
+   829→   829→
+   830→   830→          {/* Route Info */}
+   831→   831→          <div className="space-y-1.5">
+   832→   832→            <div className="flex items-center gap-2">
+   833→   833→              <Route className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+   834→   834→              <span className="text-xs text-gray-700 truncate">{sub.route.name}</span>
+   835→   835→            </div>
+   836→   836→            <div className="flex items-center gap-2">
+   837→   837→              <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+   838→   838→              <span className="text-xs text-gray-500 truncate">{sub.route.area}</span>
+   839→   839→            </div>
+   840→   840→            {sub.route.bus && (
+   841→   841→              <div className="flex items-center gap-2">
+   842→   842→                <Bus className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+   843→   843→                <span className="text-xs text-gray-500">{sub.route.bus.plateNumber}</span>
+   844→   844→              </div>
+   845→   845→            )}
+   846→   846→          </div>
+   847→   847→
+   848→   848→          {/* Direction & Fee */}
+   849→   849→          <div className="flex items-center justify-between gap-2">
+   850→   850→            <Badge className={`${dir.bgColor} ${dir.color} border text-xs`}>
+   851→   851→              {dir.label}
+   852→   852→            </Badge>
+   853→   853→            <span className="text-sm font-bold text-[#610000]">{formatCurrency(sub.monthlyFee)} ج.م</span>
+   854→   854→          </div>
+   855→   855→
+   856→   856→          {/* Payment Status */}
+   857→   857→          <div className="flex items-center justify-between text-xs">
+   858→   858→            <span className="text-gray-500">
+   859→   859→              المدفوعات: <span className="font-medium text-gray-700">{paidCount}</span> / <span className="font-medium text-gray-700">{expectedMonths}</span> شهر
+   860→   860→            </span>
+   861→   861→            {paidCount < expectedMonths && sub.status === 'نشط' && (
+   862→   862→              <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-300 text-[10px] px-1.5">
+   863→   863→                مستحق
+   864→   864→              </Badge>
+   865→   865→            )}
+   866→   866→          </div>
+   867→   867→
+   868→   868→          {/* Actions */}
+   869→   869→          <div className="flex items-center gap-2 pt-1">
+   870→   870→            <Button
+   871→   871→              variant="outline"
+   872→   872→              size="sm"
+   873→   873→              className="flex-1 min-h-[44px] text-xs"
+   874→   874→              onClick={() => openViewPayments(sub)}
+   875→   875→            >
+   876→   876→              <Eye className="w-3.5 h-3.5 ml-1" />
+   877→   877→              المدفوعات
+   878→   878→            </Button>
+   879→   879→            <Button
+   880→   880→              variant="outline"
+   881→   881→              size="sm"
+   882→   882→              className="flex-1 min-h-[44px] text-xs"
+   883→   883→              onClick={() => openEditDialog(sub)}
+   884→   884→            >
+   885→   885→              <Edit className="w-3.5 h-3.5 ml-1" />
+   886→   886→              تعديل
+   887→   887→            </Button>
+   888→   888→            {sub.status === 'نشط' && (
+   889→   889→              <Button
+   890→   890→                variant="outline"
+   891→   891→                size="sm"
+   892→   892→                className="min-h-[44px] text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+   893→   893→                onClick={() => setCancelSubId(sub.id)}
+   894→   894→              >
+   895→   895→                <Ban className="w-3.5 h-3.5" />
+   896→   896→              </Button>
+   897→   897→            )}
+   898→   898→          </div>
+   899→   899→        </CardContent>
+   900→   900→      </Card>
+   901→   901→    )
+   902→   902→  }
+   903→   903→
+   904→   904→  // ===== Render Subscriptions Tab =====
+   905→   905→  function renderSubscriptionsTab() {
+   906→   906→    return (
+   907→   907→      <div className="space-y-4">
+   908→   908→        {/* Stats Cards */}
+   909→   909→        {renderStatsCards()}
+   910→   910→
+   911→   911→        {/* Filter Bar */}
+   912→   912→        <Card className="border-0 shadow-sm">
+   913→   913→          <CardContent className="p-4">
+   914→   914→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+   915→   915→              <div className="relative">
+   916→   916→                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   917→   917→                <Input
+   918→   918→                  placeholder="بحث بالاسم أو الرقم..."
+   919→   919→                  value={searchQuery}
+   920→   920→                  onChange={(e) => setSearchQuery(e.target.value)}
+   921→   921→                  className="pr-10 min-h-[44px]"
+   922→   922→                />
+   923→   923→              </div>
+   924→   924→              <Select value={routeFilter} onValueChange={setRouteFilter}>
+   925→   925→                <SelectTrigger className="min-h-[44px]">
+   926→   926→                  <SelectValue placeholder="خط السير" />
+   927→   927→                </SelectTrigger>
+   928→   928→                <SelectContent>
+   929→   929→                  <SelectItem value="all">جميع الخطوط</SelectItem>
+   930→   930→                  {routeOptions.map(r => (
+   931→   931→                    <SelectItem key={r.id} value={r.id}>{r.name} - {r.area}</SelectItem>
+   932→   932→                  ))}
+   933→   933→                </SelectContent>
+   934→   934→              </Select>
+   935→   935→              <Select value={busFilter} onValueChange={setBusFilter}>
+   936→   936→                <SelectTrigger className="min-h-[44px]">
+   937→   937→                  <SelectValue placeholder="الباص" />
+   938→   938→                </SelectTrigger>
+   939→   939→                <SelectContent>
+   940→   940→                  <SelectItem value="all">جميع الباصات</SelectItem>
+   941→   941→                  {busOptions.map(b => (
+   942→   942→                    <SelectItem key={b.id} value={b.id}>{b.plateNumber}</SelectItem>
+   943→   943→                  ))}
+   944→   944→                </SelectContent>
+   945→   945→              </Select>
+   946→   946→              <Select value={statusFilter} onValueChange={setStatusFilter}>
+   947→   947→                <SelectTrigger className="min-h-[44px]">
+   948→   948→                  <SelectValue placeholder="الحالة" />
+   949→   949→                </SelectTrigger>
+   950→   950→                <SelectContent>
+   951→   951→                  <SelectItem value="all">الكل</SelectItem>
+   952→   952→                  <SelectItem value="نشط">نشط</SelectItem>
+   953→   953→                  <SelectItem value="ملغي">ملغي</SelectItem>
+   954→   954→                  <SelectItem value="متوقف">متوقف</SelectItem>
+   955→   955→                </SelectContent>
+   956→   956→              </Select>
+   957→   957→            </div>
+   958→   958→          </CardContent>
+   959→   959→        </Card>
+   960→   960→
+   961→   961→        {/* Subscriptions Grid */}
+   962→   962→        {loading ? renderSkeleton() : (
+   963→   963→          subscriptions.length === 0 ? (
+   964→   964→            <Card className="border-0 shadow-sm">
+   965→   965→              <CardContent className="p-8 text-center">
+   966→   966→                <Bus className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+   967→   967→                <p className="text-gray-500 text-sm">لا توجد اشتراكات</p>
+   968→   968→                <Button
+   969→   969→                  className="mt-3 bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+   970→   970→                  onClick={() => setActiveTab('new-subscription')}
+   971→   971→                >
+   972→   972→                  <UserPlus className="w-4 h-4 ml-2" />
+   973→   973→                  تسجيل اشتراك جديد
+   974→   974→                </Button>
+   975→   975→              </CardContent>
+   976→   976→            </Card>
+   977→   977→          ) : (
+   978→   978→            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   979→   979→              {subscriptions.map(renderSubscriptionCard)}
+   980→   980→            </div>
+   981→   981→          )
+   982→   982→        )}
+   983→   983→      </div>
+   984→   984→    )
+   985→   985→  }
+   986→   986→
+   987→   987→  // ===== Render New Subscription Tab =====
+   988→   988→  function renderNewSubscriptionTab() {
+   989→   989→    return (
+   990→   990→      <div className="max-w-2xl mx-auto">
+   991→   991→        {/* Step indicator */}
+   992→   992→        <div className="flex items-center justify-center gap-2 mb-6">
+   993→   993→          {[1, 2, 3].map(step => (
+   994→   994→            <React.Fragment key={step}>
+   995→   995→              <button
+   996→   996→                onClick={() => {
+   997→   997→                  if (step < newSubStep || (step === 2 && selectedStudent) || (step === 3 && selectedStudent && newSubForm.routeId)) {
+   998→   998→                    setNewSubStep(step)
+   999→   999→                  }
+  1000→  1000→                }}
+  1001→  1001→                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+  1002→  1002→                  newSubStep === step
+  1003→  1003→                    ? 'bg-[#610000] text-white'
+  1004→  1004→                    : newSubStep > step
+  1005→  1005→                      ? 'bg-green-100 text-green-700'
+  1006→  1006→                      : 'bg-gray-100 text-gray-400'
+  1007→  1007→                }`}
+  1008→  1008→              >
+  1009→  1009→                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+  1010→  1010→                  newSubStep === step ? 'bg-white/20' : newSubStep > step ? 'bg-green-200' : 'bg-gray-200'
+  1011→  1011→                }`}>
+  1012→  1012→                  {newSubStep > step ? '✓' : step}
+  1013→  1013→                </span>
+  1014→  1014→                {step === 1 && 'اختيار الطالب'}
+  1015→  1015→                {step === 2 && 'خط السير'}
+  1016→  1016→                {step === 3 && 'تفاصيل الاشتراك'}
+  1017→  1017→              </button>
+  1018→  1018→              {step < 3 && (
+  1019→  1019→                <div className={`w-8 h-0.5 ${newSubStep > step ? 'bg-green-300' : 'bg-gray-200'}`} />
+  1020→  1020→              )}
+  1021→  1021→            </React.Fragment>
+  1022→  1022→          ))}
+  1023→  1023→        </div>
+  1024→  1024→
+  1025→  1025→        {/* Step 1: Select Student */}
+  1026→  1026→        {newSubStep === 1 && (
+  1027→  1027→          <Card className="border-0 shadow-sm">
+  1028→  1028→            <CardHeader className="pb-3">
+  1029→  1029→              <CardTitle className="text-base flex items-center gap-2">
+  1030→  1030→                <Users className="w-5 h-5 text-[#610000]" />
+  1031→  1031→                اختيار الطالب
+  1032→  1032→              </CardTitle>
+  1033→  1033→            </CardHeader>
+  1034→  1034→            <CardContent className="space-y-4">
+  1035→  1035→              <div className="relative">
+  1036→  1036→                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+  1037→  1037→                <Input
+  1038→  1038→                  placeholder="ابحث بالاسم أو رقم الطالب..."
+  1039→  1039→                  value={studentSearch}
+  1040→  1040→                  onChange={(e) => setStudentSearch(e.target.value)}
+  1041→  1041→                  className="pr-10 min-h-[44px]"
+  1042→  1042→                />
+  1043→  1043→              </div>
+  1044→  1044→
+  1045→  1045→              {studentSearchLoading && (
+  1046→  1046→                <div className="space-y-2">
+  1047→  1047→                  {Array.from({ length: 3 }).map((_, i) => (
+  1048→  1048→                    <Skeleton key={i} className="h-16 w-full" />
+  1049→  1049→                  ))}
+  1050→  1050→                </div>
+  1051→  1051→              )}
+  1052→  1052→
+  1053→  1053→              {studentResults.length > 0 && !studentSearchLoading && (
+  1054→  1054→                <div className="max-h-80 overflow-y-auto space-y-2 border rounded-lg p-2">
+  1055→  1055→                  {studentResults.map(student => (
+  1056→  1056→                    <button
+  1057→  1057→                      key={student.id}
+  1058→  1058→                      onClick={() => handleSelectStudent(student)}
+  1059→  1059→                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-right min-h-[44px] ${
+  1060→  1060→                        selectedStudent?.id === student.id
+  1061→  1061→                          ? 'border-[#610000] bg-[#610000]/5'
+  1062→  1062→                          : 'border-gray-200 hover:border-[#610000]/30 hover:bg-gray-50'
+  1063→  1063→                      }`}
+  1064→  1064→                    >
+  1065→  1065→                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+  1066→  1066→                        <Users className="w-5 h-5 text-gray-400" />
+  1067→  1067→                      </div>
+  1068→  1068→                      <div className="min-w-0 flex-1">
+  1069→  1069→                        <p className="font-medium text-sm truncate">{student.name}</p>
+  1070→  1070→                        <p className="text-xs text-gray-500">#{student.studentNumber}</p>
+  1071→  1071→                        {student.classroom && (
+  1072→  1072→                          <p className="text-xs text-gray-400">{student.classroom.name}</p>
+  1073→  1073→                        )}
+  1074→  1074→                      </div>
+  1075→  1075→                      {student.parentPhone && (
+  1076→  1076→                        <Phone className="w-4 h-4 text-gray-300 shrink-0" />
+  1077→  1077→                      )}
+  1078→  1078→                    </button>
+  1079→  1079→                  ))}
+  1080→  1080→                </div>
+  1081→  1081→              )}
+  1082→  1082→
+  1083→  1083→              {studentSearch.trim().length >= 2 && studentResults.length === 0 && !studentSearchLoading && (
+  1084→  1084→                <div className="text-center py-6 text-gray-400">
+  1085→  1085→                  <Users className="w-8 h-8 mx-auto mb-2" />
+  1086→  1086→                  <p className="text-sm">لم يتم العثور على طلاب</p>
+  1087→  1087→                </div>
+  1088→  1088→              )}
+  1089→  1089→            </CardContent>
+  1090→  1090→          </Card>
+  1091→  1091→        )}
+  1092→  1092→
+  1093→  1093→        {/* Step 2: Select Route */}
+  1094→  1094→        {newSubStep === 2 && (
+  1095→  1095→          <Card className="border-0 shadow-sm">
+  1096→  1096→            <CardHeader className="pb-3">
+  1097→  1097→              <CardTitle className="text-base flex items-center gap-2">
+  1098→  1098→                <Route className="w-5 h-5 text-[#610000]" />
+  1099→  1099→                اختيار خط السير
+  1100→  1100→              </CardTitle>
+  1101→  1101→            </CardHeader>
+  1102→  1102→            <CardContent className="space-y-4">
+  1103→  1103→              {/* Selected student reminder */}
+  1104→  1104→              {selectedStudent && (
+  1105→  1105→                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+  1106→  1106→                  <div className="w-8 h-8 rounded-full bg-[#610000]/10 flex items-center justify-center shrink-0">
+  1107→  1107→                    <Users className="w-4 h-4 text-[#610000]" />
+  1108→  1108→                  </div>
+  1109→  1109→                  <div className="min-w-0">
+  1110→  1110→                    <p className="font-medium text-sm">{selectedStudent.name}</p>
+  1111→  1111→                    <p className="text-xs text-gray-500">#{selectedStudent.studentNumber}</p>
+  1112→  1112→                  </div>
+  1113→  1113→                  <Button
+  1114→  1114→                    variant="ghost"
+  1115→  1115→                    size="sm"
+  1116→  1116→                    className="mr-auto min-h-[44px] text-xs"
+  1117→  1117→                    onClick={() => {
+  1118→  1118→                      setSelectedStudent(null)
+  1119→  1119→                      setNewSubStep(1)
+  1120→  1120→                    }}
+  1121→  1121→                  >
+  1122→  1122→                    تغيير
+  1123→  1123→                  </Button>
+  1124→  1124→                </div>
+  1125→  1125→              )}
+  1126→  1126→
+  1127→  1127→              {/* Existing subscription warning */}
+  1128→  1128→              {existingSubscription && (
+  1129→  1129→                <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+  1130→  1130→                  <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+  1131→  1131→                  <div>
+  1132→  1132→                    <p className="text-sm font-medium text-yellow-800">هذا الطالب لديه اشتراك نشط</p>
+  1133→  1133→                    <p className="text-xs text-yellow-600 mt-1">
+  1134→  1134→                      خط السير: {existingSubscription.route.name} - الحالة: {existingSubscription.status}
+  1135→  1135→                    </p>
+  1136→  1136→                  </div>
+  1137→  1137→                </div>
+  1138→  1138→              )}
+  1139→  1139→
+  1140→  1140→              <Label className="text-sm font-medium">اختر خط السير</Label>
+  1141→  1141→              <div className="max-h-80 overflow-y-auto space-y-2">
+  1142→  1142→                {routeOptions.map(route => (
+  1143→  1143→                  <button
+  1144→  1144→                    key={route.id}
+  1145→  1145→                    onClick={() => handleSelectRoute(route.id)}
+  1146→  1146→                    className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-right min-h-[44px] ${
+  1147→  1147→                      newSubForm.routeId === route.id
+  1148→  1148→                        ? 'border-[#610000] bg-[#610000]/5'
+  1149→  1149→                        : 'border-gray-200 hover:border-[#610000]/30 hover:bg-gray-50'
+  1150→  1150→                    }`}
+  1151→  1151→                  >
+  1152→  1152→                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+  1153→  1153→                      <Route className="w-5 h-5 text-blue-600" />
+  1154→  1154→                    </div>
+  1155→  1155→                    <div className="min-w-0 flex-1">
+  1156→  1156→                      <p className="font-medium text-sm">{route.name}</p>
+  1157→  1157→                      <div className="flex items-center gap-2 text-xs text-gray-500">
+  1158→  1158→                        <MapPin className="w-3 h-3 shrink-0" />
+  1159→  1159→                        <span>{route.area}</span>
+  1160→  1160→                      </div>
+  1161→  1161→                      {route.bus && (
+  1162→  1162→                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+  1163→  1163→                          <Bus className="w-3 h-3 shrink-0" />
+  1164→  1164→                          <span>{route.bus.plateNumber}</span>
+  1165→  1165→                        </div>
+  1166→  1166→                      )}
+  1167→  1167→                    </div>
+  1168→  1168→                    <span className="text-sm font-bold text-[#610000] shrink-0">{formatCurrency(route.monthlyFee)} ج.م</span>
+  1169→  1169→                  </button>
+  1170→  1170→                ))}
+  1171→  1171→              </div>
+  1172→  1172→
+  1173→  1173→              <div className="flex gap-3 pt-2">
+  1174→  1174→                <Button
+  1175→  1175→                  variant="outline"
+  1176→  1176→                  className="min-h-[44px]"
+  1177→  1177→                  onClick={() => setNewSubStep(1)}
+  1178→  1178→                >
+  1179→  1179→                  <ArrowLeft className="w-4 h-4 ml-1" />
+  1180→  1180→                  السابق
+  1181→  1181→                </Button>
+  1182→  1182→                <Button
+  1183→  1183→                  className="flex-1 bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1184→  1184→                  disabled={!newSubForm.routeId}
+  1185→  1185→                  onClick={() => setNewSubStep(3)}
+  1186→  1186→                >
+  1187→  1187→                  التالي
+  1188→  1188→                </Button>
+  1189→  1189→              </div>
+  1190→  1190→            </CardContent>
+  1191→  1191→          </Card>
+  1192→  1192→        )}
+  1193→  1193→
+  1194→  1194→        {/* Step 3: Subscription Details */}
+  1195→  1195→        {newSubStep === 3 && (
+  1196→  1196→          <Card className="border-0 shadow-sm">
+  1197→  1197→            <CardHeader className="pb-3">
+  1198→  1198→              <CardTitle className="text-base flex items-center gap-2">
+  1199→  1199→                <FileText className="w-5 h-5 text-[#610000]" />
+  1200→  1200→                تفاصيل الاشتراك
+  1201→  1201→              </CardTitle>
+  1202→  1202→            </CardHeader>
+  1203→  1203→            <CardContent className="space-y-4">
+  1204→  1204→              {/* Summary */}
+  1205→  1205→              <div className="grid grid-cols-2 gap-3">
+  1206→  1206→                <div className="p-3 bg-gray-50 rounded-lg">
+  1207→  1207→                  <p className="text-xs text-gray-500">الطالب</p>
+  1208→  1208→                  <p className="font-medium text-sm truncate">{selectedStudent?.name}</p>
+  1209→  1209→                </div>
+  1210→  1210→                <div className="p-3 bg-gray-50 rounded-lg">
+  1211→  1211→                  <p className="text-xs text-gray-500">خط السير</p>
+  1212→  1212→                  <p className="font-medium text-sm truncate">{selectedRoute?.name}</p>
+  1213→  1213→                </div>
+  1214→  1214→              </div>
+  1215→  1215→
+  1216→  1216→              {/* Form */}
+  1217→  1217→              <div className="space-y-3">
+  1218→  1218→                <div>
+  1219→  1219→                  <Label className="text-sm">الاتجاه</Label>
+  1220→  1220→                  <Select value={newSubForm.direction} onValueChange={v => setNewSubForm(prev => ({ ...prev, direction: v }))}>
+  1221→  1221→                    <SelectTrigger className="min-h-[44px]">
+  1222→  1222→                      <SelectValue />
+  1223→  1223→                    </SelectTrigger>
+  1224→  1224→                    <SelectContent>
+  1225→  1225→                      <SelectItem value="ذهاب">ذهاب فقط</SelectItem>
+  1226→  1226→                      <SelectItem value="عودة">عودة فقط</SelectItem>
+  1227→  1227→                      <SelectItem value="ذهاب وعودة">ذهاب وعودة</SelectItem>
+  1228→  1228→                    </SelectContent>
+  1229→  1229→                  </Select>
+  1230→  1230→                </div>
+  1231→  1231→                <div>
+  1232→  1232→                  <Label className="text-sm">تاريخ البداية</Label>
+  1233→  1233→                  <Input
+  1234→  1234→                    type="date"
+  1235→  1235→                    value={newSubForm.startDate}
+  1236→  1236→                    onChange={(e) => setNewSubForm(prev => ({ ...prev, startDate: e.target.value }))}
+  1237→  1237→                    className="min-h-[44px]"
+  1238→  1238→                  />
+  1239→  1239→                </div>
+  1240→  1240→                <div>
+  1241→  1241→                  <Label className="text-sm">الرسوم الشهرية</Label>
+  1242→  1242→                  <Input
+  1243→  1243→                    type="number"
+  1244→  1244→                    value={newSubForm.monthlyFee}
+  1245→  1245→                    onChange={(e) => setNewSubForm(prev => ({ ...prev, monthlyFee: parseFloat(e.target.value) || 0 }))}
+  1246→  1246→                    className="min-h-[44px]"
+  1247→  1247→                  />
+  1248→  1248→                </div>
+  1249→  1249→                <div>
+  1250→  1250→                  <Label className="text-sm">ملاحظات</Label>
+  1251→  1251→                  <Textarea
+  1252→  1252→                    value={newSubForm.notes}
+  1253→  1253→                    onChange={(e) => setNewSubForm(prev => ({ ...prev, notes: e.target.value }))}
+  1254→  1254→                    placeholder="ملاحظات إضافية (اختياري)"
+  1255→  1255→                    rows={3}
+  1256→  1256→                    className="resize-none"
+  1257→  1257→                  />
+  1258→  1258→                </div>
+  1259→  1259→              </div>
+  1260→  1260→
+  1261→  1261→              <div className="flex gap-3 pt-2">
+  1262→  1262→                <Button
+  1263→  1263→                  variant="outline"
+  1264→  1264→                  className="min-h-[44px]"
+  1265→  1265→                  onClick={() => setNewSubStep(2)}
+  1266→  1266→                >
+  1267→  1267→                  <ArrowLeft className="w-4 h-4 ml-1" />
+  1268→  1268→                  السابق
+  1269→  1269→                </Button>
+  1270→  1270→                <Button
+  1271→  1271→                  className="flex-1 bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1272→  1272→                  disabled={newSubLoading}
+  1273→  1273→                  onClick={handleCreateSubscription}
+  1274→  1274→                >
+  1275→  1275→                  {newSubLoading ? (
+  1276→  1276→                    <span className="flex items-center gap-2">
+  1277→  1277→                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1278→  1278→                      جاري التسجيل...
+  1279→  1279→                    </span>
+  1280→  1280→                  ) : (
+  1281→  1281→                    <>
+  1282→  1282→                      <Save className="w-4 h-4 ml-1" />
+  1283→  1283→                      تسجيل الاشتراك
+  1284→  1284→                    </>
+  1285→  1285→                  )}
+  1286→  1286→                </Button>
+  1287→  1287→              </div>
+  1288→  1288→            </CardContent>
+  1289→  1289→          </Card>
+  1290→  1290→        )}
+  1291→  1291→      </div>
+  1292→  1292→    )
+  1293→  1293→  }
+  1294→  1294→
+  1295→  1295→  // ===== Render Payments Tab =====
+  1296→  1296→  function renderPaymentsTab() {
+  1297→  1297→    return (
+  1298→  1298→      <div className="space-y-4">
+  1299→  1299→        {/* Payment Stats */}
+  1300→  1300→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+  1301→  1301→          <Card className="border-0 shadow-sm">
+  1302→  1302→            <CardContent className="p-4">
+  1303→  1303→              <div className="flex items-center gap-3">
+  1304→  1304→                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+  1305→  1305→                  <DollarSign className="w-5 h-5 text-blue-600" />
+  1306→  1306→                </div>
+  1307→  1307→                <div>
+  1308→  1308→                  <p className="text-xs text-gray-500">المتوقع</p>
+  1309→  1309→                  <p className="text-lg font-bold text-blue-600">{formatCurrency(paymentStats.totalExpected)}</p>
+  1310→  1310→                </div>
+  1311→  1311→              </div>
+  1312→  1312→            </CardContent>
+  1313→  1313→          </Card>
+  1314→  1314→          <Card className="border-0 shadow-sm">
+  1315→  1315→            <CardContent className="p-4">
+  1316→  1316→              <div className="flex items-center gap-3">
+  1317→  1317→                <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
+  1318→  1318→                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+  1319→  1319→                </div>
+  1320→  1320→                <div>
+  1321→  1321→                  <p className="text-xs text-gray-500">المحصل</p>
+  1322→  1322→                  <p className="text-lg font-bold text-green-600">{formatCurrency(paymentStats.totalCollected)}</p>
+  1323→  1323→                </div>
+  1324→  1324→              </div>
+  1325→  1325→            </CardContent>
+  1326→  1326→          </Card>
+  1327→  1327→          <Card className="border-0 shadow-sm">
+  1328→  1328→            <CardContent className="p-4">
+  1329→  1329→              <div className="flex items-center gap-3">
+  1330→  1330→                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+  1331→  1331→                  <AlertCircle className="w-5 h-5 text-red-600" />
+  1332→  1332→                </div>
+  1333→  1333→                <div>
+  1334→  1334→                  <p className="text-xs text-gray-500">المتبقي</p>
+  1335→  1335→                  <p className="text-lg font-bold text-red-600">{formatCurrency(paymentStats.totalOutstanding)}</p>
+  1336→  1336→                </div>
+  1337→  1337→              </div>
+  1338→  1338→            </CardContent>
+  1339→  1339→          </Card>
+  1340→  1340→        </div>
+  1341→  1341→
+  1342→  1342→        {/* Filters */}
+  1343→  1343→        <Card className="border-0 shadow-sm">
+  1344→  1344→          <CardContent className="p-4">
+  1345→  1345→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+  1346→  1346→              <Select value={paymentMonth.toString()} onValueChange={v => setPaymentMonth(parseInt(v))}>
+  1347→  1347→                <SelectTrigger className="min-h-[44px]">
+  1348→  1348→                  <SelectValue />
+  1349→  1349→                </SelectTrigger>
+  1350→  1350→                <SelectContent>
+  1351→  1351→                  {arabicMonths.map((m, i) => (
+  1352→  1352→                    <SelectItem key={i + 1} value={(i + 1).toString()}>{m}</SelectItem>
+  1353→  1353→                  ))}
+  1354→  1354→                </SelectContent>
+  1355→  1355→              </Select>
+  1356→  1356→              <Select value={paymentYear.toString()} onValueChange={v => setPaymentYear(parseInt(v))}>
+  1357→  1357→                <SelectTrigger className="min-h-[44px]">
+  1358→  1358→                  <SelectValue />
+  1359→  1359→                </SelectTrigger>
+  1360→  1360→                <SelectContent>
+  1361→  1361→                  {getYearOptions().map(y => (
+  1362→  1362→                    <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+  1363→  1363→                  ))}
+  1364→  1364→                </SelectContent>
+  1365→  1365→              </Select>
+  1366→  1366→              <Select value={paymentRouteFilter} onValueChange={setPaymentRouteFilter}>
+  1367→  1367→                <SelectTrigger className="min-h-[44px]">
+  1368→  1368→                  <SelectValue placeholder="خط السير" />
+  1369→  1369→                </SelectTrigger>
+  1370→  1370→                <SelectContent>
+  1371→  1371→                  <SelectItem value="all">جميع الخطوط</SelectItem>
+  1372→  1372→                  {routeOptions.map(r => (
+  1373→  1373→                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+  1374→  1374→                  ))}
+  1375→  1375→                </SelectContent>
+  1376→  1376→              </Select>
+  1377→  1377→              <Select value={paymentBusFilter} onValueChange={setPaymentBusFilter}>
+  1378→  1378→                <SelectTrigger className="min-h-[44px]">
+  1379→  1379→                  <SelectValue placeholder="الباص" />
+  1380→  1380→                </SelectTrigger>
+  1381→  1381→                <SelectContent>
+  1382→  1382→                  <SelectItem value="all">جميع الباصات</SelectItem>
+  1383→  1383→                  {busOptions.map(b => (
+  1384→  1384→                    <SelectItem key={b.id} value={b.id}>{b.plateNumber}</SelectItem>
+  1385→  1385→                  ))}
+  1386→  1386→                </SelectContent>
+  1387→  1387→              </Select>
+  1388→  1388→              {selectedSubscriptionIds.length > 0 && (
+  1389→  1389→                <Button
+  1390→  1390→                  className="bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1391→  1391→                  onClick={() => setBulkPaymentOpen(true)}
+  1392→  1392→                >
+  1393→  1393→                  <CreditCard className="w-4 h-4 ml-1" />
+  1394→  1394→                  تسجيل دفعات ({selectedSubscriptionIds.length})
+  1395→  1395→                </Button>
+  1396→  1396→              )}
+  1397→  1397→            </div>
+  1398→  1398→          </CardContent>
+  1399→  1399→        </Card>
+  1400→  1400→
+  1401→  1401→        {/* Payment Table */}
+  1402→  1402→        {paymentsLoading2 ? (
+  1403→  1403→          <div className="space-y-2">
+  1404→  1404→            {Array.from({ length: 5 }).map((_, i) => (
+  1405→  1405→              <Skeleton key={i} className="h-14 w-full" />
+  1406→  1406→            ))}
+  1407→  1407→          </div>
+  1408→  1408→        ) : paymentSubscriptions.length === 0 ? (
+  1409→  1409→          <Card className="border-0 shadow-sm">
+  1410→  1410→            <CardContent className="p-8 text-center">
+  1411→  1411→              <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+  1412→  1412→              <p className="text-gray-500 text-sm">لا توجد اشتراكات نشطة</p>
+  1413→  1413→            </CardContent>
+  1414→  1414→          </Card>
+  1415→  1415→        ) : (
+  1416→  1416→          <Card className="border-0 shadow-sm">
+  1417→  1417→            <CardContent className="p-0">
+  1418→  1418→              <div className="overflow-x-auto">
+  1419→  1419→                <Table>
+  1420→  1420→                  <TableHeader>
+  1421→  1421→                    <TableRow>
+  1422→  1422→                      <TableHead className="text-right w-10">
+  1423→  1423→                        <Checkbox
+  1424→  1424→                          checked={selectedSubscriptionIds.length === paymentSubscriptions.length && paymentSubscriptions.length > 0}
+  1425→  1425→                          onCheckedChange={(checked) => {
+  1426→  1426→                            if (checked) {
+  1427→  1427→                              // Only select unpaid
+  1428→  1428→                              const unpaidIds = (paymentSubscriptions as (Subscription & { _hasPayment?: boolean })[])
+  1429→  1429→                                .filter(s => !s._hasPayment)
+  1430→  1430→                                .map(s => s.id)
+  1431→  1431→                              setSelectedSubscriptionIds(unpaidIds)
+  1432→  1432→                            } else {
+  1433→  1433→                              setSelectedSubscriptionIds([])
+  1434→  1434→                            }
+  1435→  1435→                          }}
+  1436→  1436→                        />
+  1437→  1437→                      </TableHead>
+  1438→  1438→                      <TableHead className="text-right">الطالب</TableHead>
+  1439→  1439→                      <TableHead className="text-right">خط السير</TableHead>
+  1440→  1440→                      <TableHead className="text-right">الرسوم</TableHead>
+  1441→  1441→                      <TableHead className="text-right">حالة الدفع</TableHead>
+  1442→  1442→                      <TableHead className="text-right">المبلغ المدفوع</TableHead>
+  1443→  1443→                      <TableHead className="text-right">إجراء</TableHead>
+  1444→  1444→                    </TableRow>
+  1445→  1445→                  </TableHeader>
+  1446→  1446→                  <TableBody>
+  1447→  1447→                    {(paymentSubscriptions as (Subscription & { _hasPayment?: boolean; _paymentAmount?: number })[]).map(sub => (
+  1448→  1448→                      <TableRow key={sub.id}>
+  1449→  1449→                        <TableCell>
+  1450→  1450→                          <Checkbox
+  1451→  1451→                            checked={selectedSubscriptionIds.includes(sub.id)}
+  1452→  1452→                            onCheckedChange={() => toggleSubscriptionSelection(sub.id)}
+  1453→  1453→                            disabled={sub._hasPayment}
+  1454→  1454→                          />
+  1455→  1455→                        </TableCell>
+  1456→  1456→                        <TableCell>
+  1457→  1457→                          <div>
+  1458→  1458→                            <p className="font-medium text-sm">{sub.student.name}</p>
+  1459→  1459→                            <p className="text-xs text-gray-500">#{sub.student.studentNumber}</p>
+  1460→  1460→                          </div>
+  1461→  1461→                        </TableCell>
+  1462→  1462→                        <TableCell>
+  1463→  1463→                          <div>
+  1464→  1464→                            <p className="text-sm">{sub.route.name}</p>
+  1465→  1465→                            <p className="text-xs text-gray-400">{sub.route.area}</p>
+  1466→  1466→                          </div>
+  1467→  1467→                        </TableCell>
+  1468→  1468→                        <TableCell>
+  1469→  1469→                          <span className="font-medium text-sm">{formatCurrency(sub.monthlyFee)}</span>
+  1470→  1470→                        </TableCell>
+  1471→  1471→                        <TableCell>
+  1472→  1472→                          {sub._hasPayment ? (
+  1473→  1473→                            <Badge className="bg-green-100 text-green-700 border border-green-300 text-xs">
+  1474→  1474→                              <CheckCircle2 className="w-3 h-3 ml-1" />
+  1475→  1475→                              مدفوع
+  1476→  1476→                            </Badge>
+  1477→  1477→                          ) : (
+  1478→  1478→                            <Badge className="bg-red-100 text-red-700 border border-red-300 text-xs">
+  1479→  1479→                              <XCircle className="w-3 h-3 ml-1" />
+  1480→  1480→                              لم يدفع
+  1481→  1481→                            </Badge>
+  1482→  1482→                          )}
+  1483→  1483→                        </TableCell>
+  1484→  1484→                        <TableCell>
+  1485→  1485→                          <span className={`text-sm font-medium ${sub._hasPayment ? 'text-green-600' : 'text-red-600'}`}>
+  1486→  1486→                            {sub._hasPayment ? formatCurrency(sub._paymentAmount || 0) : '—'}
+  1487→  1487→                          </span>
+  1488→  1488→                        </TableCell>
+  1489→  1489→                        <TableCell>
+  1490→  1490→                          {sub._hasPayment ? (
+  1491→  1491→                            <span className="text-xs text-gray-400">—</span>
+  1492→  1492→                          ) : (
+  1493→  1493→                            <Button
+  1494→  1494→                              size="sm"
+  1495→  1495→                              className="bg-[#610000] hover:bg-[#4a0000] min-h-[44px] text-xs"
+  1496→  1496→                              onClick={() => openSinglePayment(sub)}
+  1497→  1497→                            >
+  1498→  1498→                              <CreditCard className="w-3.5 h-3.5 ml-1" />
+  1499→  1499→                              تسجيل دفعة
+  1500→  1500→                            </Button>
+  1501→  1501→                          )}
+  1502→  1502→                        </TableCell>
+  1503→  1503→                      </TableRow>
+  1504→  1504→                    ))}
+  1505→  1505→                  </TableBody>
+  1506→  1506→                </Table>
+  1507→  1507→              </div>
+  1508→  1508→            </CardContent>
+  1509→  1509→          </Card>
+  1510→  1510→        )}
+  1511→  1511→      </div>
+  1512→  1512→    )
+  1513→  1513→  }
+  1514→  1514→
+  1515→  1515→  // ===== Render View Payments Dialog =====
+  1516→  1516→  function renderViewPaymentsDialog() {
+  1517→  1517→    if (!viewPaymentsSub) return null
+  1518→  1518→    const sub = viewPaymentsSub
+  1519→  1519→    const dir = directionConfig[sub.direction] || directionConfig['ذهاب وعودة']
+  1520→  1520→
+  1521→  1521→    // Calculate missing months
+  1522→  1522→    const startDate = new Date(sub.startDate)
+  1523→  1523→    const endDate = sub.endDate ? new Date(sub.endDate) : new Date()
+  1524→  1524→    const missingMonths: { month: number; year: number }[] = []
+  1525→  1525→    const paidMonths = new Set(
+  1526→  1526→      subscriptionPayments.map(p => `${p.month}-${p.year}`)
+  1527→  1527→    )
+  1528→  1528→    let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+  1529→  1529→    const endLimit = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+  1530→  1530→    while (current <= endLimit) {
+  1531→  1531→      const m = current.getMonth() + 1
+  1532→  1532→      const y = current.getFullYear()
+  1533→  1533→      if (!paidMonths.has(`${m}-${y}`) && sub.status === 'نشط') {
+  1534→  1534→        missingMonths.push({ month: m, year: y })
+  1535→  1535→      }
+  1536→  1536→      current.setMonth(current.getMonth() + 1)
+  1537→  1537→    }
+  1538→  1538→
+  1539→  1539→    return (
+  1540→  1540→      <Dialog open={!!viewPaymentsSub} onOpenChange={(open) => { if (!open) setViewPaymentsSub(null) }}>
+  1541→  1541→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
+  1542→  1542→          <DialogHeader>
+  1543→  1543→            <DialogTitle className="flex items-center gap-2">
+  1544→  1544→              <Receipt className="w-5 h-5 text-[#610000]" />
+  1545→  1545→              مدفوعات {sub.student.name}
+  1546→  1546→            </DialogTitle>
+  1547→  1547→            <DialogDescription>
+  1548→  1548→              {sub.route.name} - {sub.route.area} | {dir.label} | {formatCurrency(sub.monthlyFee)} ج.م/شهر
+  1549→  1549→            </DialogDescription>
+  1550→  1550→          </DialogHeader>
+  1551→  1551→
+  1552→  1552→          {/* Missing months warning */}
+  1553→  1553→          {missingMonths.length > 0 && (
+  1554→  1554→            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+  1555→  1555→              <div className="flex items-start gap-2">
+  1556→  1556→                <AlertCircle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+  1557→  1557→                <div>
+  1558→  1558→                  <p className="text-sm font-medium text-yellow-800">أشهر غير مدفوعة ({missingMonths.length})</p>
+  1559→  1559→                  <div className="flex flex-wrap gap-1 mt-1">
+  1560→  1560→                    {missingMonths.slice(-6).map(m => (
+  1561→  1561→                      <Badge key={`${m.month}-${m.year}`} className="bg-yellow-100 text-yellow-700 border border-yellow-300 text-[10px]">
+  1562→  1562→                        {arabicMonths[m.month - 1]} {m.year}
+  1563→  1563→                      </Badge>
+  1564→  1564→                    ))}
+  1565→  1565→                    {missingMonths.length > 6 && (
+  1566→  1566→                      <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-300 text-[10px]">
+  1567→  1567→                        +{missingMonths.length - 6} أخرى
+  1568→  1568→                      </Badge>
+  1569→  1569→                    )}
+  1570→  1570→                  </div>
+  1571→  1571→                </div>
+  1572→  1572→              </div>
+  1573→  1573→            </div>
+  1574→  1574→          )}
+  1575→  1575→
+  1576→  1576→          {/* Payments Table */}
+  1577→  1577→          {paymentsLoading ? (
+  1578→  1578→            <div className="space-y-2">
+  1579→  1579→              {Array.from({ length: 3 }).map((_, i) => (
+  1580→  1580→                <Skeleton key={i} className="h-12 w-full" />
+  1581→  1581→              ))}
+  1582→  1582→            </div>
+  1583→  1583→          ) : subscriptionPayments.length === 0 ? (
+  1584→  1584→            <div className="text-center py-6 text-gray-400">
+  1585→  1585→              <Receipt className="w-8 h-8 mx-auto mb-2" />
+  1586→  1586→              <p className="text-sm">لا توجد مدفوعات مسجلة</p>
+  1587→  1587→            </div>
+  1588→  1588→          ) : (
+  1589→  1589→            <div className="overflow-x-auto">
+  1590→  1590→              <Table>
+  1591→  1591→                <TableHeader>
+  1592→  1592→                  <TableRow>
+  1593→  1593→                    <TableHead className="text-right">الشهر</TableHead>
+  1594→  1594→                    <TableHead className="text-right">المبلغ</TableHead>
+  1595→  1595→                    <TableHead className="text-right">تاريخ الدفع</TableHead>
+  1596→  1596→                    <TableHead className="text-right">طريقة الدفع</TableHead>
+  1597→  1597→                    <TableHead className="text-right">رقم الإيصال</TableHead>
+  1598→  1598→                    <TableHead className="text-right">إجراء</TableHead>
+  1599→  1599→                  </TableRow>
+  1600→  1600→                </TableHeader>
+  1601→  1601→                <TableBody>
+  1602→  1602→                  {subscriptionPayments.map(payment => (
+  1603→  1603→                    <TableRow key={payment.id}>
+  1604→  1604→                      <TableCell>
+  1605→  1605→                        <span className="text-sm">{arabicMonths[payment.month - 1]} {payment.year}</span>
+  1606→  1606→                      </TableCell>
+  1607→  1607→                      <TableCell>
+  1608→  1608→                        <span className="font-medium text-sm text-green-600">{formatCurrency(payment.amount)}</span>
+  1609→  1609→                      </TableCell>
+  1610→  1610→                      <TableCell>
+  1611→  1611→                        <span className="text-sm text-gray-600">{formatDate(payment.paymentDate)}</span>
+  1612→  1612→                      </TableCell>
+  1613→  1613→                      <TableCell>
+  1614→  1614→                        <span className="text-sm">{payment.paymentMethod}</span>
+  1615→  1615→                      </TableCell>
+  1616→  1616→                      <TableCell>
+  1617→  1617→                        <span className="text-sm text-gray-500">{payment.receiptNumber || '—'}</span>
+  1618→  1618→                      </TableCell>
+  1619→  1619→                      <TableCell>
+  1620→  1620→                        <Button
+  1621→  1621→                          variant="ghost"
+  1622→  1622→                          size="sm"
+  1623→  1623→                          className="text-red-500 hover:text-red-700 hover:bg-red-50 min-h-[44px] text-xs"
+  1624→  1624→                          onClick={() => handleDeletePayment(payment.id)}
+  1625→  1625→                        >
+  1626→  1626→                          <Trash2 className="w-3.5 h-3.5" />
+  1627→  1627→                        </Button>
+  1628→  1628→                      </TableCell>
+  1629→  1629→                    </TableRow>
+  1630→  1630→                  ))}
+  1631→  1631→                </TableBody>
+  1632→  1632→              </Table>
+  1633→  1633→            </div>
+  1634→  1634→          )}
+  1635→  1635→
+  1636→  1636→          {/* Add Payment Button */}
+  1637→  1637→          {sub.status === 'نشط' && (
+  1638→  1638→            <Button
+  1639→  1639→              className="w-full bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1640→  1640→              onClick={() => {
+  1641→  1641→                setPaymentForm({
+  1642→  1642→                  month: getCurrentMonth(),
+  1643→  1643→                  year: getCurrentYear(),
+  1644→  1644→                  amount: sub.monthlyFee,
+  1645→  1645→                  paymentDate: new Date().toISOString().split('T')[0],
+  1646→  1646→                  paymentMethod: 'نقدي',
+  1647→  1647→                  receiptNumber: '',
+  1648→  1648→                  notes: '',
+  1649→  1649→                })
+  1650→  1650→                setAddPaymentOpen(true)
+  1651→  1651→              }}
+  1652→  1652→            >
+  1653→  1653→              <Plus className="w-4 h-4 ml-1" />
+  1654→  1654→              إضافة دفعة جديدة
+  1655→  1655→            </Button>
+  1656→  1656→          )}
+  1657→  1657→        </DialogContent>
+  1658→  1658→      </Dialog>
+  1659→  1659→    )
+  1660→  1660→  }
+  1661→  1661→
+  1662→  1662→  // ===== Render Add Payment Dialog =====
+  1663→  1663→  function renderAddPaymentDialog() {
+  1664→  1664→    return (
+  1665→  1665→      <Dialog open={addPaymentOpen} onOpenChange={setAddPaymentOpen}>
+  1666→  1666→        <DialogContent className="max-w-md" dir="rtl">
+  1667→  1667→          <DialogHeader>
+  1668→  1668→            <DialogTitle className="flex items-center gap-2">
+  1669→  1669→              <CreditCard className="w-5 h-5 text-[#610000]" />
+  1670→  1670→              تسجيل دفعة جديدة
+  1671→  1671→            </DialogTitle>
+  1672→  1672→            <DialogDescription>
+  1673→  1673→              {viewPaymentsSub?.student.name} - {viewPaymentsSub?.route.name}
+  1674→  1674→            </DialogDescription>
+  1675→  1675→          </DialogHeader>
+  1676→  1676→
+  1677→  1677→          <div className="space-y-3">
+  1678→  1678→            <div className="grid grid-cols-2 gap-3">
+  1679→  1679→              <div>
+  1680→  1680→                <Label className="text-sm">الشهر</Label>
+  1681→  1681→                <Select value={paymentForm.month.toString()} onValueChange={v => setPaymentForm(prev => ({ ...prev, month: parseInt(v) }))}>
+  1682→  1682→                  <SelectTrigger className="min-h-[44px]">
+  1683→  1683→                    <SelectValue />
+  1684→  1684→                  </SelectTrigger>
+  1685→  1685→                  <SelectContent>
+  1686→  1686→                    {arabicMonths.map((m, i) => (
+  1687→  1687→                      <SelectItem key={i + 1} value={(i + 1).toString()}>{m}</SelectItem>
+  1688→  1688→                    ))}
+  1689→  1689→                  </SelectContent>
+  1690→  1690→                </Select>
+  1691→  1691→              </div>
+  1692→  1692→              <div>
+  1693→  1693→                <Label className="text-sm">السنة</Label>
+  1694→  1694→                <Select value={paymentForm.year.toString()} onValueChange={v => setPaymentForm(prev => ({ ...prev, year: parseInt(v) }))}>
+  1695→  1695→                  <SelectTrigger className="min-h-[44px]">
+  1696→  1696→                    <SelectValue />
+  1697→  1697→                  </SelectTrigger>
+  1698→  1698→                  <SelectContent>
+  1699→  1699→                    {getYearOptions().map(y => (
+  1700→  1700→                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+  1701→  1701→                    ))}
+  1702→  1702→                  </SelectContent>
+  1703→  1703→                </Select>
+  1704→  1704→              </div>
+  1705→  1705→            </div>
+  1706→  1706→            <div>
+  1707→  1707→              <Label className="text-sm">المبلغ</Label>
+  1708→  1708→              <Input
+  1709→  1709→                type="number"
+  1710→  1710→                value={paymentForm.amount}
+  1711→  1711→                onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+  1712→  1712→                className="min-h-[44px]"
+  1713→  1713→              />
+  1714→  1714→            </div>
+  1715→  1715→            <div>
+  1716→  1716→              <Label className="text-sm">تاريخ الدفع</Label>
+  1717→  1717→              <Input
+  1718→  1718→                type="date"
+  1719→  1719→                value={paymentForm.paymentDate}
+  1720→  1720→                onChange={(e) => setPaymentForm(prev => ({ ...prev, paymentDate: e.target.value }))}
+  1721→  1721→                className="min-h-[44px]"
+  1722→  1722→              />
+  1723→  1723→            </div>
+  1724→  1724→            <div>
+  1725→  1725→              <Label className="text-sm">طريقة الدفع</Label>
+  1726→  1726→              <Select value={paymentForm.paymentMethod} onValueChange={v => setPaymentForm(prev => ({ ...prev, paymentMethod: v }))}>
+  1727→  1727→                <SelectTrigger className="min-h-[44px]">
+  1728→  1728→                  <SelectValue />
+  1729→  1729→                </SelectTrigger>
+  1730→  1730→                <SelectContent>
+  1731→  1731→                  {paymentMethods.map(m => (
+  1732→  1732→                    <SelectItem key={m} value={m}>{m}</SelectItem>
+  1733→  1733→                  ))}
+  1734→  1734→                </SelectContent>
+  1735→  1735→              </Select>
+  1736→  1736→            </div>
+  1737→  1737→            <div>
+  1738→  1738→              <Label className="text-sm">رقم الإيصال</Label>
+  1739→  1739→              <Input
+  1740→  1740→                value={paymentForm.receiptNumber}
+  1741→  1741→                onChange={(e) => setPaymentForm(prev => ({ ...prev, receiptNumber: e.target.value }))}
+  1742→  1742→                placeholder="رقم الإيصال (اختياري)"
+  1743→  1743→                className="min-h-[44px]"
+  1744→  1744→              />
+  1745→  1745→            </div>
+  1746→  1746→            <div>
+  1747→  1747→              <Label className="text-sm">ملاحظات</Label>
+  1748→  1748→              <Textarea
+  1749→  1749→                value={paymentForm.notes}
+  1750→  1750→                onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+  1751→  1751→                placeholder="ملاحظات (اختياري)"
+  1752→  1752→                rows={2}
+  1753→  1753→                className="resize-none"
+  1754→  1754→              />
+  1755→  1755→            </div>
+  1756→  1756→          </div>
+  1757→  1757→
+  1758→  1758→          <DialogFooter>
+  1759→  1759→            <Button
+  1760→  1760→              variant="outline"
+  1761→  1761→              className="min-h-[44px]"
+  1762→  1762→              onClick={() => setAddPaymentOpen(false)}
+  1763→  1763→            >
+  1764→  1764→              إلغاء
+  1765→  1765→            </Button>
+  1766→  1766→            <Button
+  1767→  1767→              className="bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1768→  1768→              disabled={singlePaymentLoading}
+  1769→  1769→              onClick={() => {
+  1770→  1770→                if (viewPaymentsSub) handleCreatePayment(viewPaymentsSub.id)
+  1771→  1771→              }}
+  1772→  1772→            >
+  1773→  1773→              {singlePaymentLoading ? (
+  1774→  1774→                <span className="flex items-center gap-2">
+  1775→  1775→                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1776→  1776→                  جاري التسجيل...
+  1777→  1777→                </span>
+  1778→  1778→              ) : (
+  1779→  1779→                <>
+  1780→  1780→                  <Save className="w-4 h-4 ml-1" />
+  1781→  1781→                  تسجيل الدفعة
+  1782→  1782→                </>
+  1783→  1783→              )}
+  1784→  1784→            </Button>
+  1785→  1785→          </DialogFooter>
+  1786→  1786→        </DialogContent>
+  1787→  1787→      </Dialog>
+  1788→  1788→    )
+  1789→  1789→  }
+  1790→  1790→
+  1791→  1791→  // ===== Render Edit Subscription Dialog =====
+  1792→  1792→  function renderEditDialog() {
+  1793→  1793→    if (!editSub) return null
+  1794→  1794→    return (
+  1795→  1795→      <Dialog open={!!editSub} onOpenChange={(open) => { if (!open) setEditSub(null) }}>
+  1796→  1796→        <DialogContent className="max-w-md" dir="rtl">
+  1797→  1797→          <DialogHeader>
+  1798→  1798→            <DialogTitle className="flex items-center gap-2">
+  1799→  1799→              <Edit className="w-5 h-5 text-[#610000]" />
+  1800→  1800→              تعديل الاشتراك
+  1801→  1801→            </DialogTitle>
+  1802→  1802→            <DialogDescription>
+  1803→  1803→              {editSub.student.name} - {editSub.route.name}
+  1804→  1804→            </DialogDescription>
+  1805→  1805→          </DialogHeader>
+  1806→  1806→
+  1807→  1807→          <div className="space-y-3">
+  1808→  1808→            <div>
+  1809→  1809→              <Label className="text-sm">خط السير</Label>
+  1810→  1810→              <Select value={editForm.routeId} onValueChange={v => setEditForm(prev => ({ ...prev, routeId: v }))}>
+  1811→  1811→                <SelectTrigger className="min-h-[44px]">
+  1812→  1812→                  <SelectValue />
+  1813→  1813→                </SelectTrigger>
+  1814→  1814→                <SelectContent>
+  1815→  1815→                  {routeOptions.map(r => (
+  1816→  1816→                    <SelectItem key={r.id} value={r.id}>{r.name} - {r.area}</SelectItem>
+  1817→  1817→                  ))}
+  1818→  1818→                </SelectContent>
+  1819→  1819→              </Select>
+  1820→  1820→            </div>
+  1821→  1821→            <div>
+  1822→  1822→              <Label className="text-sm">الاتجاه</Label>
+  1823→  1823→              <Select value={editForm.direction} onValueChange={v => setEditForm(prev => ({ ...prev, direction: v }))}>
+  1824→  1824→                <SelectTrigger className="min-h-[44px]">
+  1825→  1825→                  <SelectValue />
+  1826→  1826→                </SelectTrigger>
+  1827→  1827→                <SelectContent>
+  1828→  1828→                  <SelectItem value="ذهاب">ذهاب فقط</SelectItem>
+  1829→  1829→                  <SelectItem value="عودة">عودة فقط</SelectItem>
+  1830→  1830→                  <SelectItem value="ذهاب وعودة">ذهاب وعودة</SelectItem>
+  1831→  1831→                </SelectContent>
+  1832→  1832→              </Select>
+  1833→  1833→            </div>
+  1834→  1834→            <div>
+  1835→  1835→              <Label className="text-sm">الرسوم الشهرية</Label>
+  1836→  1836→              <Input
+  1837→  1837→                type="number"
+  1838→  1838→                value={editForm.monthlyFee}
+  1839→  1839→                onChange={(e) => setEditForm(prev => ({ ...prev, monthlyFee: parseFloat(e.target.value) || 0 }))}
+  1840→  1840→                className="min-h-[44px]"
+  1841→  1841→              />
+  1842→  1842→            </div>
+  1843→  1843→            <div>
+  1844→  1844→              <Label className="text-sm">الحالة</Label>
+  1845→  1845→              <Select value={editForm.status} onValueChange={v => setEditForm(prev => ({ ...prev, status: v }))}>
+  1846→  1846→                <SelectTrigger className="min-h-[44px]">
+  1847→  1847→                  <SelectValue />
+  1848→  1848→                </SelectTrigger>
+  1849→  1849→                <SelectContent>
+  1850→  1850→                  <SelectItem value="نشط">نشط</SelectItem>
+  1851→  1851→                  <SelectItem value="متوقف">متوقف</SelectItem>
+  1852→  1852→                  <SelectItem value="ملغي">ملغي</SelectItem>
+  1853→  1853→                </SelectContent>
+  1854→  1854→              </Select>
+  1855→  1855→            </div>
+  1856→  1856→            <div>
+  1857→  1857→              <Label className="text-sm">تاريخ الانتهاء</Label>
+  1858→  1858→              <Input
+  1859→  1859→                type="date"
+  1860→  1860→                value={editForm.endDate}
+  1861→  1861→                onChange={(e) => setEditForm(prev => ({ ...prev, endDate: e.target.value }))}
+  1862→  1862→                className="min-h-[44px]"
+  1863→  1863→                placeholder="اتركه فارغاً للاشتراك المستمر"
+  1864→  1864→              />
+  1865→  1865→            </div>
+  1866→  1866→            <div>
+  1867→  1867→              <Label className="text-sm">ملاحظات</Label>
+  1868→  1868→              <Textarea
+  1869→  1869→                value={editForm.notes}
+  1870→  1870→                onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+  1871→  1871→                placeholder="ملاحظات (اختياري)"
+  1872→  1872→                rows={2}
+  1873→  1873→                className="resize-none"
+  1874→  1874→              />
+  1875→  1875→            </div>
+  1876→  1876→          </div>
+  1877→  1877→
+  1878→  1878→          <DialogFooter>
+  1879→  1879→            <Button
+  1880→  1880→              variant="outline"
+  1881→  1881→              className="min-h-[44px]"
+  1882→  1882→              onClick={() => setEditSub(null)}
+  1883→  1883→            >
+  1884→  1884→              إلغاء
+  1885→  1885→            </Button>
+  1886→  1886→            <Button
+  1887→  1887→              className="bg-[#610000] hover:bg-[#4a0000] min-h-[44px]"
+  1888→  1888→              disabled={editLoading}
+  1889→  1889→              onClick={handleEditSubscription}
+  1890→  1890→            >
+  1891→  1891→              {editLoading ? (
+  1892→  1892→                <span className="flex items-center gap-2">
+  1893→  1893→                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1894→  1894→                  جاري الحفظ...
+  1895→  1895→                </span>
+  1896→  1896→              ) : (
+  1897→  1897→                <>
+  1898→  1898→                  <Save className="w-4 h-4 ml-1" />
+  1899→  1899→                  حفظ التعديلات
+  1900→  1900→                </>
+  1901→  1901→              )}
+  1902→  1902→            </Button>
+  1903→  1903→          </DialogFooter>
+  1904→  1904→        </DialogContent>
+  1905→  1905→      </Dialog>
+  1906→  1906→    )
+  1907→  1907→  }
+  1908→  1908→
+  1909→  1909→  // ===== Render Cancel Confirmation Dialog =====
+  1910→  1910→  function renderCancelDialog() {
+  1911→  1911→    return (
+  1912→  1912→      <Dialog open={!!cancelSubId} onOpenChange={(open) => { if (!open) setCancelSubId(null) }}>
+  1913→  1913→        <DialogContent className="max-w-sm" dir="rtl">
+  1914→  1914→          <DialogHeader>
+  1915→  1915→            <DialogTitle className="flex items-center gap-2 text-red-600">
+  1916→  1916→              <XCircle className="w-5 h-5" />
+  1917→  1917→              تأكيد إلغاء الاشتراك
+  1918→  1918→            </DialogTitle>
+  1919→  1919→            <DialogDescription>
+  1920→  1920→              هل أنت متأكد من إلغاء هذا الاشتراك؟ سيتم تغيير الحالة إلى &quot;ملغي&quot;
+  1921→  1921→            </DialogDescription>
+  1922→  1922→          </DialogHeader>
+  1923→  1923→          <DialogFooter>
+  1924→  1924→            <Button
+  1925→  1925→              variant="outline"
+  1926→  1926→              className="min-h-[44px]"
+  1927→  1927→              onClick={() => setCancelSubId(null)}
+  1928→  1928→            >
+  1929→  1929→              تراجع
+  1930→  1930→            </Button>
+  1931→  1931→            <Button
+  1932→  1932→              variant="destructive"
+  1933→  1933→              className="min-h-[44px]"
+  1934→  1934→              disabled={cancelLoading}
+  1935→  1935→              onClick={handleCancelSubscription}
+  1936→  1936→            >
+  1937→  1937→              {cancelLoading ? (
+  1938→  1938→                <span className="flex items-center gap-2">
+  1939→  1939→                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+  1940→  1940→                  جاري الإلغاء...
+  1941→  1941→                </span>
+  1942→  1942→              ) : (
+  1943→  1943→                <>
+  1944→  1944→                  <XCircle className="w-4 h-4 ml-1" />
+  1945→  1945→                  إلغاء الاشتراك
+  1946→  1946→                </>
+  1947→  1947→              )}
+  1948→  1948→            </Button>
+  1949→  1949→          </DialogFooter>
+  1950→  1950→        </DialogContent>
+  1951→  1951→      </Dialog>
+  1952→  1952→    )
+  1953→  1953→  }
+  1954→  1954→
+  1955→  1955→  // ===== Render Single Payment Dialog (from payments tab) =====
+  1956→  1956→  function renderSinglePaymentDialog() {
+  1957→  1957→    if (!singlePaymentSub) return null
+  1958→  1958→    return (
+  1959→  1959→      <Dialog open={!!singlePaymentSub} onOpenChange={(open) => { if (!open) setSinglePaymentSub(null) }}>
+  1960→  1960→        <DialogContent className="max-w-md" dir="rtl">
+  1961→  1961→          <DialogHeader>
+  1962→  1962→            <DialogTitle className="flex items-center gap-2">
+  1963→  1963→              <CreditCard className="w-5 h-5 text-[#610000]" />
+  1964→  1964→              تسجيل دفعة
+  1965→  1965→            </DialogTitle>
+  1966→  1966→            <DialogDescription>
+  1967→  1967→              {singlePaymentSub.student.name} - {singlePaymentSub.route.name} | {arabicMonths[paymentForm.month - 1]} {paymentForm.year}
+  1968→  1968→            </DialogDescription>
+  1969→  1969→          </DialogHeader>
+  1970→  1970→
+  1971→  1971→          <div className="space-y-3">
+  1972→  1972→            <div className="grid grid-cols-2 gap-3">
+  1973→  1973→              <div>
+  1974→  1974→                <Label className="text-sm">الشهر</Label>
+  1975→  1975→                <Select value={paymentForm.month.toString()} onValueChange={v => setPaymentForm(prev => ({ ...prev, month: parseInt(v) }))}>
+  1976→  1976→                  <SelectTrigger className="min-h-[44px]">
+  1977→  1977→                    <SelectValue />
+  1978→  1978→                  </SelectTrigger>
+  1979→  1979→                  <SelectContent>
+  1980→  1980→                    {arabicMonths.map((m, i) => (
+  1981→  1981→                      <SelectItem key={i + 1} value={(i + 1).toString()}>{m}</SelectItem>
+  1982→  1982→                    ))}
+  1983→  1983→                  </SelectContent>
+  1984→  1984→                </Select>
+  1985→  1985→              </div>
+  1986→  1986→              <div>
+  1987→  1987→                <Label className="text-sm">السنة</Label>
+  1988→  1988→                <Select value={paymentForm.year.toString()} onValueChange={v => setPaymentForm(prev => ({ ...prev, year: parseInt(v) }))}>
+  1989→  1989→                  <SelectTrigger className="min-h-[44px]">
+  1990→  1990→                    <SelectValue />
+  1991→  1991→                  </SelectTrigger>
+  1992→  1992→                  <SelectContent>
+  1993→  1993→                    {getYearOptions().map(y => (
+  1994→  1994→                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+  1995→  1995→                    ))}
+  1996→  1996→                  </SelectContent>
+  1997→  1997→                </Select>
+  1998→  1998→              </div>
+  1999→  1999→            </div>
+  2000→  2000→            <div>
+
+[showing lines 1-2000 of 2002; use offset=2001 with limit to continue reading]

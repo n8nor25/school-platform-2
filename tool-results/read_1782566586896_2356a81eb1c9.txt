@@ -1,0 +1,1347 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect } from 'react'
+     4→     4→import {
+     5→     5→  ClipboardCheck, Calendar, Search, Filter, Users, BarChart3,
+     6→     6→  CheckCircle, XCircle, Clock, AlertTriangle, Save, ChevronLeft,
+     7→     7→  ChevronRight, Eye, Trash2, RefreshCw, FileText
+     8→     8→} from 'lucide-react'
+     9→     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→    10→import { Button } from '@/components/ui/button'
+    11→    11→import { Input } from '@/components/ui/input'
+    12→    12→import { Label } from '@/components/ui/label'
+    13→    13→import { Badge } from '@/components/ui/badge'
+    14→    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+    15→    15→import {
+    16→    16→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+    17→    17→} from '@/components/ui/select'
+    18→    18→import { Textarea } from '@/components/ui/textarea'
+    19→    19→import { Skeleton } from '@/components/ui/skeleton'
+    20→    20→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    21→    21→import { toast } from 'sonner'
+    22→    22→import { useAdminStore } from '@/lib/admin-store'
+    23→    23→
+    24→    24→// ===== Types =====
+    25→    25→interface Classroom {
+    26→    26→  id: string
+    27→    27→  name: string
+    28→    28→  gradeLevel: string
+    29→    29→  section: string
+    30→    30→  capacity: number
+    31→    31→  academicYearId: string
+    32→    32→  academicYear?: { name: string }
+    33→    33→  _count?: { students: number }
+    34→    34→}
+    35→    35→
+    36→    36→interface AcademicYear {
+    37→    37→  id: string
+    38→    38→  name: string
+    39→    39→  isActive: boolean
+    40→    40→}
+    41→    41→
+    42→    42→interface Student {
+    43→    43→  id: string
+    44→    44→  studentNumber: string
+    45→    45→  name: string
+    46→    46→  gender: string
+    47→    47→  classroom?: { name: string; gradeLevel: string } | null
+    48→    48→  classroomId: string | null
+    49→    49→}
+    50→    50→
+    51→    51→interface AttendanceRecord {
+    52→    52→  id: string
+    53→    53→  studentId: string
+    54→    54→  classroomId: string | null
+    55→    55→  academicYearId: string | null
+    56→    56→  date: string
+    57→    57→  status: string
+    58→    58→  arrivalTime: string | null
+    59→    59→  notes: string | null
+    60→    60→  recordedBy: string | null
+    61→    61→  createdAt: string
+    62→    62→  student: {
+    63→    63→    id: string
+    64→    64→    name: string
+    65→    65→    studentNumber: string
+    66→    66→    classroom: { name: string; gradeLevel: string } | null
+    67→    67→  }
+    68→    68→  classroom: { name: string; gradeLevel: string } | null
+    69→    69→  academicYear: { name: string } | null
+    70→    70→}
+    71→    71→
+    72→    72→interface AttendanceStats {
+    73→    73→  total: number
+    74→    74→  present: number
+    75→    75→  absent: number
+    76→    76→  late: number
+    77→    77→  excused: number
+    78→    78→  presentRate: number
+    79→    79→  absentRate: number
+    80→    80→}
+    81→    81→
+    82→    82→interface StudentAttendanceEntry {
+    83→    83→  studentId: string
+    84→    84→  status: string
+    85→    85→  arrivalTime: string
+    86→    86→  notes: string
+    87→    87→}
+    88→    88→
+    89→    89→const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
+    90→    90→  'حاضر': { label: 'حاضر', color: 'text-green-700', bgColor: 'bg-green-100 border-green-300', icon: <CheckCircle className="w-4 h-4" /> },
+    91→    91→  'غائب': { label: 'غائب', color: 'text-red-700', bgColor: 'bg-red-100 border-red-300', icon: <XCircle className="w-4 h-4" /> },
+    92→    92→  'متأخر': { label: 'متأخر', color: 'text-yellow-700', bgColor: 'bg-yellow-100 border-yellow-300', icon: <Clock className="w-4 h-4" /> },
+    93→    93→  'غائب بعذر': { label: 'غائب بعذر', color: 'text-orange-700', bgColor: 'bg-orange-100 border-orange-300', icon: <AlertTriangle className="w-4 h-4" /> },
+    94→    94→}
+    95→    95→
+    96→    96→const arabicMonths = [
+    97→    97→  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    98→    98→  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    99→    99→]
+   100→   100→
+   101→   101→const weekDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+   102→   102→
+   103→   103→export function AttendanceManagement() {
+   104→   104→  const { selectedSchoolId } = useAdminStore()
+   105→   105→
+   106→   106→  // ===== Common State =====
+   107→   107→  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+   108→   108→  const [classrooms, setClassrooms] = useState<Classroom[]>([])
+   109→   109→  const [loading, setLoading] = useState(false)
+   110→   110→  const [activeTab, setActiveTab] = useState('record')
+   111→   111→
+   112→   112→  // ===== Record Attendance State =====
+   113→   113→  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('')
+   114→   114→  const [selectedClassroom, setSelectedClassroom] = useState<string>('')
+   115→   115→  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+   116→   116→  const [students, setStudents] = useState<Student[]>([])
+   117→   117→  const [attendanceEntries, setAttendanceEntries] = useState<Record<string, StudentAttendanceEntry>>({})
+   118→   118→  const [savingAttendance, setSavingAttendance] = useState(false)
+   119→   119→
+   120→   120→  // ===== History State =====
+   121→   121→  const [historyRecords, setHistoryRecords] = useState<AttendanceRecord[]>([])
+   122→   122→  const [historyStats, setHistoryStats] = useState<AttendanceStats | null>(null)
+   123→   123→  const [historyLoading, setHistoryLoading] = useState(false)
+   124→   124→  const [historyClassroom, setHistoryClassroom] = useState<string>('all')
+   125→   125→  const [historyDate, setHistoryDate] = useState<string>(new Date().toISOString().split('T')[0])
+   126→   126→  const [historyStatus, setHistoryStatus] = useState<string>('all')
+   127→   127→  const [historySearch, setHistorySearch] = useState('')
+   128→   128→
+   129→   129→  // ===== Student History Dialog =====
+   130→   130→  const [studentHistoryOpen, setStudentHistoryOpen] = useState(false)
+   131→   131→  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+   132→   132→  const [studentHistoryRecords, setStudentHistoryRecords] = useState<AttendanceRecord[]>([])
+   133→   133→  const [studentHistoryMonth, setStudentHistoryMonth] = useState<number>(new Date().getMonth())
+   134→   134→  const [studentHistoryYear, setStudentHistoryYear] = useState<number>(new Date().getFullYear())
+   135→   135→  const [studentHistoryLoading, setStudentHistoryLoading] = useState(false)
+   136→   136→
+   137→   137→  // ===== Delete Dialog =====
+   138→   138→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   139→   139→  const [deleteTarget, setDeleteTarget] = useState<AttendanceRecord | null>(null)
+   140→   140→  const [deleting, setDeleting] = useState(false)
+   141→   141→
+   142→   142→  // ===== Data Fetching (non-effect helpers) =====
+   143→   143→  const loadStudentsForClass = async (classroomId: string) => {
+   144→   144→    if (!selectedSchoolId || !classroomId) return
+   145→   145→    setLoading(true)
+   146→   146→    try {
+   147→   147→      const res = await fetch(`/api/students?schoolId=${selectedSchoolId}&classroomId=${classroomId}&includeArchived=false`)
+   148→   148→      if (res.ok) {
+   149→   149→        const data: Student[] = await res.json()
+   150→   150→        setStudents(data)
+   151→   151→        // Check if attendance already exists for this date
+   152→   152→        const dateRes = await fetch(`/api/attendance?schoolId=${selectedSchoolId}&classroomId=${classroomId}&date=${selectedDate}`)
+   153→   153→        if (dateRes.ok) {
+   154→   154→          const existingRecords: AttendanceRecord[] = await dateRes.json()
+   155→   155→          const entries: Record<string, StudentAttendanceEntry> = {}
+   156→   156→          data.forEach(s => {
+   157→   157→            entries[s.id] = { studentId: s.id, status: 'حاضر', arrivalTime: '', notes: '' }
+   158→   158→          })
+   159→   159→          existingRecords.forEach(r => {
+   160→   160→            if (entries[r.studentId]) {
+   161→   161→              entries[r.studentId] = {
+   162→   162→                studentId: r.studentId,
+   163→   163→                status: r.status,
+   164→   164→                arrivalTime: r.arrivalTime || '',
+   165→   165→                notes: r.notes || '',
+   166→   166→              }
+   167→   167→            }
+   168→   168→          })
+   169→   169→          setAttendanceEntries(entries)
+   170→   170→        } else {
+   171→   171→          const entries: Record<string, StudentAttendanceEntry> = {}
+   172→   172→          data.forEach(s => {
+   173→   173→            entries[s.id] = { studentId: s.id, status: 'حاضر', arrivalTime: '', notes: '' }
+   174→   174→          })
+   175→   175→          setAttendanceEntries(entries)
+   176→   176→        }
+   177→   177→      }
+   178→   178→    } catch (err) {
+   179→   179→      console.error('Error fetching students:', err)
+   180→   180→      toast.error('خطأ في تحميل بيانات الطلاب')
+   181→   181→    } finally {
+   182→   182→      setLoading(false)
+   183→   183→    }
+   184→   184→  }
+   185→   185→
+   186→   186→  const loadHistory = async () => {
+   187→   187→    if (!selectedSchoolId) return
+   188→   188→    setHistoryLoading(true)
+   189→   189→    try {
+   190→   190→      const params = new URLSearchParams({ schoolId: selectedSchoolId, includeStats: 'true' })
+   191→   191→      if (historyDate) params.set('date', historyDate)
+   192→   192→      if (historyClassroom && historyClassroom !== 'all') params.set('classroomId', historyClassroom)
+   193→   193→      if (historyStatus && historyStatus !== 'all') params.set('status', historyStatus)
+   194→   194→
+   195→   195→      const res = await fetch(`/api/attendance?${params}`)
+   196→   196→      if (res.ok) {
+   197→   197→        const data = await res.json()
+   198→   198→        setHistoryRecords(data.records || [])
+   199→   199→        setHistoryStats(data.stats || null)
+   200→   200→      }
+   201→   201→    } catch (err) {
+   202→   202→      console.error('Error fetching history:', err)
+   203→   203→    } finally {
+   204→   204→      setHistoryLoading(false)
+   205→   205→    }
+   206→   206→  }
+   207→   207→
+   208→   208→  const loadStudentHistory = async (studentId: string, month?: number, year?: number) => {
+   209→   209→    if (!selectedSchoolId) return
+   210→   210→    setStudentHistoryLoading(true)
+   211→   211→    try {
+   212→   212→      const m = month ?? studentHistoryMonth
+   213→   213→      const y = year ?? studentHistoryYear
+   214→   214→      const startDate = `${y}-${String(m + 1).padStart(2, '0')}-01`
+   215→   215→      const endDate = new Date(y, m + 1, 0).toISOString().split('T')[0]
+   216→   216→
+   217→   217→      const params = new URLSearchParams({
+   218→   218→        schoolId: selectedSchoolId,
+   219→   219→        studentId,
+   220→   220→        dateFrom: startDate,
+   221→   221→        dateTo: endDate,
+   222→   222→      })
+   223→   223→      const res = await fetch(`/api/attendance?${params}`)
+   224→   224→      if (res.ok) {
+   225→   225→        const data = await res.json()
+   226→   226→        setStudentHistoryRecords(Array.isArray(data) ? data : [])
+   227→   227→      }
+   228→   228→    } catch (err) {
+   229→   229→      console.error('Error fetching student history:', err)
+   230→   230→    } finally {
+   231→   231→      setStudentHistoryLoading(false)
+   232→   232→    }
+   233→   233→  }
+   234→   234→
+   235→   235→  // ===== Effects =====
+   236→   236→  useEffect(() => {
+   237→   237→    if (!selectedSchoolId) return
+   238→   238→    let cancelled = false
+   239→   239→    const load = async () => {
+   240→   240→      try {
+   241→   241→        const res = await fetch(`/api/academic-years?schoolId=${selectedSchoolId}`)
+   242→   242→        if (res.ok && !cancelled) {
+   243→   243→          const data = await res.json()
+   244→   244→          setAcademicYears(data)
+   245→   245→          const activeYear = data.find((y: AcademicYear) => y.isActive)
+   246→   246→          if (activeYear) setSelectedAcademicYear(activeYear.id)
+   247→   247→        }
+   248→   248→      } catch (err) {
+   249→   249→        if (!cancelled) console.error('Error fetching academic years:', err)
+   250→   250→      }
+   251→   251→    }
+   252→   252→    load()
+   253→   253→    return () => { cancelled = true }
+   254→   254→  }, [selectedSchoolId])
+   255→   255→
+   256→   256→  useEffect(() => {
+   257→   257→    if (!selectedSchoolId || !selectedAcademicYear) return
+   258→   258→    let cancelled = false
+   259→   259→    const load = async () => {
+   260→   260→      try {
+   261→   261→        const res = await fetch(`/api/classrooms?schoolId=${selectedSchoolId}&academicYearId=${selectedAcademicYear}`)
+   262→   262→        if (res.ok && !cancelled) {
+   263→   263→          const data = await res.json()
+   264→   264→          setClassrooms(data)
+   265→   265→        }
+   266→   266→      } catch (err) {
+   267→   267→        if (!cancelled) console.error('Error fetching classrooms:', err)
+   268→   268→      }
+   269→   269→    }
+   270→   270→    load()
+   271→   271→    return () => { cancelled = true }
+   272→   272→  }, [selectedSchoolId, selectedAcademicYear])
+   273→   273→
+   274→   274→  useEffect(() => {
+   275→   275→    /* eslint-disable react-hooks/set-state-in-effect */
+   276→   276→    if (!selectedClassroom) {
+   277→   277→      setStudents([])
+   278→   278→      setAttendanceEntries({})
+   279→   279→      return
+   280→   280→    }
+   281→   281→    /* eslint-enable react-hooks/set-state-in-effect */
+   282→   282→    if (!selectedSchoolId) return
+   283→   283→    let cancelled = false
+   284→   284→    const load = async () => {
+   285→   285→      setLoading(true)
+   286→   286→      try {
+   287→   287→        const res = await fetch(`/api/students?schoolId=${selectedSchoolId}&classroomId=${selectedClassroom}&includeArchived=false`)
+   288→   288→        if (res.ok && !cancelled) {
+   289→   289→          const data: Student[] = await res.json()
+   290→   290→          setStudents(data)
+   291→   291→          // Check if attendance already exists for this date
+   292→   292→          const dateRes = await fetch(`/api/attendance?schoolId=${selectedSchoolId}&classroomId=${selectedClassroom}&date=${selectedDate}`)
+   293→   293→          if (dateRes.ok && !cancelled) {
+   294→   294→            const existingRecords: AttendanceRecord[] = await dateRes.json()
+   295→   295→            const entries: Record<string, StudentAttendanceEntry> = {}
+   296→   296→            data.forEach(s => {
+   297→   297→              entries[s.id] = { studentId: s.id, status: 'حاضر', arrivalTime: '', notes: '' }
+   298→   298→            })
+   299→   299→            existingRecords.forEach(r => {
+   300→   300→              if (entries[r.studentId]) {
+   301→   301→                entries[r.studentId] = {
+   302→   302→                  studentId: r.studentId,
+   303→   303→                  status: r.status,
+   304→   304→                  arrivalTime: r.arrivalTime || '',
+   305→   305→                  notes: r.notes || '',
+   306→   306→                }
+   307→   307→              }
+   308→   308→            })
+   309→   309→            setAttendanceEntries(entries)
+   310→   310→          } else if (!cancelled) {
+   311→   311→            const entries: Record<string, StudentAttendanceEntry> = {}
+   312→   312→            data.forEach(s => {
+   313→   313→              entries[s.id] = { studentId: s.id, status: 'حاضر', arrivalTime: '', notes: '' }
+   314→   314→            })
+   315→   315→            setAttendanceEntries(entries)
+   316→   316→          }
+   317→   317→        }
+   318→   318→      } catch (err) {
+   319→   319→        if (!cancelled) {
+   320→   320→          console.error('Error fetching students:', err)
+   321→   321→          toast.error('خطأ في تحميل بيانات الطلاب')
+   322→   322→        }
+   323→   323→      } finally {
+   324→   324→        if (!cancelled) setLoading(false)
+   325→   325→      }
+   326→   326→    }
+   327→   327→    load()
+   328→   328→    return () => { cancelled = true }
+   329→   329→  }, [selectedClassroom, selectedDate, selectedSchoolId])
+   330→   330→
+   331→   331→  useEffect(() => {
+   332→   332→    if (activeTab !== 'history' || !selectedSchoolId) return
+   333→   333→    let cancelled = false
+   334→   334→    const load = async () => {
+   335→   335→      setHistoryLoading(true)
+   336→   336→      try {
+   337→   337→        const params = new URLSearchParams({ schoolId: selectedSchoolId, includeStats: 'true' })
+   338→   338→        if (historyDate) params.set('date', historyDate)
+   339→   339→        if (historyClassroom && historyClassroom !== 'all') params.set('classroomId', historyClassroom)
+   340→   340→        if (historyStatus && historyStatus !== 'all') params.set('status', historyStatus)
+   341→   341→
+   342→   342→        const res = await fetch(`/api/attendance?${params}`)
+   343→   343→        if (res.ok && !cancelled) {
+   344→   344→          const data = await res.json()
+   345→   345→          setHistoryRecords(data.records || [])
+   346→   346→          setHistoryStats(data.stats || null)
+   347→   347→        }
+   348→   348→      } catch (err) {
+   349→   349→        if (!cancelled) console.error('Error fetching history:', err)
+   350→   350→      } finally {
+   351→   351→        if (!cancelled) setHistoryLoading(false)
+   352→   352→      }
+   353→   353→    }
+   354→   354→    load()
+   355→   355→    return () => { cancelled = true }
+   356→   356→  }, [activeTab, selectedSchoolId, historyDate, historyClassroom, historyStatus])
+   357→   357→
+   358→   358→  // Effect: fetch student history when dialog opens or month/year changes
+   359→   359→  useEffect(() => {
+   360→   360→    if (!studentHistoryOpen || !selectedStudent || !selectedSchoolId) return
+   361→   361→    let cancelled = false
+   362→   362→    const load = async () => {
+   363→   363→      setStudentHistoryLoading(true)
+   364→   364→      try {
+   365→   365→        const startDate = `${studentHistoryYear}-${String(studentHistoryMonth + 1).padStart(2, '0')}-01`
+   366→   366→        const endDate = new Date(studentHistoryYear, studentHistoryMonth + 1, 0).toISOString().split('T')[0]
+   367→   367→        const params = new URLSearchParams({
+   368→   368→          schoolId: selectedSchoolId,
+   369→   369→          studentId: selectedStudent.id,
+   370→   370→          dateFrom: startDate,
+   371→   371→          dateTo: endDate,
+   372→   372→        })
+   373→   373→        const res = await fetch(`/api/attendance?${params}`)
+   374→   374→        if (res.ok && !cancelled) {
+   375→   375→          const data = await res.json()
+   376→   376→          setStudentHistoryRecords(Array.isArray(data) ? data : [])
+   377→   377→        }
+   378→   378→      } catch (err) {
+   379→   379→        if (!cancelled) console.error('Error fetching student history:', err)
+   380→   380→      } finally {
+   381→   381→        if (!cancelled) setStudentHistoryLoading(false)
+   382→   382→      }
+   383→   383→    }
+   384→   384→    load()
+   385→   385→    return () => { cancelled = true }
+   386→   386→  }, [studentHistoryOpen, selectedStudent, selectedSchoolId, studentHistoryMonth, studentHistoryYear])
+   387→   387→
+   388→   388→  // ===== Handlers =====
+   389→   389→  const handleSaveAttendance = async () => {
+   390→   390→    if (!selectedSchoolId || !selectedClassroom || students.length === 0) return
+   391→   391→    setSavingAttendance(true)
+   392→   392→    try {
+   393→   393→      const records = Object.values(attendanceEntries).map(entry => ({
+   394→   394→        studentId: entry.studentId,
+   395→   395→        status: entry.status,
+   396→   396→        arrivalTime: entry.arrivalTime || undefined,
+   397→   397→        notes: entry.notes || undefined,
+   398→   398→        classroomId: selectedClassroom,
+   399→   399→      }))
+   400→   400→
+   401→   401→      const res = await fetch('/api/attendance/bulk', {
+   402→   402→        method: 'POST',
+   403→   403→        headers: { 'Content-Type': 'application/json' },
+   404→   404→        body: JSON.stringify({
+   405→   405→          schoolId: selectedSchoolId,
+   406→   406→          date: selectedDate,
+   407→   407→          academicYearId: selectedAcademicYear || undefined,
+   408→   408→          records,
+   409→   409→        }),
+   410→   410→      })
+   411→   411→
+   412→   412→      if (res.ok) {
+   413→   413→        const data = await res.json()
+   414→   414→        toast.success(data.message || 'تم حفظ الحضور بنجاح')
+   415→   415→      } else {
+   416→   416→        toast.error('خطأ في حفظ الحضور')
+   417→   417→      }
+   418→   418→    } catch {
+   419→   419→      toast.error('خطأ في الاتصال بالخادم')
+   420→   420→    } finally {
+   421→   421→      setSavingAttendance(false)
+   422→   422→    }
+   423→   423→  }
+   424→   424→
+   425→   425→  const handleMarkAll = (status: string) => {
+   426→   426→    const updated = { ...attendanceEntries }
+   427→   427→    Object.keys(updated).forEach(studentId => {
+   428→   428→      updated[studentId] = { ...updated[studentId], status }
+   429→   429→    })
+   430→   430→    setAttendanceEntries(updated)
+   431→   431→  }
+   432→   432→
+   433→   433→  const handleDeleteRecord = async () => {
+   434→   434→    if (!deleteTarget || !selectedSchoolId) return
+   435→   435→    setDeleting(true)
+   436→   436→    try {
+   437→   437→      const res = await fetch(`/api/attendance/${deleteTarget.id}?schoolId=${selectedSchoolId}`, {
+   438→   438→        method: 'DELETE',
+   439→   439→      })
+   440→   440→      if (res.ok) {
+   441→   441→        toast.success('تم حذف سجل الحضور')
+   442→   442→        setDeleteDialogOpen(false)
+   443→   443→        setDeleteTarget(null)
+   444→   444→        loadHistory()
+   445→   445→      } else {
+   446→   446→        toast.error('خطأ في حذف السجل')
+   447→   447→      }
+   448→   448→    } catch {
+   449→   449→      toast.error('خطأ في الاتصال بالخادم')
+   450→   450→    } finally {
+   451→   451→      setDeleting(false)
+   452→   452→    }
+   453→   453→  }
+   454→   454→
+   455→   455→  const openStudentHistory = (student: Student) => {
+   456→   456→    setSelectedStudent(student)
+   457→   457→    setStudentHistoryOpen(true)
+   458→   458→    setStudentHistoryMonth(new Date().getMonth())
+   459→   459→    setStudentHistoryYear(new Date().getFullYear())
+   460→   460→  }
+   461→   461→
+   462→   462→  // Compute summary for current recording
+   463→   463→  const recordingSummary = React.useMemo(() => {
+   464→   464→    const entries = Object.values(attendanceEntries)
+   465→   465→    return {
+   466→   466→      total: entries.length,
+   467→   467→      present: entries.filter(e => e.status === 'حاضر').length,
+   468→   468→      absent: entries.filter(e => e.status === 'غائب').length,
+   469→   469→      late: entries.filter(e => e.status === 'متأخر').length,
+   470→   470→      excused: entries.filter(e => e.status === 'غائب بعذر').length,
+   471→   471→    }
+   472→   472→  }, [attendanceEntries])
+   473→   473→
+   474→   474→  // Filter history records by search
+   475→   475→  const filteredHistoryRecords = React.useMemo(() => {
+   476→   476→    if (!historySearch) return historyRecords
+   477→   477→    const q = historySearch.toLowerCase()
+   478→   478→    return historyRecords.filter(r =>
+   479→   479→      r.student.name.toLowerCase().includes(q) ||
+   480→   480→      r.student.studentNumber.toLowerCase().includes(q)
+   481→   481→    )
+   482→   482→  }, [historyRecords, historySearch])
+   483→   483→
+   484→   484→  // Generate calendar days for student history view
+   485→   485→  const calendarDays = React.useMemo(() => {
+   486→   486→    const year = studentHistoryYear
+   487→   487→    const month = studentHistoryMonth
+   488→   488→    const firstDay = new Date(year, month, 1).getDay()
+   489→   489→    const daysInMonth = new Date(year, month + 1, 0).getDate()
+   490→   490→
+   491→   491→    const days: { day: number; status: string | null; isCurrentMonth: boolean }[] = []
+   492→   492→
+   493→   493→    // Previous month padding
+   494→   494→    for (let i = 0; i < firstDay; i++) {
+   495→   495→      days.push({ day: 0, status: null, isCurrentMonth: false })
+   496→   496→    }
+   497→   497→
+   498→   498→    // Current month days
+   499→   499→    for (let d = 1; d <= daysInMonth; d++) {
+   500→   500→      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+   501→   501→      const record = studentHistoryRecords.find(r => {
+   502→   502→        const rDate = new Date(r.date)
+   503→   503→        return rDate.getFullYear() === year && rDate.getMonth() === month && rDate.getDate() === d
+   504→   504→      })
+   505→   505→      days.push({ day: d, status: record?.status || null, isCurrentMonth: true })
+   506→   506→    }
+   507→   507→
+   508→   508→    return days
+   509→   509→  }, [studentHistoryYear, studentHistoryMonth, studentHistoryRecords])
+   510→   510→
+   511→   511→  // ===== Render =====
+   512→   512→  return (
+   513→   513→    <div className="space-y-6">
+   514→   514→      {/* Page Header */}
+   515→   515→      <div className="flex items-center justify-between">
+   516→   516→        <div>
+   517→   517→          <h2 className="text-2xl font-bold text-[#1a1a2e] flex items-center gap-2">
+   518→   518→            <ClipboardCheck className="w-7 h-7 text-[#610000]" />
+   519→   519→            إدارة الحضور والغياب
+   520→   520→          </h2>
+   521→   521→          <p className="text-gray-500 text-sm mt-1">تسجيل ومتابعة حضور وغياب الطلاب</p>
+   522→   522→        </div>
+   523→   523→      </div>
+   524→   524→
+   525→   525→      {/* Tabs */}
+   526→   526→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   527→   527→        <TabsList className="grid w-full grid-cols-3">
+   528→   528→          <TabsTrigger value="record" className="flex items-center gap-2">
+   529→   529→            <ClipboardCheck className="w-4 h-4" />
+   530→   530→            تسجيل الحضور
+   531→   531→          </TabsTrigger>
+   532→   532→          <TabsTrigger value="history" className="flex items-center gap-2">
+   533→   533→            <FileText className="w-4 h-4" />
+   534→   534→            سجل الحضور
+   535→   535→          </TabsTrigger>
+   536→   536→          <TabsTrigger value="stats" className="flex items-center gap-2">
+   537→   537→            <BarChart3 className="w-4 h-4" />
+   538→   538→            إحصائيات
+   539→   539→          </TabsTrigger>
+   540→   540→        </TabsList>
+   541→   541→
+   542→   542→        {/* ===== Tab 1: Record Attendance ===== */}
+   543→   543→        <TabsContent value="record" className="space-y-4">
+   544→   544→          {/* Filters */}
+   545→   545→          <Card>
+   546→   546→            <CardContent className="p-4">
+   547→   547→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   548→   548→                <div>
+   549→   549→                  <Label className="text-sm font-medium mb-1.5 block">السنة الدراسية</Label>
+   550→   550→                  <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
+   551→   551→                    <SelectTrigger>
+   552→   552→                      <SelectValue placeholder="اختر السنة الدراسية" />
+   553→   553→                    </SelectTrigger>
+   554→   554→                    <SelectContent>
+   555→   555→                      {academicYears.map(y => (
+   556→   556→                        <SelectItem key={y.id} value={y.id}>
+   557→   557→                          {y.name} {y.isActive ? '(نشطة)' : ''}
+   558→   558→                        </SelectItem>
+   559→   559→                      ))}
+   560→   560→                    </SelectContent>
+   561→   561→                  </Select>
+   562→   562→                </div>
+   563→   563→                <div>
+   564→   564→                  <Label className="text-sm font-medium mb-1.5 block">الفصل الدراسي</Label>
+   565→   565→                  <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
+   566→   566→                    <SelectTrigger>
+   567→   567→                      <SelectValue placeholder="اختر الفصل" />
+   568→   568→                    </SelectTrigger>
+   569→   569→                    <SelectContent>
+   570→   570→                      {classrooms.map(c => (
+   571→   571→                        <SelectItem key={c.id} value={c.id}>
+   572→   572→                          {c.name} - {c.gradeLevel}
+   573→   573→                        </SelectItem>
+   574→   574→                      ))}
+   575→   575→                    </SelectContent>
+   576→   576→                  </Select>
+   577→   577→                </div>
+   578→   578→                <div>
+   579→   579→                  <Label className="text-sm font-medium mb-1.5 block">التاريخ</Label>
+   580→   580→                  <Input
+   581→   581→                    type="date"
+   582→   582→                    value={selectedDate}
+   583→   583→                    onChange={e => setSelectedDate(e.target.value)}
+   584→   584→                  />
+   585→   585→                </div>
+   586→   586→                <div className="flex items-end">
+   587→   587→                  <Button
+   588→   588→                    onClick={() => {
+   589→   589→                      if (selectedClassroom) loadStudentsForClass(selectedClassroom)
+   590→   590→                    }}
+   591→   591→                    variant="outline"
+   592→   592→                    className="w-full"
+   593→   593→                    disabled={!selectedClassroom}
+   594→   594→                  >
+   595→   595→                    <RefreshCw className="w-4 h-4 ml-2" />
+   596→   596→                    تحديث البيانات
+   597→   597→                  </Button>
+   598→   598→                </div>
+   599→   599→              </div>
+   600→   600→            </CardContent>
+   601→   601→          </Card>
+   602→   602→
+   603→   603→          {/* Quick Action Buttons */}
+   604→   604→          {students.length > 0 && (
+   605→   605→            <Card>
+   606→   606→              <CardContent className="p-4">
+   607→   607→                <div className="flex flex-wrap items-center justify-between gap-3">
+   608→   608→                  <div className="flex flex-wrap items-center gap-2">
+   609→   609→                    <span className="text-sm font-medium text-gray-600">تحديد سريع:</span>
+   610→   610→                    <Button size="sm" variant="outline" onClick={() => handleMarkAll('حاضر')}
+   611→   611→                      className="border-green-300 text-green-700 hover:bg-green-50">
+   612→   612→                      <CheckCircle className="w-3.5 h-3.5 ml-1" />
+   613→   613→                      الكل حاضر
+   614→   614→                    </Button>
+   615→   615→                    <Button size="sm" variant="outline" onClick={() => handleMarkAll('غائب')}
+   616→   616→                      className="border-red-300 text-red-700 hover:bg-red-50">
+   617→   617→                      <XCircle className="w-3.5 h-3.5 ml-1" />
+   618→   618→                      الكل غائب
+   619→   619→                    </Button>
+   620→   620→                    <Button size="sm" variant="outline" onClick={() => handleMarkAll('متأخر')}
+   621→   621→                      className="border-yellow-300 text-yellow-700 hover:bg-yellow-50">
+   622→   622→                      <Clock className="w-3.5 h-3.5 ml-1" />
+   623→   623→                      الكل متأخر
+   624→   624→                    </Button>
+   625→   625→                  </div>
+   626→   626→                  {/* Summary */}
+   627→   627→                  <div className="flex items-center gap-3 text-sm">
+   628→   628→                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+   629→   629→                      حاضر: {recordingSummary.present}
+   630→   630→                    </Badge>
+   631→   631→                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+   632→   632→                      غائب: {recordingSummary.absent}
+   633→   633→                    </Badge>
+   634→   634→                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+   635→   635→                      متأخر: {recordingSummary.late}
+   636→   636→                    </Badge>
+   637→   637→                    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+   638→   638→                      بعذر: {recordingSummary.excused}
+   639→   639→                    </Badge>
+   640→   640→                  </div>
+   641→   641→                </div>
+   642→   642→              </CardContent>
+   643→   643→            </Card>
+   644→   644→          )}
+   645→   645→
+   646→   646→          {/* Student Attendance List */}
+   647→   647→          {loading ? (
+   648→   648→            <Card>
+   649→   649→              <CardContent className="p-6 space-y-4">
+   650→   650→                {[...Array(5)].map((_, i) => (
+   651→   651→                  <div key={i} className="flex items-center gap-4">
+   652→   652→                    <Skeleton className="h-10 w-10 rounded-full" />
+   653→   653→                    <Skeleton className="h-6 flex-1" />
+   654→   654→                    <Skeleton className="h-8 w-32" />
+   655→   655→                  </div>
+   656→   656→                ))}
+   657→   657→              </CardContent>
+   658→   658→            </Card>
+   659→   659→          ) : students.length > 0 ? (
+   660→   660→            <Card>
+   661→   661→              <CardHeader className="pb-3">
+   662→   662→                <CardTitle className="text-lg flex items-center gap-2">
+   663→   663→                  <Users className="w-5 h-5" />
+   664→   664→                  قائمة الطلاب - {classrooms.find(c => c.id === selectedClassroom)?.name || ''}
+   665→   665→                  <Badge variant="secondary" className="mr-2">{students.length} طالب</Badge>
+   666→   666→                </CardTitle>
+   667→   667→              </CardHeader>
+   668→   668→              <CardContent className="p-0">
+   669→   669→                <div className="overflow-x-auto">
+   670→   670→                  <table className="w-full">
+   671→   671→                    <thead>
+   672→   672→                      <tr className="border-b bg-gray-50">
+   673→   673→                        <th className="text-right p-3 text-sm font-medium text-gray-600 w-10">#</th>
+   674→   674→                        <th className="text-right p-3 text-sm font-medium text-gray-600">رقم الطالب</th>
+   675→   675→                        <th className="text-right p-3 text-sm font-medium text-gray-600">الاسم</th>
+   676→   676→                        <th className="text-right p-3 text-sm font-medium text-gray-600">الجنس</th>
+   677→   677→                        <th className="text-center p-3 text-sm font-medium text-gray-600">الحالة</th>
+   678→   678→                        <th className="text-center p-3 text-sm font-medium text-gray-600">وقت الحضور</th>
+   679→   679→                        <th className="text-right p-3 text-sm font-medium text-gray-600">ملاحظات</th>
+   680→   680→                      </tr>
+   681→   681→                    </thead>
+   682→   682→                    <tbody>
+   683→   683→                      {students.map((student, index) => {
+   684→   684→                        const entry = attendanceEntries[student.id]
+   685→   685→                        if (!entry) return null
+   686→   686→                        const config = statusConfig[entry.status]
+   687→   687→                        return (
+   688→   688→                          <tr key={student.id} className="border-b hover:bg-gray-50/50 transition-colors">
+   689→   689→                            <td className="p-3 text-sm text-gray-500">{index + 1}</td>
+   690→   690→                            <td className="p-3 text-sm font-mono">{student.studentNumber}</td>
+   691→   691→                            <td className="p-3 text-sm font-medium">{student.name}</td>
+   692→   692→                            <td className="p-3 text-sm text-gray-500">{student.gender}</td>
+   693→   693→                            <td className="p-3">
+   694→   694→                              <div className="flex justify-center gap-1">
+   695→   695→                                {Object.entries(statusConfig).map(([status, cfg]) => (
+   696→   696→                                  <button
+   697→   697→                                    key={status}
+   698→   698→                                    onClick={() => setAttendanceEntries(prev => ({
+   699→   699→                                      ...prev,
+   700→   700→                                      [student.id]: { ...prev[student.id], status }
+   701→   701→                                    }))}
+   702→   702→                                    className={`p-1.5 rounded-md transition-all text-xs flex items-center gap-1 ${
+   703→   703→                                      entry.status === status
+   704→   704→                                        ? `${cfg.bgColor} ${cfg.color} border font-medium shadow-sm`
+   705→   705→                                        : 'text-gray-400 hover:bg-gray-100 border border-transparent'
+   706→   706→                                    }`}
+   707→   707→                                    title={cfg.label}
+   708→   708→                                  >
+   709→   709→                                    {cfg.icon}
+   710→   710→                                  </button>
+   711→   711→                                ))}
+   712→   712→                              </div>
+   713→   713→                            </td>
+   714→   714→                            <td className="p-3">
+   715→   715→                              <Input
+   716→   716→                                type="time"
+   717→   717→                                value={entry.arrivalTime}
+   718→   718→                                onChange={e => setAttendanceEntries(prev => ({
+   719→   719→                                  ...prev,
+   720→   720→                                  [student.id]: { ...prev[student.id], arrivalTime: e.target.value }
+   721→   721→                                }))}
+   722→   722→                                className="w-28 h-8 text-center text-sm mx-auto"
+   723→   723→                                disabled={entry.status === 'غائب'}
+   724→   724→                              />
+   725→   725→                            </td>
+   726→   726→                            <td className="p-3">
+   727→   727→                              <Input
+   728→   728→                                value={entry.notes}
+   729→   729→                                onChange={e => setAttendanceEntries(prev => ({
+   730→   730→                                  ...prev,
+   731→   731→                                  [student.id]: { ...prev[student.id], notes: e.target.value }
+   732→   732→                                }))}
+   733→   733→                                placeholder="ملاحظة..."
+   734→   734→                                className="h-8 text-sm"
+   735→   735→                              />
+   736→   736→                            </td>
+   737→   737→                          </tr>
+   738→   738→                        )
+   739→   739→                      })}
+   740→   740→                    </tbody>
+   741→   741→                  </table>
+   742→   742→                </div>
+   743→   743→
+   744→   744→                {/* Save Button */}
+   745→   745→                <div className="p-4 border-t bg-gray-50 flex justify-end">
+   746→   746→                  <Button
+   747→   747→                    onClick={handleSaveAttendance}
+   748→   748→                    disabled={savingAttendance}
+   749→   749→                    className="bg-[#610000] hover:bg-[#7a0000] min-w-[160px]"
+   750→   750→                  >
+   751→   751→                    {savingAttendance ? (
+   752→   752→                      <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+   753→   753→                    ) : (
+   754→   754→                      <Save className="w-4 h-4 ml-2" />
+   755→   755→                    )}
+   756→   756→                    {savingAttendance ? 'جارٍ الحفظ...' : 'حفظ الحضور'}
+   757→   757→                  </Button>
+   758→   758→                </div>
+   759→   759→              </CardContent>
+   760→   760→            </Card>
+   761→   761→          ) : selectedClassroom ? (
+   762→   762→            <Card>
+   763→   763→              <CardContent className="p-12 text-center text-gray-500">
+   764→   764→                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+   765→   765→                <p>لا يوجد طلاب في هذا الفصل</p>
+   766→   766→              </CardContent>
+   767→   767→            </Card>
+   768→   768→          ) : (
+   769→   769→            <Card>
+   770→   770→              <CardContent className="p-12 text-center text-gray-500">
+   771→   771→                <ClipboardCheck className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+   772→   772→                <p>اختر الفصل الدراسي لتسجيل الحضور</p>
+   773→   773→              </CardContent>
+   774→   774→            </Card>
+   775→   775→          )}
+   776→   776→        </TabsContent>
+   777→   777→
+   778→   778→        {/* ===== Tab 2: Attendance History ===== */}
+   779→   779→        <TabsContent value="history" className="space-y-4">
+   780→   780→          {/* Filters */}
+   781→   781→          <Card>
+   782→   782→            <CardContent className="p-4">
+   783→   783→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+   784→   784→                <div>
+   785→   785→                  <Label className="text-sm font-medium mb-1.5 block">التاريخ</Label>
+   786→   786→                  <Input
+   787→   787→                    type="date"
+   788→   788→                    value={historyDate}
+   789→   789→                    onChange={e => setHistoryDate(e.target.value)}
+   790→   790→                  />
+   791→   791→                </div>
+   792→   792→                <div>
+   793→   793→                  <Label className="text-sm font-medium mb-1.5 block">الفصل</Label>
+   794→   794→                  <Select value={historyClassroom} onValueChange={setHistoryClassroom}>
+   795→   795→                    <SelectTrigger>
+   796→   796→                      <SelectValue />
+   797→   797→                    </SelectTrigger>
+   798→   798→                    <SelectContent>
+   799→   799→                      <SelectItem value="all">جميع الفصول</SelectItem>
+   800→   800→                      {classrooms.map(c => (
+   801→   801→                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+   802→   802→                      ))}
+   803→   803→                    </SelectContent>
+   804→   804→                  </Select>
+   805→   805→                </div>
+   806→   806→                <div>
+   807→   807→                  <Label className="text-sm font-medium mb-1.5 block">الحالة</Label>
+   808→   808→                  <Select value={historyStatus} onValueChange={setHistoryStatus}>
+   809→   809→                    <SelectTrigger>
+   810→   810→                      <SelectValue />
+   811→   811→                    </SelectTrigger>
+   812→   812→                    <SelectContent>
+   813→   813→                      <SelectItem value="all">الكل</SelectItem>
+   814→   814→                      <SelectItem value="حاضر">حاضر</SelectItem>
+   815→   815→                      <SelectItem value="غائب">غائب</SelectItem>
+   816→   816→                      <SelectItem value="متأخر">متأخر</SelectItem>
+   817→   817→                      <SelectItem value="غائب بعذر">غائب بعذر</SelectItem>
+   818→   818→                    </SelectContent>
+   819→   819→                  </Select>
+   820→   820→                </div>
+   821→   821→                <div>
+   822→   822→                  <Label className="text-sm font-medium mb-1.5 block">بحث</Label>
+   823→   823→                  <div className="relative">
+   824→   824→                    <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+   825→   825→                    <Input
+   826→   826→                      value={historySearch}
+   827→   827→                      onChange={e => setHistorySearch(e.target.value)}
+   828→   828→                      placeholder="اسم أو رقم الطالب..."
+   829→   829→                      className="pr-9"
+   830→   830→                    />
+   831→   831→                  </div>
+   832→   832→                </div>
+   833→   833→                <div className="flex items-end">
+   834→   834→                  <Button onClick={loadHistory} variant="outline" className="w-full">
+   835→   835→                    <Search className="w-4 h-4 ml-2" />
+   836→   836→                    بحث
+   837→   837→                  </Button>
+   838→   838→                </div>
+   839→   839→              </div>
+   840→   840→            </CardContent>
+   841→   841→          </Card>
+   842→   842→
+   843→   843→          {/* Stats Summary */}
+   844→   844→          {historyStats && (
+   845→   845→            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   846→   846→              <Card className="border-green-200 bg-green-50/50">
+   847→   847→                <CardContent className="p-3 text-center">
+   848→   848→                  <div className="text-2xl font-bold text-green-700">{historyStats.present}</div>
+   849→   849→                  <div className="text-xs text-green-600">حاضر ({historyStats.presentRate}%)</div>
+   850→   850→                </CardContent>
+   851→   851→              </Card>
+   852→   852→              <Card className="border-red-200 bg-red-50/50">
+   853→   853→                <CardContent className="p-3 text-center">
+   854→   854→                  <div className="text-2xl font-bold text-red-700">{historyStats.absent}</div>
+   855→   855→                  <div className="text-xs text-red-600">غائب ({historyStats.absentRate}%)</div>
+   856→   856→                </CardContent>
+   857→   857→              </Card>
+   858→   858→              <Card className="border-yellow-200 bg-yellow-50/50">
+   859→   859→                <CardContent className="p-3 text-center">
+   860→   860→                  <div className="text-2xl font-bold text-yellow-700">{historyStats.late}</div>
+   861→   861→                  <div className="text-xs text-yellow-600">متأخر</div>
+   862→   862→                </CardContent>
+   863→   863→              </Card>
+   864→   864→              <Card className="border-orange-200 bg-orange-50/50">
+   865→   865→                <CardContent className="p-3 text-center">
+   866→   866→                  <div className="text-2xl font-bold text-orange-700">{historyStats.excused}</div>
+   867→   867→                  <div className="text-xs text-orange-600">غائب بعذر</div>
+   868→   868→                </CardContent>
+   869→   869→              </Card>
+   870→   870→            </div>
+   871→   871→          )}
+   872→   872→
+   873→   873→          {/* Records Table */}
+   874→   874→          {historyLoading ? (
+   875→   875→            <Card>
+   876→   876→              <CardContent className="p-6 space-y-4">
+   877→   877→                {[...Array(5)].map((_, i) => (
+   878→   878→                  <div key={i} className="flex items-center gap-4">
+   879→   879→                    <Skeleton className="h-8 w-8 rounded" />
+   880→   880→                    <Skeleton className="h-6 flex-1" />
+   881→   881→                    <Skeleton className="h-6 w-20" />
+   882→   882→                    <Skeleton className="h-6 w-20" />
+   883→   883→                  </div>
+   884→   884→                ))}
+   885→   885→              </CardContent>
+   886→   886→            </Card>
+   887→   887→          ) : filteredHistoryRecords.length > 0 ? (
+   888→   888→            <Card>
+   889→   889→              <CardContent className="p-0">
+   890→   890→                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+   891→   891→                  <table className="w-full">
+   892→   892→                    <thead className="sticky top-0 bg-gray-50 z-10">
+   893→   893→                      <tr className="border-b">
+   894→   894→                        <th className="text-right p-3 text-sm font-medium text-gray-600 w-10">#</th>
+   895→   895→                        <th className="text-right p-3 text-sm font-medium text-gray-600">رقم الطالب</th>
+   896→   896→                        <th className="text-right p-3 text-sm font-medium text-gray-600">الاسم</th>
+   897→   897→                        <th className="text-right p-3 text-sm font-medium text-gray-600">الفصل</th>
+   898→   898→                        <th className="text-center p-3 text-sm font-medium text-gray-600">الحالة</th>
+   899→   899→                        <th className="text-center p-3 text-sm font-medium text-gray-600">وقت الحضور</th>
+   900→   900→                        <th className="text-right p-3 text-sm font-medium text-gray-600">ملاحظات</th>
+   901→   901→                        <th className="text-center p-3 text-sm font-medium text-gray-600">إجراءات</th>
+   902→   902→                      </tr>
+   903→   903→                    </thead>
+   904→   904→                    <tbody>
+   905→   905→                      {filteredHistoryRecords.map((record, index) => {
+   906→   906→                        const config = statusConfig[record.status] || statusConfig['حاضر']
+   907→   907→                        return (
+   908→   908→                          <tr key={record.id} className="border-b hover:bg-gray-50/50 transition-colors">
+   909→   909→                            <td className="p-3 text-sm text-gray-500">{index + 1}</td>
+   910→   910→                            <td className="p-3 text-sm font-mono">{record.student.studentNumber}</td>
+   911→   911→                            <td className="p-3 text-sm font-medium">{record.student.name}</td>
+   912→   912→                            <td className="p-3 text-sm text-gray-500">
+   913→   913→                              {record.classroom?.name || record.student.classroom?.name || '-'}
+   914→   914→                            </td>
+   915→   915→                            <td className="p-3 text-center">
+   916→   916→                              <Badge className={`${config.bgColor} ${config.color} border`}>
+   917→   917→                                {config.icon}
+   918→   918→                                <span className="mr-1">{config.label}</span>
+   919→   919→                              </Badge>
+   920→   920→                            </td>
+   921→   921→                            <td className="p-3 text-sm text-center text-gray-500">
+   922→   922→                              {record.arrivalTime || '-'}
+   923→   923→                            </td>
+   924→   924→                            <td className="p-3 text-sm text-gray-500 max-w-[150px] truncate">
+   925→   925→                              {record.notes || '-'}
+   926→   926→                            </td>
+   927→   927→                            <td className="p-3">
+   928→   928→                              <div className="flex justify-center gap-1">
+   929→   929→                                <Button
+   930→   930→                                  size="icon"
+   931→   931→                                  variant="ghost"
+   932→   932→                                  className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+   933→   933→                                  onClick={() => {
+   934→   934→                                    const student: Student = {
+   935→   935→                                      id: record.student.id,
+   936→   936→                                      name: record.student.name,
+   937→   937→                                      studentNumber: record.student.studentNumber,
+   938→   938→                                      gender: '',
+   939→   939→                                      classroom: record.student.classroom,
+   940→   940→                                      classroomId: record.classroomId,
+   941→   941→                                    }
+   942→   942→                                    openStudentHistory(student)
+   943→   943→                                  }}
+   944→   944→                                  title="عرض سجل الطالب"
+   945→   945→                                >
+   946→   946→                                  <Eye className="w-4 h-4" />
+   947→   947→                                </Button>
+   948→   948→                                <Button
+   949→   949→                                  size="icon"
+   950→   950→                                  variant="ghost"
+   951→   951→                                  className="h-8 w-8 text-red-600 hover:bg-red-50"
+   952→   952→                                  onClick={() => {
+   953→   953→                                    setDeleteTarget(record)
+   954→   954→                                    setDeleteDialogOpen(true)
+   955→   955→                                  }}
+   956→   956→                                  title="حذف"
+   957→   957→                                >
+   958→   958→                                  <Trash2 className="w-4 h-4" />
+   959→   959→                                </Button>
+   960→   960→                              </div>
+   961→   961→                            </td>
+   962→   962→                          </tr>
+   963→   963→                        )
+   964→   964→                      })}
+   965→   965→                    </tbody>
+   966→   966→                  </table>
+   967→   967→                </div>
+   968→   968→              </CardContent>
+   969→   969→            </Card>
+   970→   970→          ) : (
+   971→   971→            <Card>
+   972→   972→              <CardContent className="p-12 text-center text-gray-500">
+   973→   973→                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+   974→   974→                <p>لا توجد سجلات حضور للفلاتر المحددة</p>
+   975→   975→              </CardContent>
+   976→   976→            </Card>
+   977→   977→          )}
+   978→   978→        </TabsContent>
+   979→   979→
+   980→   980→        {/* ===== Tab 3: Statistics ===== */}
+   981→   981→        <TabsContent value="stats" className="space-y-4">
+   982→   982→          <Card>
+   983→   983→            <CardHeader>
+   984→   984→              <CardTitle className="text-lg flex items-center gap-2">
+   985→   985→                <BarChart3 className="w-5 h-5" />
+   986→   986→                إحصائيات الحضور والغياب
+   987→   987→              </CardTitle>
+   988→   988→            </CardHeader>
+   989→   989→            <CardContent className="space-y-6">
+   990→   990→              {/* Period Selection */}
+   991→   991→              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   992→   992→                <div>
+   993→   993→                  <Label className="text-sm font-medium mb-1.5 block">الفصل</Label>
+   994→   994→                  <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
+   995→   995→                    <SelectTrigger>
+   996→   996→                      <SelectValue placeholder="اختر الفصل" />
+   997→   997→                    </SelectTrigger>
+   998→   998→                    <SelectContent>
+   999→   999→                      {classrooms.map(c => (
+  1000→  1000→                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+  1001→  1001→                      ))}
+  1002→  1002→                    </SelectContent>
+  1003→  1003→                  </Select>
+  1004→  1004→                </div>
+  1005→  1005→                <div>
+  1006→  1006→                  <Label className="text-sm font-medium mb-1.5 block">من تاريخ</Label>
+  1007→  1007→                  <Input
+  1008→  1008→                    type="date"
+  1009→  1009→                    value={selectedDate}
+  1010→  1010→                    onChange={e => setSelectedDate(e.target.value)}
+  1011→  1011→                  />
+  1012→  1012→                </div>
+  1013→  1013→                <div className="flex items-end">
+  1014→  1014→                  <Button
+  1015→  1015→                    onClick={async () => {
+  1016→  1016→                      if (!selectedSchoolId || !selectedClassroom) return
+  1017→  1017→                      setLoading(true)
+  1018→  1018→                      try {
+  1019→  1019→                        // Get current month range
+  1020→  1020→                        const d = new Date(selectedDate)
+  1021→  1021→                        const startOfMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  1022→  1022→                        const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
+  1023→  1023→
+  1024→  1024→                        const params = new URLSearchParams({
+  1025→  1025→                          schoolId: selectedSchoolId,
+  1026→  1026→                          classroomId: selectedClassroom,
+  1027→  1027→                          dateFrom: startOfMonth,
+  1028→  1028→                          dateTo: endOfMonth,
+  1029→  1029→                          includeStats: 'true',
+  1030→  1030→                        })
+  1031→  1031→                        const res = await fetch(`/api/attendance?${params}`)
+  1032→  1032→                        if (res.ok) {
+  1033→  1033→                          const data = await res.json()
+  1034→  1034→                          setHistoryRecords(data.records || [])
+  1035→  1035→                          setHistoryStats(data.stats || null)
+  1036→  1036→                        }
+  1037→  1037→                        setActiveTab('history')
+  1038→  1038→                      } catch {
+  1039→  1039→                        toast.error('خطأ في تحميل الإحصائيات')
+  1040→  1040→                      } finally {
+  1041→  1041→                        setLoading(false)
+  1042→  1042→                      }
+  1043→  1043→                    }}
+  1044→  1044→                    className="w-full bg-[#610000] hover:bg-[#7a0000]"
+  1045→  1045→                    disabled={!selectedClassroom}
+  1046→  1046→                  >
+  1047→  1047→                    <BarChart3 className="w-4 h-4 ml-2" />
+  1048→  1048→                    عرض الإحصائيات
+  1049→  1049→                  </Button>
+  1050→  1050→                </div>
+  1051→  1051→              </div>
+  1052→  1052→
+  1053→  1053→              {/* Quick Stats Cards */}
+  1054→  1054→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  1055→  1055→                <Card className="border-green-200">
+  1056→  1056→                  <CardContent className="p-6 text-center">
+  1057→  1057→                    <CheckCircle className="w-10 h-10 mx-auto mb-2 text-green-500" />
+  1058→  1058→                    <div className="text-3xl font-bold text-green-700">
+  1059→  1059→                      {historyStats?.present || 0}
+  1060→  1060→                    </div>
+  1061→  1061→                    <div className="text-sm text-green-600 mt-1">إجمالي الحضور</div>
+  1062→  1062→                  </CardContent>
+  1063→  1063→                </Card>
+  1064→  1064→                <Card className="border-red-200">
+  1065→  1065→                  <CardContent className="p-6 text-center">
+  1066→  1066→                    <XCircle className="w-10 h-10 mx-auto mb-2 text-red-500" />
+  1067→  1067→                    <div className="text-3xl font-bold text-red-700">
+  1068→  1068→                      {historyStats?.absent || 0}
+  1069→  1069→                    </div>
+  1070→  1070→                    <div className="text-sm text-red-600 mt-1">إجمالي الغياب</div>
+  1071→  1071→                  </CardContent>
+  1072→  1072→                </Card>
+  1073→  1073→                <Card className="border-yellow-200">
+  1074→  1074→                  <CardContent className="p-6 text-center">
+  1075→  1075→                    <Clock className="w-10 h-10 mx-auto mb-2 text-yellow-500" />
+  1076→  1076→                    <div className="text-3xl font-bold text-yellow-700">
+  1077→  1077→                      {historyStats?.late || 0}
+  1078→  1078→                    </div>
+  1079→  1079→                    <div className="text-sm text-yellow-600 mt-1">إجمالي التأخير</div>
+  1080→  1080→                  </CardContent>
+  1081→  1081→                </Card>
+  1082→  1082→                <Card className="border-orange-200">
+  1083→  1083→                  <CardContent className="p-6 text-center">
+  1084→  1084→                    <AlertTriangle className="w-10 h-10 mx-auto mb-2 text-orange-500" />
+  1085→  1085→                    <div className="text-3xl font-bold text-orange-700">
+  1086→  1086→                      {historyStats?.excused || 0}
+  1087→  1087→                    </div>
+  1088→  1088→                    <div className="text-sm text-orange-600 mt-1">غياب بعذر</div>
+  1089→  1089→                  </CardContent>
+  1090→  1090→                </Card>
+  1091→  1091→              </div>
+  1092→  1092→
+  1093→  1093→              {/* Progress Bars */}
+  1094→  1094→              {historyStats && historyStats.total > 0 && (
+  1095→  1095→                <Card>
+  1096→  1096→                  <CardContent className="p-6 space-y-4">
+  1097→  1097→                    <h3 className="font-semibold text-gray-700 mb-4">نسب الحضور والغياب</h3>
+  1098→  1098→                    <div className="space-y-3">
+  1099→  1099→                      <div>
+  1100→  1100→                        <div className="flex justify-between text-sm mb-1">
+  1101→  1101→                          <span className="text-green-700 font-medium">نسبة الحضور</span>
+  1102→  1102→                          <span className="font-bold text-green-700">{historyStats.presentRate}%</span>
+  1103→  1103→                        </div>
+  1104→  1104→                        <div className="w-full bg-gray-200 rounded-full h-3">
+  1105→  1105→                          <div
+  1106→  1106→                            className="bg-green-500 h-3 rounded-full transition-all duration-500"
+  1107→  1107→                            style={{ width: `${historyStats.presentRate}%` }}
+  1108→  1108→                          />
+  1109→  1109→                        </div>
+  1110→  1110→                      </div>
+  1111→  1111→                      <div>
+  1112→  1112→                        <div className="flex justify-between text-sm mb-1">
+  1113→  1113→                          <span className="text-red-700 font-medium">نسبة الغياب</span>
+  1114→  1114→                          <span className="font-bold text-red-700">{historyStats.absentRate}%</span>
+  1115→  1115→                        </div>
+  1116→  1116→                        <div className="w-full bg-gray-200 rounded-full h-3">
+  1117→  1117→                          <div
+  1118→  1118→                            className="bg-red-500 h-3 rounded-full transition-all duration-500"
+  1119→  1119→                            style={{ width: `${historyStats.absentRate}%` }}
+  1120→  1120→                          />
+  1121→  1121→                        </div>
+  1122→  1122→                      </div>
+  1123→  1123→                    </div>
+  1124→  1124→                  </CardContent>
+  1125→  1125→                </Card>
+  1126→  1126→              )}
+  1127→  1127→
+  1128→  1128→              {!historyStats && (
+  1129→  1129→                <div className="text-center py-12 text-gray-500">
+  1130→  1130→                  <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+  1131→  1131→                  <p>اختر الفصل والفترة الزمنية لعرض الإحصائيات</p>
+  1132→  1132→                </div>
+  1133→  1133→              )}
+  1134→  1134→            </CardContent>
+  1135→  1135→          </Card>
+  1136→  1136→        </TabsContent>
+  1137→  1137→      </Tabs>
+  1138→  1138→
+  1139→  1139→      {/* ===== Student History Dialog ===== */}
+  1140→  1140→      <Dialog open={studentHistoryOpen} onOpenChange={setStudentHistoryOpen}>
+  1141→  1141→        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+  1142→  1142→          <DialogHeader>
+  1143→  1143→            <DialogTitle className="flex items-center gap-2">
+  1144→  1144→              <Calendar className="w-5 h-5 text-[#610000]" />
+  1145→  1145→              سجل حضور وغياب: {selectedStudent?.name}
+  1146→  1146→            </DialogTitle>
+  1147→  1147→            <DialogDescription>
+  1148→  1148→              رقم الطالب: {selectedStudent?.studentNumber} | الفصل: {selectedStudent?.classroom?.name || '-'}
+  1149→  1149→            </DialogDescription>
+  1150→  1150→          </DialogHeader>
+  1151→  1151→
+  1152→  1152→          {/* Month/Year Navigation */}
+  1153→  1153→          <div className="flex items-center justify-between gap-3 mb-4">
+  1154→  1154→            <Button
+  1155→  1155→              variant="outline"
+  1156→  1156→              size="sm"
+  1157→  1157→              onClick={() => {
+  1158→  1158→                const newMonth = studentHistoryMonth === 0 ? 11 : studentHistoryMonth - 1
+  1159→  1159→                const newYear = studentHistoryMonth === 0 ? studentHistoryYear - 1 : studentHistoryYear
+  1160→  1160→                setStudentHistoryMonth(newMonth)
+  1161→  1161→                setStudentHistoryYear(newYear)
+  1162→  1162→              }}
+  1163→  1163→            >
+  1164→  1164→              <ChevronRight className="w-4 h-4" />
+  1165→  1165→            </Button>
+  1166→  1166→            <div className="text-center font-semibold text-[#1a1a2e]">
+  1167→  1167→              {arabicMonths[studentHistoryMonth]} {studentHistoryYear}
+  1168→  1168→            </div>
+  1169→  1169→            <Button
+  1170→  1170→              variant="outline"
+  1171→  1171→              size="sm"
+  1172→  1172→              onClick={() => {
+  1173→  1173→                const newMonth = studentHistoryMonth === 11 ? 0 : studentHistoryMonth + 1
+  1174→  1174→                const newYear = studentHistoryMonth === 11 ? studentHistoryYear + 1 : studentHistoryYear
+  1175→  1175→                setStudentHistoryMonth(newMonth)
+  1176→  1176→                setStudentHistoryYear(newYear)
+  1177→  1177→              }}
+  1178→  1178→            >
+  1179→  1179→              <ChevronLeft className="w-4 h-4" />
+  1180→  1180→            </Button>
+  1181→  1181→          </div>
+  1182→  1182→
+  1183→  1183→          {/* Calendar View */}
+  1184→  1184→          <div className="mb-4">
+  1185→  1185→            <div className="grid grid-cols-7 gap-1 mb-1">
+  1186→  1186→              {weekDays.map(day => (
+  1187→  1187→                <div key={day} className="text-center text-xs font-medium text-gray-500 py-1">
+  1188→  1188→                  {day}
+  1189→  1189→                </div>
+  1190→  1190→              ))}
+  1191→  1191→            </div>
+  1192→  1192→            <div className="grid grid-cols-7 gap-1">
+  1193→  1193→              {calendarDays.map((cd, idx) => (
+  1194→  1194→                <div
+  1195→  1195→                  key={idx}
+  1196→  1196→                  className={`aspect-square flex items-center justify-center rounded-md text-sm font-medium ${
+  1197→  1197→                    !cd.isCurrentMonth
+  1198→  1198→                      ? ''
+  1199→  1199→                      : cd.status === 'حاضر'
+  1200→  1200→                        ? 'bg-green-100 text-green-700 border border-green-300'
+  1201→  1201→                        : cd.status === 'غائب'
+  1202→  1202→                          ? 'bg-red-100 text-red-700 border border-red-300'
+  1203→  1203→                          : cd.status === 'متأخر'
+  1204→  1204→                            ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+  1205→  1205→                            : cd.status === 'غائب بعذر'
+  1206→  1206→                              ? 'bg-orange-100 text-orange-700 border border-orange-300'
+  1207→  1207→                              : 'bg-gray-50 text-gray-500 border border-gray-200'
+  1208→  1208→                  }`}
+  1209→  1209→                >
+  1210→  1210→                  {cd.day > 0 ? cd.day : ''}
+  1211→  1211→                </div>
+  1212→  1212→              ))}
+  1213→  1213→            </div>
+  1214→  1214→
+  1215→  1215→            {/* Calendar Legend */}
+  1216→  1216→            <div className="flex flex-wrap items-center gap-4 mt-3 text-xs">
+  1217→  1217→              <div className="flex items-center gap-1">
+  1218→  1218→                <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
+  1219→  1219→                <span className="text-gray-600">حاضر</span>
+  1220→  1220→              </div>
+  1221→  1221→              <div className="flex items-center gap-1">
+  1222→  1222→                <div className="w-3 h-3 rounded bg-red-100 border border-red-300" />
+  1223→  1223→                <span className="text-gray-600">غائب</span>
+  1224→  1224→              </div>
+  1225→  1225→              <div className="flex items-center gap-1">
+  1226→  1226→                <div className="w-3 h-3 rounded bg-yellow-100 border border-yellow-300" />
+  1227→  1227→                <span className="text-gray-600">متأخر</span>
+  1228→  1228→              </div>
+  1229→  1229→              <div className="flex items-center gap-1">
+  1230→  1230→                <div className="w-3 h-3 rounded bg-orange-100 border border-orange-300" />
+  1231→  1231→                <span className="text-gray-600">غائب بعذر</span>
+  1232→  1232→              </div>
+  1233→  1233→              <div className="flex items-center gap-1">
+  1234→  1234→                <div className="w-3 h-3 rounded bg-gray-50 border border-gray-200" />
+  1235→  1235→                <span className="text-gray-600">لم يُسجل</span>
+  1236→  1236→              </div>
+  1237→  1237→            </div>
+  1238→  1238→          </div>
+  1239→  1239→
+  1240→  1240→          {/* Detailed Records Table */}
+  1241→  1241→          {studentHistoryLoading ? (
+  1242→  1242→            <div className="space-y-2">
+  1243→  1243→              {[...Array(3)].map((_, i) => (
+  1244→  1244→                <Skeleton key={i} className="h-10 w-full" />
+  1245→  1245→              ))}
+  1246→  1246→            </div>
+  1247→  1247→          ) : studentHistoryRecords.length > 0 ? (
+  1248→  1248→            <div className="overflow-x-auto">
+  1249→  1249→              <table className="w-full text-sm">
+  1250→  1250→                <thead>
+  1251→  1251→                  <tr className="border-b bg-gray-50">
+  1252→  1252→                    <th className="text-right p-2 font-medium text-gray-600">التاريخ</th>
+  1253→  1253→                    <th className="text-center p-2 font-medium text-gray-600">الحالة</th>
+  1254→  1254→                    <th className="text-center p-2 font-medium text-gray-600">وقت الحضور</th>
+  1255→  1255→                    <th className="text-right p-2 font-medium text-gray-600">ملاحظات</th>
+  1256→  1256→                  </tr>
+  1257→  1257→                </thead>
+  1258→  1258→                <tbody>
+  1259→  1259→                  {studentHistoryRecords.map(record => {
+  1260→  1260→                    const config = statusConfig[record.status] || statusConfig['حاضر']
+  1261→  1261→                    const dateObj = new Date(record.date)
+  1262→  1262→                    const dayName = weekDays[dateObj.getDay()]
+  1263→  1263→                    return (
+  1264→  1264→                      <tr key={record.id} className="border-b">
+  1265→  1265→                        <td className="p-2">
+  1266→  1266→                          <div className="font-medium">{dateObj.getDate()}/{dateObj.getMonth() + 1}</div>
+  1267→  1267→                          <div className="text-xs text-gray-400">{dayName}</div>
+  1268→  1268→                        </td>
+  1269→  1269→                        <td className="p-2 text-center">
+  1270→  1270→                          <Badge className={`${config.bgColor} ${config.color} border text-xs`}>
+  1271→  1271→                            {config.label}
+  1272→  1272→                          </Badge>
+  1273→  1273→                        </td>
+  1274→  1274→                        <td className="p-2 text-center text-gray-500">
+  1275→  1275→                          {record.arrivalTime || '-'}
+  1276→  1276→                        </td>
+  1277→  1277→                        <td className="p-2 text-gray-500">
+  1278→  1278→                          {record.notes || '-'}
+  1279→  1279→                        </td>
+  1280→  1280→                      </tr>
+  1281→  1281→                    )
+  1282→  1282→                  })}
+  1283→  1283→                </tbody>
+  1284→  1284→              </table>
+  1285→  1285→            </div>
+  1286→  1286→          ) : (
+  1287→  1287→            <div className="text-center py-8 text-gray-500">
+  1288→  1288→              <Calendar className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+  1289→  1289→              <p>لا توجد سجلات لهذا الشهر</p>
+  1290→  1290→            </div>
+  1291→  1291→          )}
+  1292→  1292→
+  1293→  1293→          {/* Fetch Button */}
+  1294→  1294→          <Button
+  1295→  1295→            onClick={() => {
+  1296→  1296→              if (selectedStudent) loadStudentHistory(selectedStudent.id)
+  1297→  1297→            }}
+  1298→  1298→            variant="outline"
+  1299→  1299→            className="w-full"
+  1300→  1300→            disabled={studentHistoryLoading}
+  1301→  1301→          >
+  1302→  1302→            {studentHistoryLoading ? (
+  1303→  1303→              <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+  1304→  1304→            ) : (
+  1305→  1305→              <RefreshCw className="w-4 h-4 ml-2" />
+  1306→  1306→            )}
+  1307→  1307→            تحديث السجل
+  1308→  1308→          </Button>
+  1309→  1309→        </DialogContent>
+  1310→  1310→      </Dialog>
+  1311→  1311→
+  1312→  1312→      {/* ===== Delete Confirmation Dialog ===== */}
+  1313→  1313→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1314→  1314→        <DialogContent className="max-w-md">
+  1315→  1315→          <DialogHeader>
+  1316→  1316→            <DialogTitle className="flex items-center gap-2 text-red-600">
+  1317→  1317→              <Trash2 className="w-5 h-5" />
+  1318→  1318→              تأكيد الحذف
+  1319→  1319→            </DialogTitle>
+  1320→  1320→            <DialogDescription>
+  1321→  1321→              هل أنت متأكد من حذف سجل الحضور للطالب &quot;{deleteTarget?.student.name}&quot; بتاريخ{' '}
+  1322→  1322→              {deleteTarget ? new Date(deleteTarget.date).toLocaleDateString('ar-EG') : ''}؟
+  1323→  1323→            </DialogDescription>
+  1324→  1324→          </DialogHeader>
+  1325→  1325→          <div className="flex justify-end gap-3 mt-4">
+  1326→  1326→            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+  1327→  1327→              إلغاء
+  1328→  1328→            </Button>
+  1329→  1329→            <Button
+  1330→  1330→              variant="destructive"
+  1331→  1331→              onClick={handleDeleteRecord}
+  1332→  1332→              disabled={deleting}
+  1333→  1333→            >
+  1334→  1334→              {deleting ? (
+  1335→  1335→                <RefreshCw className="w-4 h-4 ml-2 animate-spin" />
+  1336→  1336→              ) : (
+  1337→  1337→                <Trash2 className="w-4 h-4 ml-2" />
+  1338→  1338→              )}
+  1339→  1339→              حذف
+  1340→  1340→            </Button>
+  1341→  1341→          </div>
+  1342→  1342→        </DialogContent>
+  1343→  1343→      </Dialog>
+  1344→  1344→    </div>
+  1345→  1345→  )
+  1346→  1346→}
+  1347→  1347→

@@ -1,0 +1,866 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+     4→import dynamic from 'next/dynamic'
+     5→import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+     6→import { useAdminStore } from '@/lib/admin-store'
+     7→
+     8→// Lazy-loaded sub-pages - only compiled when visited
+     9→const PageLoader = () => (
+    10→  <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f5f5f5' }}>
+    11→    <div className="w-10 h-10 border-4 border-[#610000] border-t-transparent rounded-full animate-spin" />
+    12→  </div>
+    13→)
+    14→
+    15→const AdminLayout = dynamic(() => import('@/components/admin/admin-layout').then(m => ({ default: m.AdminLayout })), { loading: PageLoader })
+    16→const AdminLogin = dynamic(() => import('@/components/admin/admin-login').then(m => ({ default: m.AdminLogin })))
+    17→const StudentLifePage = dynamic(() => import('@/components/student-life-page'), { loading: PageLoader })
+    18→const ResultsPage = dynamic(() => import('@/components/results-page'), { loading: PageLoader })
+    19→const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
+    20→const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
+    21→const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
+    22→const TeacherExamsPage = dynamic(() => import('@/components/teacher-exams-page'), { loading: PageLoader })
+    23→const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
+    24→
+    25→// ===== Types =====
+    26→interface SchoolData {
+    27→  school: {
+    28→    id: string; name: string; subdomain: string; description: string
+    29→    logoUrl: string | null; primaryColor: string; secondaryColor: string
+    30→    address: string; phone: string; email: string; facebookUrl: string | null; mapEmbedUrl: string | null; isActive: boolean
+    31→  }
+    32→  settings: {
+    33→    heroTitle: string; heroSubtitle: string; bannerTitle: string | null; bannerImageUrl: string | null
+    34→    vision: string | null; aboutImage: string | null; aboutVideoUrl: string | null
+    35→    showNewsTicker: boolean; showHeroBanner: boolean; showLiveStream: boolean; liveStreamUrl: string | null
+    36→    facebookUrl: string | null; youtubeUrl: string | null
+    37→    showSlider: boolean; showAbout: boolean; showNews: boolean; showServices: boolean
+    38→    showGallery: boolean; showTeachers: boolean; showStats: boolean; showContact: boolean
+    39→    developerName: string; developerPhoto: string | null
+    40→  } | null
+    41→  stats: { students: number; teachers: number; classes: number; years: number } | null
+    42→}
+    43→
+    44→interface NewsItem {
+    45→  id: string; title: string; excerpt: string | null; image: string | null
+    46→  category: string; active: boolean; createdAt: string
+    47→}
+    48→
+    49→interface GalleryItem { id: string; title: string | null; imageUrl: string }
+    50→interface Teacher { id: string; name: string; subject: string; email: string | null; imageUrl: string | null }
+    51→interface SliderItem { id: string; imageUrl: string; title: string | null; subtitle: string | null; active: boolean }
+    52→interface CustomSectionItem { id: string; title: string; content: string; imageUrl: string | null; layout: string; active: boolean; sortOrder: number }
+    53→
+    54→const defaultSchoolData: SchoolData = {
+    55→  school: {
+    56→    id: 'demo', name: 'المدرسة الإعدادية النموذجية', subdomain: 'demo',
+    57→    description: 'مدرسة رائدة في التعليم الإعدادي', logoUrl: null,
+    58→    primaryColor: '#610000', secondaryColor: '#009688',
+    59→    address: 'الشارع الرئيسي، المدينة', phone: '0123456789',
+    60→    email: 'info@school.edu', facebookUrl: null, mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d110502.76718827617!2d31.66512595!3d26.5593145!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x144f1f9b6c3e3fd5%3A0x8e5e3e0a1e0e2e0e!2sSohag%2C%20Egypt!5e0!3m2!1sar!2seg!4v1700000000000!5m2!1sar!2seg',
+    61→    isActive: true,
+    62→  },
+    63→  settings: {
+    64→    heroTitle: 'المدرسة الإعدادية النموذجية', heroSubtitle: 'نحو تعليم متميز ومستقبل مشرق',
+    65→    bannerTitle: 'مرحباً بكم', bannerImageUrl: null, vision: null,
+    66→    aboutImage: null, aboutVideoUrl: null, showNewsTicker: true,
+    67→    showHeroBanner: true, showLiveStream: false, liveStreamUrl: null,
+    68→    facebookUrl: null, youtubeUrl: null, showSlider: true, showAbout: true,
+    69→    showNews: true, showServices: true, showGallery: true, showTeachers: true,
+    70→    showStats: true, showContact: true, developerName: 'محروس شعبان', developerPhoto: null,
+    71→  },
+    72→  stats: { students: 0, teachers: 0, classes: 0, years: 0 },
+    73→}
+    74→
+    75→const navLinks = [
+    76→  { label: 'الرئيسية', href: '#' },
+    77→  { label: 'من نحن', href: '#welcome' },
+    78→  { label: 'أحدث الأخبار', href: '#news' },
+    79→  { label: 'الخدمات الإلكترونية', href: '#services', isServices: true },
+    80→  { label: 'الحياة الطلابية', href: '#student-life', isStudentLife: true },
+    81→  { label: 'معرض الصور', href: '#gallery' },
+    82→  { label: 'اتصل بنا', href: '#contact' },
+    83→]
+    84→
+    85→const serviceItems = [
+    86→  { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
+    87→  { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
+    88→  { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
+    89→  { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
+    90→  { label: 'امتحانات المعلم', icon: '🎓', action: 'teacher-exams' },
+    91→]
+    92→
+    93→// ===== Main Component =====
+    94→export default function HomePageWrapper() {
+    95→  return (
+    96→    <Suspense fallback={<PageLoader />}>
+    97→      <HomePage />
+    98→    </Suspense>
+    99→  )
+   100→}
+   101→
+   102→function HomePage() {
+   103→  const { isAdminMode, selectedSchoolId, setSelectedSchoolId, setSchools, _hasHydrated } = useAdminStore()
+   104→  const searchParams = useSearchParams()
+   105→  const router = useRouter()
+   106→  const pathname = usePathname()
+   107→  const urlSubdomain = searchParams.get('school')
+   108→  const hasAppliedUrlSchool = useRef(false)
+   109→
+   110→  const [schoolData, setSchoolData] = useState<SchoolData | null>(null)
+   111→  const [news, setNews] = useState<NewsItem[]>([])
+   112→  const [gallery, setGallery] = useState<GalleryItem[]>([])
+   113→  const [teachers, setTeachers] = useState<Teacher[]>([])
+   114→  const [sliders, setSliders] = useState<SliderItem[]>([])
+   115→  const [customSections, setCustomSections] = useState<CustomSectionItem[]>([])
+   116→  const [loading, setLoading] = useState(true)
+   117→  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+   118→  const [servicesOpen, setServicesOpen] = useState(false)
+   119→  const [showAdminLogin, setShowAdminLogin] = useState(false)
+   120→  const [showResultsPage, setShowResultsPage] = useState(false)
+   121→  const [showStudentLife, setShowStudentLife] = useState(false)
+   122→  const [showSchedulesPage, setShowSchedulesPage] = useState(false)
+   123→  const [showLibraryPage, setShowLibraryPage] = useState(false)
+   124→  const [showParentsPage, setShowParentsPage] = useState(false)
+   125→  const [showTeacherExamsPage, setShowTeacherExamsPage] = useState(false)
+   126→  const [showScrollTop, setShowScrollTop] = useState(false)
+   127→  const [currentSlide, setCurrentSlide] = useState(0)
+   128→  const logoClickCount = useRef(0)
+   129→  const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+   130→
+   131→  const hydrated = _hasHydrated
+   132→
+   133→  // Resolve school from subdomain only (not from store's school list)
+   134→  useEffect(() => {
+   135→    if (!hydrated) return
+   136→    let cancelled = false
+   137→    async function resolveSchool() {
+   138→      try {
+   139→        if (urlSubdomain) {
+   140→          // If subdomain is in URL, fetch by subdomain
+   141→          const res = await fetch(`/api/school/by-subdomain?subdomain=${urlSubdomain}`)
+   142→          if (res.ok && !cancelled) {
+   143→            const data = await res.json()
+   144→            if (data.school) {
+   145→              setSchoolData(data)
+   146→              setSelectedSchoolId(data.school.id)
+   147→              return
+   148→            }
+   149→          }
+   150→        }
+   151→        // No subdomain in URL — fetch first available school
+   152→        const schoolsRes = await fetch('/api/schools')
+   153→        if (schoolsRes.ok && !cancelled) {
+   154→          const schoolsList = await schoolsRes.json()
+   155→          if (Array.isArray(schoolsList) && schoolsList.length > 0) {
+   156→            setSchools(schoolsList)
+   157→            const firstSchool = schoolsList[0]
+   158→            // Fetch full data for the first school
+   159→            const res = await fetch(`/api/school?schoolId=${firstSchool.id}`)
+   160→            if (res.ok && !cancelled) {
+   161→              const data = await res.json()
+   162→              if (data.school) {
+   163→                setSchoolData(data)
+   164→                setSelectedSchoolId(data.school.id)
+   165→              }
+   166→            }
+   167→          }
+   168→        }
+   169→      } catch {
+   170→        // fallback to default data
+   171→      }
+   172→    }
+   173→    resolveSchool()
+   174→    return () => { cancelled = true }
+   175→  }, [hydrated, urlSubdomain, setSelectedSchoolId, setSchools])
+   176→
+   177→  // Fetch content for selected school
+   178→  useEffect(() => {
+   179→    if (!hydrated || !selectedSchoolId) return
+   180→    let cancelled = false
+   181→    const sid = selectedSchoolId
+   182→    async function loadData() {
+   183→      setLoading(true)
+   184→      try {
+   185→        const [newsRes, galleryRes, teachersRes, slidersRes, csRes] = await Promise.allSettled([
+   186→          fetch(`/api/news?limit=10&schoolId=${sid}`),
+   187→          fetch(`/api/gallery?limit=8&schoolId=${sid}`),
+   188→          fetch(`/api/teachers?schoolId=${sid}`),
+   189→          fetch(`/api/sliders?schoolId=${sid}`),
+   190→          fetch(`/api/custom-sections?schoolId=${sid}`),
+   191→        ])
+   192→        if (cancelled) return
+   193→        if (newsRes.status === 'fulfilled' && newsRes.value.ok) {
+   194→          const d = await newsRes.value.json()
+   195→          if (Array.isArray(d) && !cancelled) setNews(d)
+   196→        }
+   197→        if (galleryRes.status === 'fulfilled' && galleryRes.value.ok) {
+   198→          const d = await galleryRes.value.json()
+   199→          if (Array.isArray(d) && !cancelled) setGallery(d)
+   200→        }
+   201→        if (teachersRes.status === 'fulfilled' && teachersRes.value.ok) {
+   202→          const d = await teachersRes.value.json()
+   203→          if (Array.isArray(d) && !cancelled) setTeachers(d)
+   204→        }
+   205→        if (slidersRes.status === 'fulfilled' && slidersRes.value.ok) {
+   206→          const d = await slidersRes.value.json()
+   207→          if (Array.isArray(d) && !cancelled) setSliders(d)
+   208→        }
+   209→        if (csRes.status === 'fulfilled' && csRes.value.ok) {
+   210→          const d = await csRes.value.json()
+   211→          if (Array.isArray(d) && !cancelled) setCustomSections(d)
+   212→        }
+   213→      } catch {
+   214→        // silently fail
+   215→      } finally {
+   216→        if (!cancelled) setLoading(false)
+   217→      }
+   218→    }
+   219→    loadData()
+   220→    return () => { cancelled = true }
+   221→  }, [selectedSchoolId, hydrated])
+   222→
+   223→  // Auto-rotate slider
+   224→  const activeSliders = sliders.filter(s => s.active)
+   225→  const newsWithImage = news.filter(n => n.image).slice(0, 5)
+   226→  const slideItems = activeSliders.length > 0 ? activeSliders : newsWithImage
+   227→  useEffect(() => {
+   228→    if (slideItems.length <= 1) return
+   229→    const timer = setInterval(() => setCurrentSlide(i => (i + 1) % slideItems.length), 5000)
+   230→    return () => clearInterval(timer)
+   231→  }, [slideItems.length])
+   232→
+   233→  // Scroll to top
+   234→  useEffect(() => {
+   235→    const h = () => setShowScrollTop(window.scrollY > 500)
+   236→    window.addEventListener('scroll', h)
+   237→    return () => window.removeEventListener('scroll', h)
+   238→  }, [])
+   239→
+   240→  const handleLogoClick = useCallback(() => {
+   241→    logoClickCount.current += 1
+   242→    if (logoClickTimer.current) clearTimeout(logoClickTimer.current)
+   243→    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0 }, 3000)
+   244→    if (logoClickCount.current >= 5) { logoClickCount.current = 0; setShowAdminLogin(true) }
+   245→  }, [])
+   246→
+   247→  const handleServiceAction = (action: string) => {
+   248→    setServicesOpen(false); setMobileMenuOpen(false)
+   249→    if (action === 'results') setShowResultsPage(true)
+   250→    if (action === 'schedules') setShowSchedulesPage(true)
+   251→    if (action === 'library') setShowLibraryPage(true)
+   252→    if (action === 'parents') setShowParentsPage(true)
+   253→    if (action === 'teacher-exams') setShowTeacherExamsPage(true)
+   254→  }
+   255→
+   256→  const school = schoolData?.school || defaultSchoolData.school
+   257→  const settings = schoolData?.settings || defaultSchoolData.settings
+   258→  const stats = schoolData?.stats || defaultSchoolData.stats
+   259→  const alertNews = news.filter(n => n.category === 'تنبيه')
+   260→
+   261→  // Build ticker text for seamless scrolling
+   262→  const tickerText = news.map(item => item.title).join('     ◆     ')
+   263→
+   264→  // Sub-page rendering
+   265→  if (isAdminMode) return <AdminLayout />
+   266→  if (showStudentLife) return <StudentLifePage onBack={() => setShowStudentLife(false)} />
+   267→  if (showResultsPage) return <ResultsPage onBack={() => setShowResultsPage(false)} schoolId={selectedSchoolId} />
+   268→  if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
+   269→  if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
+   270→  if (showParentsPage) return <ParentsPortalPage onBack={() => setShowParentsPage(false)} schoolId={selectedSchoolId} />
+   271→  if (showTeacherExamsPage) return <TeacherExamsPage onBack={() => setShowTeacherExamsPage(false)} schoolId={selectedSchoolId} />
+   272→
+   273→  if (!hydrated) {
+   274→    return (
+   275→      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f5f5f5' }}>
+   276→        <div className="text-center">
+   277→          <div className="w-10 h-10 border-4 border-[#610000] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+   278→          <p className="text-gray-500 text-sm">جاري التحميل...</p>
+   279→        </div>
+   280→      </div>
+   281→    )
+   282→  }
+   283→
+   284→  return (
+   285→    <div className="min-h-screen flex flex-col" dir="rtl">
+   286→
+   287→      {/* ===== STICKY TOP ===== */}
+   288→      <div className="sticky top-0 z-50 shadow-lg">
+   289→        {/* Top Bar - Contact info only, NO school switcher for visitors */}
+   290→        <div style={{ backgroundColor: school.primaryColor }} className="text-white text-xs">
+   291→          <div className="max-w-[1280px] mx-auto px-4 py-1.5 flex items-center justify-between">
+   292→            <div className="flex items-center gap-4">
+   293→              {school.phone && <a href={`tel:${school.phone}`} className="hover:opacity-80 flex items-center gap-1">📞 {school.phone}</a>}
+   294→              {school.email && <a href={`mailto:${school.email}`} className="hover:opacity-80 flex items-center gap-1">✉️ {school.email}</a>}
+   295→            </div>
+   296→            <div className="flex items-center gap-2">
+   297→              {school.facebookUrl && (
+   298→                <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">📘</a>
+   299→              )}
+   300→              {settings?.youtubeUrl && (
+   301→                <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">📺</a>
+   302→              )}
+   303→            </div>
+   304→          </div>
+   305→        </div>
+   306→
+   307→        {/* Header */}
+   308→        <header className="bg-white shadow-sm">
+   309→          <div className="max-w-[1280px] mx-auto px-4 py-2 flex items-center gap-3">
+   310→            <div onClick={handleLogoClick} className="cursor-pointer shrink-0" title="اضغط 5 مرات للإدارة">
+   311→              {school.logoUrl ? (
+   312→                <img src={school.logoUrl} alt={school.name} className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: school.primaryColor }} />
+   313→              ) : (
+   314→                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl" style={{ backgroundColor: school.primaryColor }}>🏫</div>
+   315→              )}
+   316→            </div>
+   317→            <div className="flex-1 min-w-0">
+   318→              <h1 className="text-base md:text-xl font-bold truncate" style={{ color: school.primaryColor }}>{school.name}</h1>
+   319→              {settings?.heroSubtitle && <p className="text-xs text-gray-500 truncate">{settings.heroSubtitle}</p>}
+   320→            </div>
+   321→            <button className="lg:hidden p-2 text-2xl text-gray-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+   322→              {mobileMenuOpen ? '✕' : '☰'}
+   323→            </button>
+   324→          </div>
+   325→        </header>
+   326→
+   327→        {/* Navigation */}
+   328→        <nav style={{ backgroundColor: '#1a2332' }} className="text-white shadow-lg">
+   329→          <div className="max-w-[1280px] mx-auto px-4">
+   330→            {/* Desktop Nav */}
+   331→            <div className="hidden lg:flex items-center h-11">
+   332→              {navLinks.map((link) => (
+   333→                link.isServices ? (
+   334→                  <div key={link.href} className="relative" onMouseEnter={() => setServicesOpen(true)} onMouseLeave={() => setServicesOpen(false)}>
+   335→                    <button className="px-5 h-full text-sm font-medium hover:bg-white/10 flex items-center gap-1 transition-colors">
+   336→                      {link.label} ▾
+   337→                    </button>
+   338→                    {servicesOpen && (
+   339→                      <div className="absolute top-full right-0 bg-white rounded-lg shadow-xl border min-w-[220px] z-50 overflow-hidden">
+   340→                        {serviceItems.map(item => (
+   341→                          <button key={item.action} onClick={() => handleServiceAction(item.action)}
+   342→                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+   343→                            <span className="text-lg">{item.icon}</span> {item.label}
+   344→                          </button>
+   345→                        ))}
+   346→                      </div>
+   347→                    )}
+   348→                  </div>
+   349→                ) : (
+   350→                  <a key={link.href} href={link.isStudentLife ? undefined : link.href}
+   351→                    onClick={link.isStudentLife ? (e) => { e.preventDefault(); setShowStudentLife(true) } : undefined}
+   352→                    className="px-5 h-full text-sm font-medium hover:bg-white/10 flex items-center transition-colors">
+   353→                    {link.label}
+   354→                  </a>
+   355→                )
+   356→              ))}
+   357→            </div>
+   358→            {/* Mobile Nav */}
+   359→            {mobileMenuOpen && (
+   360→              <div className="lg:hidden py-2 border-t border-white/10">
+   361→                {navLinks.map((link) => (
+   362→                  link.isServices ? (
+   363→                    <div key={link.href}>
+   364→                      <div className="px-4 py-2 text-sm font-medium text-white/70">{link.label}</div>
+   365→                      {serviceItems.map(item => (
+   366→                        <button key={item.action} onClick={() => handleServiceAction(item.action)}
+   367→                          className="w-full flex items-center gap-2 px-8 py-2 text-sm text-white/80 hover:bg-white/10">
+   368→                          <span>{item.icon}</span> {item.label}
+   369→                        </button>
+   370→                      ))}
+   371→                    </div>
+   372→                  ) : (
+   373→                    <a key={link.href} href={link.isStudentLife ? undefined : link.href}
+   374→                      onClick={link.isStudentLife ? (e) => { e.preventDefault(); setShowStudentLife(true); setMobileMenuOpen(false) } : () => setMobileMenuOpen(false)}
+   375→                      className="block px-4 py-2 text-sm hover:bg-white/10">{link.label}</a>
+   376→                  )
+   377→                ))}
+   378→              </div>
+   379→            )}
+   380→          </div>
+   381→        </nav>
+   382→
+   383→        {/* News Ticker - Seamless scrolling */}
+   384→        {settings?.showNewsTicker && news.length > 0 && (
+   385→          <div className="bg-gray-100 border-b overflow-hidden">
+   386→            <div className="flex items-center">
+   387→              <span className="bg-red-600 text-white px-4 py-2 text-xs font-bold shrink-0 flex items-center gap-1 z-10">
+   388→                🔴 عاجل
+   389→              </span>
+   390→              <div className="overflow-hidden flex-1 relative">
+   391→                <div className="animate-news-ticker-scroll whitespace-nowrap py-2">
+   392→                  {/* Duplicate content for seamless loop */}
+   393→                  <span className="inline-block text-sm mx-4">
+   394→                    {tickerText}
+   395→                  </span>
+   396→                  <span className="inline-block text-sm mx-4">
+   397→                    {tickerText}
+   398→                  </span>
+   399→                </div>
+   400→              </div>
+   401→            </div>
+   402→          </div>
+   403→        )}
+   404→      </div>
+   405→
+   406→      {/* ===== MAIN CONTENT ===== */}
+   407→      <main className="flex-1">
+   408→        {/* Hero Slider */}
+   409→        {(settings?.showSlider ?? true) && (
+   410→          <section className="max-w-[1280px] mx-auto px-4 py-6">
+   411→            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+   412→              <div className="md:col-span-7 rounded-lg overflow-hidden shadow-lg relative h-[300px] md:h-[400px] bg-gray-200">
+   413→                {loading ? (
+   414→                  <div className="w-full h-full flex items-center justify-center text-gray-400">جاري التحميل...</div>
+   415→                ) : slideItems.length > 0 ? (
+   416→                  <>
+   417→                    <img
+   418→                      src={'imageUrl' in slideItems[currentSlide] ? (slideItems[currentSlide] as SliderItem).imageUrl : (slideItems[currentSlide] as NewsItem).image || ''}
+   419→                      alt={'title' in slideItems[currentSlide] ? slideItems[currentSlide].title || '' : ''}
+   420→                      className="w-full h-full object-cover transition-opacity duration-500"
+   421→                    />
+   422→                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+   423→                    <div className="absolute bottom-0 right-0 left-0 p-5">
+   424→                      <h2 className="text-lg md:text-xl font-bold text-white mb-1">{slideItems[currentSlide].title}</h2>
+   425→                      {'subtitle' in slideItems[currentSlide] && (slideItems[currentSlide] as SliderItem).subtitle && (
+   426→                        <p className="text-white/70 text-sm">{(slideItems[currentSlide] as SliderItem).subtitle}</p>
+   427→                      )}
+   428→                    </div>
+   429→                    {slideItems.length > 1 && (
+   430→                      <div className="absolute bottom-4 left-4 flex gap-1.5">
+   431→                        {slideItems.map((_, i) => (
+   432→                          <button key={i} onClick={() => setCurrentSlide(i)}
+   433→                            className={`w-2.5 h-2.5 rounded-full transition-colors ${i === currentSlide ? 'bg-white' : 'bg-white/50'}`} />
+   434→                        ))}
+   435→                      </div>
+   436→                    )}
+   437→                  </>
+   438→                ) : (
+   439→                  <div className="w-full h-full flex items-center justify-center text-white relative overflow-hidden" style={{ backgroundColor: school.primaryColor }}>
+   440→                    <div className="absolute inset-0 opacity-10">
+   441→                      <div className="absolute top-10 right-10 w-40 h-40 rounded-full bg-white/20" />
+   442→                      <div className="absolute bottom-10 left-10 w-60 h-60 rounded-full bg-white/10" />
+   443→                    </div>
+   444→                    <div className="text-center px-4 relative z-10">
+   445→                      <h2 className="text-2xl md:text-4xl font-bold mb-2">{settings?.heroTitle || school.name}</h2>
+   446→                      <p className="text-white/80 text-lg">{settings?.heroSubtitle || 'نحو تعليم متميز'}</p>
+   447→                      <button className="mt-4 px-6 py-2 bg-white/20 rounded-lg text-white hover:bg-white/30 transition-colors">
+   448→                        اكتشف المزيد
+   449→                      </button>
+   450→                    </div>
+   451→                  </div>
+   452→                )}
+   453→              </div>
+   454→              {/* Headlines - side by side with Alerts */}
+   455→              <div className="md:col-span-3 bg-white rounded-lg shadow-md overflow-hidden h-[300px] md:h-[400px] flex flex-col">
+   456→                <div className="px-3 py-2.5 text-white font-bold text-sm flex items-center gap-1" style={{ backgroundColor: school.primaryColor }}>
+   457→                  📰 العناوين
+   458→                </div>
+   459→                <div className="flex-1 overflow-y-auto p-2">
+   460→                  {slideItems.length > 0 ? slideItems.map((item, i) => (
+   461→                    <button key={item.id} onClick={() => setCurrentSlide(i)}
+   462→                      className={`w-full text-right px-3 py-2 rounded-md mb-1 transition-colors text-xs ${
+   463→                        i === currentSlide ? 'text-white shadow-sm' : 'hover:bg-gray-100'
+   464→                      }`} style={i === currentSlide ? { backgroundColor: school.primaryColor } : {}}>
+   465→                      <div className="font-bold line-clamp-2">{item.title}</div>
+   466→                    </button>
+   467→                  )) : <p className="text-gray-400 text-center py-8 text-sm">لا توجد عناوين</p>}
+   468→                </div>
+   469→              </div>
+   470→              {/* Alerts - side by side with Headlines */}
+   471→              {alertNews.length > 0 && (
+   472→                <div className="md:col-span-2 bg-white rounded-lg shadow-md overflow-hidden h-[300px] md:h-[400px] flex flex-col">
+   473→                  <div className="px-3 py-2.5 text-white font-bold text-sm flex items-center gap-1" style={{ backgroundColor: '#d32f2f' }}>
+   474→                    ⚠️ تنبيهات
+   475→                  </div>
+   476→                  <div className="flex-1 overflow-y-auto">
+   477→                    {alertNews.map(item => (
+   478→                      <div key={item.id} className="p-2.5 border-b hover:bg-gray-50">
+   479→                        <div className="text-[10px] text-gray-400 mb-0.5">{new Date(item.createdAt).toLocaleDateString('ar-EG')}</div>
+   480→                        <div className="text-xs font-bold">{item.title}</div>
+   481→                      </div>
+   482→                    ))}
+   483→                  </div>
+   484→                </div>
+   485→              )}
+   486→            </div>
+   487→          </section>
+   488→        )}
+   489→
+   490→        {/* Welcome / About Section */}
+   491→        {(settings?.showAbout ?? true) && (
+   492→          <section id="welcome" className="py-12 bg-white">
+   493→            <div className="max-w-[1280px] mx-auto px-4">
+   494→              <div className="grid md:grid-cols-2 gap-8 items-center">
+   495→                <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl bg-gray-200">
+   496→                  {settings?.aboutVideoUrl ? (
+   497→                    <iframe src={settings.aboutVideoUrl.replace('watch?v=', 'embed/')} className="w-full h-full" allowFullScreen />
+   498→                  ) : (
+   499→                    <img src={settings?.aboutImage || 'https://picsum.photos/seed/schoolwelcome/600/450'} alt="عن المدرسة" className="w-full h-full object-cover" />
+   500→                  )}
+   501→                </div>
+   502→                <div>
+   503→                  <h2 className="text-2xl md:text-3xl font-bold mb-4" style={{ color: school.primaryColor }}>
+   504→                    مرحباً بكم في {school.name}
+   505→                  </h2>
+   506→                  {school.description && <p className="text-gray-600 leading-relaxed mb-4">{school.description}</p>}
+   507→                  {settings?.vision && (
+   508→                    <div className="rounded-xl p-5 border" style={{ borderColor: school.secondaryColor + '40', backgroundColor: school.secondaryColor + '10' }}>
+   509→                      <h3 className="font-bold mb-2" style={{ color: school.secondaryColor }}>👁️ رؤيتنا</h3>
+   510→                      <p className="text-gray-600 text-sm leading-relaxed">{settings.vision}</p>
+   511→                    </div>
+   512→                  )}
+   513→                </div>
+   514→              </div>
+   515→            </div>
+   516→          </section>
+   517→        )}
+   518→
+   519→        {/* News Section - Card Grid */}
+   520→        {(settings?.showNews ?? true) && (
+   521→          <section id="news" className="py-12" style={{ backgroundColor: '#f0f0f0' }}>
+   522→            <div className="max-w-[1280px] mx-auto px-4">
+   523→              <div className="text-center mb-8">
+   524→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>أحدث الأخبار</h2>
+   525→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   526→              </div>
+   527→              {loading ? (
+   528→                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   529→                  {[1,2,3].map(i => <div key={i} className="bg-white rounded-lg shadow-md h-64 animate-pulse" />)}
+   530→                </div>
+   531→              ) : news.length > 0 ? (
+   532→                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   533→                  {news.slice(0, 6).map((item, index) => (
+   534→                    <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group">
+   535→                      <div className="h-48 overflow-hidden relative">
+   536→                        <img src={item.image || `https://picsum.photos/seed/news${index + 20}/400/250`} alt={item.title}
+   537→                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+   538→                        <span className="absolute top-3 right-3 px-2 py-1 rounded text-xs text-white font-medium" style={{ backgroundColor: school.primaryColor }}>
+   539→                          {item.category}
+   540→                        </span>
+   541→                      </div>
+   542→                      <div className="p-4">
+   543→                        <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+   544→                          <span>🕐</span> {new Date(item.createdAt).toLocaleDateString('ar-EG')}
+   545→                        </div>
+   546→                        <h3 className="font-bold text-gray-800 mb-1 line-clamp-2">{item.title}</h3>
+   547→                        {item.excerpt && <p className="text-sm text-gray-500 line-clamp-2">{item.excerpt}</p>}
+   548→                      </div>
+   549→                    </div>
+   550→                  ))}
+   551→                </div>
+   552→              ) : (
+   553→                <p className="text-center text-gray-400 py-12">لا توجد أخبار حالياً</p>
+   554→              )}
+   555→            </div>
+   556→          </section>
+   557→        )}
+   558→
+   559→        {/* Services Section - Colored Cards matching screenshot */}
+   560→        {(settings?.showServices ?? true) && (
+   561→          <section id="services" className="py-12 bg-white">
+   562→            <div className="max-w-[1280px] mx-auto px-4">
+   563→              <div className="text-center mb-8">
+   564→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>الخدمات الإلكترونية</h2>
+   565→                <p className="text-gray-500 text-sm mt-2">استفد من خدماتنا الإلكترونية المتنوعة</p>
+   566→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   567→              </div>
+   568→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   569→                {[
+   570→                  { icon: '📋', title: 'الاستعلام عن النتائج', desc: 'استعلم عن نتائجك الأكاديمية بسهولة وسرعة', action: 'results', color: '#2196F3' },
+   571→                  { icon: '📅', title: 'جداول الحصص', desc: 'عرض جداول الحصص والمواعيد الدراسية', action: 'schedules', color: '#FF9800' },
+   572→                  { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم الأكاديمي والسلوكي', action: 'parents', color: '#4CAF50' },
+   573→                  { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
+   574→                  { icon: '💻', title: 'التحول الرقمي', desc: 'خدمات التحول الرقمي المتقدمة', action: 'schedules', color: '#00BCD4' },
+   575→                  { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
+   576→                ].map(service => (
+   577→                  <div key={service.title}
+   578→                    onClick={() => service.action ? handleServiceAction(service.action) : document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+   579→                    className="rounded-xl shadow-md hover:shadow-xl transition-all cursor-pointer p-6 group text-white relative overflow-hidden"
+   580→                    style={{ backgroundColor: service.color }}>
+   581→                    {/* Decorative circle */}
+   582→                    <div className="absolute -top-4 -left-4 w-24 h-24 rounded-full bg-white/10" />
+   583→                    <div className="relative z-10">
+   584→                      <div className="text-3xl mb-3">{service.icon}</div>
+   585→                      <h3 className="font-bold text-lg mb-2">{service.title}</h3>
+   586→                      <p className="text-white/80 text-sm">{service.desc}</p>
+   587→                      <div className="mt-3 text-sm font-medium text-white/90 hover:text-white flex items-center gap-1">
+   588→                        أعرف أكثر ←
+   589→                      </div>
+   590→                    </div>
+   591→                  </div>
+   592→                ))}
+   593→              </div>
+   594→            </div>
+   595→          </section>
+   596→        )}
+   597→
+   598→        {/* Gallery Section */}
+   599→        {(settings?.showGallery ?? true) && gallery.length > 0 && (
+   600→          <section id="gallery" className="py-12" style={{ backgroundColor: '#f0f0f0' }}>
+   601→            <div className="max-w-[1280px] mx-auto px-4">
+   602→              <div className="text-center mb-8">
+   603→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>📸 معرض الصور</h2>
+   604→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   605→              </div>
+   606→              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+   607→                {gallery.map(item => (
+   608→                  <div key={item.id} className="aspect-square rounded-xl overflow-hidden shadow-md group cursor-pointer">
+   609→                    <img src={item.imageUrl} alt={item.title || 'صورة'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+   610→                  </div>
+   611→                ))}
+   612→              </div>
+   613→            </div>
+   614→          </section>
+   615→        )}
+   616→
+   617→        {/* Teachers Section */}
+   618→        {(settings?.showTeachers ?? true) && teachers.length > 0 && (
+   619→          <section id="teachers" className="py-12 bg-white">
+   620→            <div className="max-w-[1280px] mx-auto px-4">
+   621→              <div className="text-center mb-8">
+   622→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>👨‍🏫 فريق التدريس</h2>
+   623→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   624→              </div>
+   625→              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+   626→                {teachers.map(teacher => (
+   627→                  <div key={teacher.id} className="bg-white rounded-xl shadow-md overflow-hidden group hover:shadow-lg transition-shadow">
+   628→                    <div className="aspect-[3/4] overflow-hidden">
+   629→                      {teacher.imageUrl ? (
+   630→                        <img src={teacher.imageUrl} alt={teacher.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+   631→                      ) : (
+   632→                        <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-white/50" style={{ backgroundColor: school.primaryColor }}>
+   633→                          {teacher.name.charAt(0)}
+   634→                        </div>
+   635→                      )}
+   636→                    </div>
+   637→                    <div className="p-3 text-center">
+   638→                      <h3 className="font-bold">{teacher.name}</h3>
+   639→                      <p className="text-sm text-gray-500">{teacher.subject}</p>
+   640→                    </div>
+   641→                  </div>
+   642→                ))}
+   643→              </div>
+   644→            </div>
+   645→          </section>
+   646→        )}
+   647→
+   648→        {/* Stats Section - in school primary color */}
+   649→        {(settings?.showStats ?? true) && stats && (stats.students > 0 || stats.teachers > 0) && (
+   650→          <section style={{ backgroundColor: school.primaryColor }} className="py-10">
+   651→            <div className="max-w-[1280px] mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-6">
+   652→              {[
+   653→                { icon: '👨‍🎓', label: 'طلاب', value: stats.students },
+   654→                { icon: '👨‍🏫', label: 'معلمون', value: stats.teachers },
+   655→                { icon: '📖', label: 'فصول', value: stats.classes },
+   656→                { icon: '🏆', label: 'سنوات خبرة', value: stats.years },
+   657→              ].map(stat => (
+   658→                <div key={stat.label} className="text-center text-white p-4">
+   659→                  <div className="text-4xl mb-2">{stat.icon}</div>
+   660→                  <div className="text-4xl font-bold mb-1">{stat.value}</div>
+   661→                  <div className="text-white/70 text-sm font-medium">{stat.label}</div>
+   662→                </div>
+   663→              ))}
+   664→            </div>
+   665→          </section>
+   666→        )}
+   667→
+   668→        {/* Contact Section */}
+   669→        {(settings?.showContact ?? true) && (
+   670→          <section id="contact" className="py-12 bg-white">
+   671→            <div className="max-w-[1280px] mx-auto px-4">
+   672→              <div className="text-center mb-8">
+   673→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>📞 تواصل معنا</h2>
+   674→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   675→              </div>
+   676→              <div className="grid md:grid-cols-2 gap-8">
+   677→                {/* Contact Form */}
+   678→                <div className="bg-white border rounded-xl shadow-md p-6">
+   679→                  <h3 className="text-xl font-bold mb-4" style={{ color: school.primaryColor }}>اتصل بنا</h3>
+   680→                  <form onSubmit={e => e.preventDefault()} className="space-y-3">
+   681→                    <input placeholder="الاسم" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   682→                    <input type="email" placeholder="البريد الإلكتروني" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   683→                    <input type="tel" placeholder="الجوال" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   684→                    <textarea placeholder="اكتب رسالتك هنا..." className="w-full border rounded-lg px-4 py-2.5 text-sm min-h-[100px] focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   685→                    <button type="submit" className="w-full py-2.5 rounded-lg text-white font-medium text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: school.primaryColor }}>
+   686→                      إرسال الرسالة
+   687→                    </button>
+   688→                  </form>
+   689→                </div>
+   690→                {/* Contact Info + Map */}
+   691→                <div className="flex flex-col gap-6">
+   692→                  {/* Contact Info Card */}
+   693→                  <div className="rounded-xl p-6 text-white" style={{ backgroundColor: school.primaryColor }}>
+   694→                    <h3 className="text-xl font-bold mb-6">بيانات الاتصال</h3>
+   695→                    <div className="space-y-4">
+   696→                      {school.address && <div className="flex items-start gap-3"><span className="text-xl">📍</span><div><div className="text-white/70 text-sm">الموقع</div><div className="font-medium">{school.address}</div></div></div>}
+   697→                      {school.phone && <div className="flex items-start gap-3"><span className="text-xl">📞</span><div><div className="text-white/70 text-sm">الهاتف</div><a href={`tel:${school.phone}`} className="font-medium hover:text-white/80" dir="ltr">{school.phone}</a></div></div>}
+   698→                      {school.email && <div className="flex items-start gap-3"><span className="text-xl">✉️</span><div><div className="text-white/70 text-sm">البريد الإلكتروني</div><a href={`mailto:${school.email}`} className="font-medium hover:text-white/80" dir="ltr">{school.email}</a></div></div>}
+   699→                    </div>
+   700→                    {/* Social links */}
+   701→                    <div className="mt-6 pt-4 border-t border-white/20">
+   702→                      <div className="flex gap-3">
+   703→                        {school.facebookUrl && <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">📘</a>}
+   704→                        {settings?.youtubeUrl && <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">📺</a>}
+   705→                      </div>
+   706→                    </div>
+   707→                  </div>
+   708→                  {/* Google Map */}
+   709→                  <div className="rounded-xl overflow-hidden shadow-md border">
+   710→                    <div className="px-4 py-2.5 text-white font-bold text-sm flex items-center gap-2" style={{ backgroundColor: school.primaryColor }}>
+   711→                      📍 خريطة الموقع
+   712→                    </div>
+   713→                    <div className="relative" style={{ height: '250px' }}>
+   714→                      {school.mapEmbedUrl ? (
+   715→                        <iframe
+   716→                          src={school.mapEmbedUrl}
+   717→                          width="100%"
+   718→                          height="100%"
+   719→                          style={{ border: 0 }}
+   720→                          allowFullScreen
+   721→                          loading="lazy"
+   722→                          referrerPolicy="no-referrer-when-downgrade"
+   723→                          title="خريطة الموقع"
+   724→                        />
+   725→                      ) : (
+   726→                        <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500">
+   727→                          <div className="text-center">
+   728→                            <span className="text-4xl block mb-2">🗺️</span>
+   729→                            <p className="text-sm">لم يتم تحديد موقع على الخريطة</p>
+   730→                          </div>
+   731→                        </div>
+   732→                      )}
+   733→                    </div>
+   734→                  </div>
+   735→                </div>
+   736→              </div>
+   737→            </div>
+   738→          </section>
+   739→        )}
+   740→
+   741→        {/* Custom Sections */}
+   742→        <CustomSectionRenderer sections={customSections} />
+   743→      </main>
+   744→
+   745→      {/* Footer - Approved Design */}
+   746→      <footer className="text-white mt-auto">
+   747→        {/* Colored bar at top */}
+   748→        <div className="flex h-1.5">
+   749→          <div className="flex-1" style={{ backgroundColor: school.primaryColor }} />
+   750→          <div className="flex-1 bg-white" />
+   751→          <div className="flex-1 bg-gray-800" />
+   752→        </div>
+   753→        {/* Main footer content */}
+   754→        <div style={{ backgroundColor: '#1a2332' }}>
+   755→          <div className="max-w-[1280px] mx-auto px-4 py-10">
+   756→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+   757→              {/* Column 1: Contact Info */}
+   758→              <div>
+   759→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>تواصل معنا</h3>
+   760→                <div className="space-y-3 text-sm">
+   761→                  {school.address && (
+   762→                    <div className="flex items-start gap-2">
+   763→                      <span className="mt-0.5">📍</span>
+   764→                      <span className="text-gray-300">{school.address}</span>
+   765→                    </div>
+   766→                  )}
+   767→                  {school.phone && (
+   768→                    <div className="flex items-start gap-2">
+   769→                      <span className="mt-0.5">📞</span>
+   770→                      <a href={`tel:${school.phone}`} className="text-gray-300 hover:text-white transition-colors" dir="ltr">{school.phone}</a>
+   771→                    </div>
+   772→                  )}
+   773→                  {school.email && (
+   774→                    <div className="flex items-start gap-2">
+   775→                      <span className="mt-0.5">✉️</span>
+   776→                      <a href={`mailto:${school.email}`} className="text-gray-300 hover:text-white transition-colors" dir="ltr">{school.email}</a>
+   777→                    </div>
+   778→                  )}
+   779→                </div>
+   780→              </div>
+   781→              {/* Column 2: Academic Links */}
+   782→              <div>
+   783→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>الروابط الأكاديمية</h3>
+   784→                <ul className="space-y-2">
+   785→                  {serviceItems.map(item => (
+   786→                    <li key={item.action}>
+   787→                      <button onClick={() => handleServiceAction(item.action)} className="text-gray-300 hover:text-white text-sm transition-colors flex items-center gap-2">
+   788→                        <span className="text-xs">◆</span> {item.label}
+   789→                      </button>
+   790→                    </li>
+   791→                  ))}
+   792→                </ul>
+   793→              </div>
+   794→              {/* Column 3: School Links */}
+   795→              <div>
+   796→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>روابط المدرسة</h3>
+   797→                <ul className="space-y-2">
+   798→                  {navLinks.filter(l => !l.isServices).map(link => (
+   799→                    <li key={link.href}>
+   800→                      <a href={link.href} className="text-gray-300 hover:text-white text-sm transition-colors flex items-center gap-2">
+   801→                        <span className="text-xs">◆</span> {link.label}
+   802→                      </a>
+   803→                    </li>
+   804→                  ))}
+   805→                </ul>
+   806→              </div>
+   807→              {/* Column 4: School Logo & Name (changes with school) */}
+   808→              <div className="flex flex-col items-center sm:items-start">
+   809→                <div className="mb-3">
+   810→                  {school.logoUrl ? (
+   811→                    <img src={school.logoUrl} alt={school.name} className="w-16 h-16 rounded-full object-cover border-3" style={{ borderColor: school.primaryColor }} />
+   812→                  ) : (
+   813→                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: school.primaryColor }}>🏫</div>
+   814→                  )}
+   815→                </div>
+   816→                <h3 className="font-bold text-lg mb-2 text-center sm:text-right">{school.name}</h3>
+   817→                {school.description && <p className="text-gray-400 text-xs line-clamp-3 text-center sm:text-right">{school.description}</p>}
+   818→                {/* Social icons */}
+   819→                <div className="flex gap-2 mt-3">
+   820→                  {school.facebookUrl && (
+   821→                    <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer"
+   822→                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm transition-colors" style={{ backgroundColor: school.primaryColor }}>
+   823→                      📘
+   824→                    </a>
+   825→                  )}
+   826→                  {settings?.youtubeUrl && (
+   827→                    <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer"
+   828→                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm transition-colors" style={{ backgroundColor: school.primaryColor }}>
+   829→                      📺
+   830→                    </a>
+   831→                  )}
+   832→                </div>
+   833→              </div>
+   834→            </div>
+   835→          </div>
+   836→          {/* Bottom bar - Developer credit */}
+   837→          <div className="border-t border-white/10">
+   838→            <div className="max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-center gap-3 text-gray-400 text-xs">
+   839→              <span>تصميم وتطوير</span>
+   840→              {settings?.developerPhoto ? (
+   841→                <img src={settings.developerPhoto} alt={settings?.developerName || 'المطور'} className="w-7 h-7 rounded-full object-cover border border-white/20" />
+   842→              ) : (
+   843→                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs text-white" style={{ backgroundColor: school.primaryColor }}>👨‍💻</div>
+   844→              )}
+   845→              <span className="font-bold text-white">{settings?.developerName || 'محروس شعبان'}</span>
+   846→              <span>© {new Date().getFullYear()}</span>
+   847→            </div>
+   848→          </div>
+   849→        </div>
+   850→      </footer>
+   851→
+   852→      {/* Scroll to Top */}
+   853→      {showScrollTop && (
+   854→        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+   855→          className="fixed bottom-6 left-6 w-12 h-12 rounded-full shadow-lg text-white hover:opacity-90 transition-opacity z-40 flex items-center justify-center text-xl"
+   856→          style={{ backgroundColor: school.primaryColor }}>
+   857→          ↑
+   858→        </button>
+   859→      )}
+   860→
+   861→      {/* Admin Login Modal */}
+   862→      <AdminLogin open={showAdminLogin} onOpenChange={setShowAdminLogin} />
+   863→    </div>
+   864→  )
+   865→}
+   866→

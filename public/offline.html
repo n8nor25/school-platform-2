@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>غير متصل — منصة المدرسة</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+      background: linear-gradient(135deg, #610000 0%, #8B0000 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      padding: 2rem;
+    }
+    .container {
+      text-align: center;
+      max-width: 500px;
+    }
+    .icon {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 2rem;
+      background: rgba(255,255,255,0.15);
+      border-radius: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 60px;
+      backdrop-filter: blur(10px);
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 1rem;
+      font-weight: 800;
+    }
+    p {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      margin-bottom: 2rem;
+      opacity: 0.9;
+    }
+    .retry-btn {
+      display: inline-block;
+      padding: 14px 40px;
+      background: #fff;
+      color: #610000;
+      border: none;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+    }
+    .retry-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .features {
+      margin-top: 3rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .feature {
+      background: rgba(255,255,255,0.1);
+      padding: 0.8rem 1.5rem;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      backdrop-filter: blur(5px);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>أنت غير متصل بالإنترنت</h1>
+    <p>
+      لا يمكن الوصول إلى منصة المدرسة في الوقت الحالي.<br>
+      تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى.
+    </p>
+    <button class="retry-btn" onclick="window.location.reload()">
+      🔄 إعادة المحاولة
+    </button>
+    <div class="features">
+      <span class="feature">📚 النتائج السابقة محفوظة</span>
+      <span class="feature">🔔 الإشعارات الأخيرة</span>
+      <span class="feature">📋 الجداول</span>
+    </div>
+  </div>
+  <script>
+    // محاولة إعادة الاتصال تلقائياً عند عودة الشبكة
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>
