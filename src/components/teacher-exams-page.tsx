@@ -6,6 +6,8 @@ import {
   ClipboardCheck, Clock, Award, Eye, AlertTriangle, Sparkles,
   CalendarDays, GraduationCap, CheckCircle2, XCircle, HelpCircle,
   ShieldCheck, Lock, BookOpen, Trophy, BarChart3,
+  Plus, Trash2, Loader2, Save, Send, X,
+  Dumbbell, Repeat2, EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 interface TeacherExamsPageProps {
@@ -39,6 +45,8 @@ interface TeacherExamsPageProps {
 // ===== Types =====
 type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
 type TimeStatus = 'UPCOMING' | 'OPEN' | 'ENDED';
+type ExamCategory = 'OFFICIAL' | 'TRAINING';
+type ExamPeriod = 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE' | 'NONE';
 
 interface ExamListItem {
   id: string;
@@ -56,6 +64,10 @@ interface ExamListItem {
   timeStatus: TimeStatus;
   submissionsCount: number;
   questionsCount: number;
+  category?: ExamCategory;
+  examPeriod?: ExamPeriod;
+  showAnswersAfter?: boolean;
+  allowRetakes?: boolean;
 }
 
 interface ExamQuestion {
@@ -143,6 +155,96 @@ interface SubmissionsResponse {
   totalPages: number;
   stats: SubmissionsStats;
   submissions: unknown[];
+}
+
+// ===== Create Exam types =====
+type QuestionType = 'MCQ' | 'TRUE_FALSE' | 'SHORT' | 'ESSAY';
+
+interface DraftQuestion {
+  id: string;
+  type: QuestionType;
+  text: string;
+  options: string[];
+  correctAnswer: string;
+  correctText: string;
+  rubric: string;
+  points: number;
+  explanation: string;
+}
+
+interface CreateExamForm {
+  title: string;
+  subject: string;
+  description: string;
+  classroomName: string;
+  startDate: string;
+  endDate: string;
+  durationMinutes: number;
+  passingScore: number;
+  password: string;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  allowReview: boolean;
+  showResultImmediately: boolean;
+  parentVisible: boolean;
+  antiCheatEnabled: boolean;
+  category: ExamCategory;
+  examPeriod: ExamPeriod;
+  showAnswersAfter: boolean;
+  allowRetakes: boolean;
+  // ===== سلسلة امتحانات (Oracle Academy style) — تدريبي فقط =====
+  isSeries: boolean;            // toggle on/off
+  seriesCount: number;          // 2..12 (default 4)
+  seriesIntervalDays: number;   // 7 | 14 | 30 (default 7)
+  questions: DraftQuestion[];
+}
+
+const ARABIC_OPTION_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح'];
+
+function optionLetter(i: number): string {
+  return ARABIC_OPTION_LETTERS[i] || String(i + 1);
+}
+
+function makeEmptyQuestion(index: number): DraftQuestion {
+  return {
+    id: `q-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    type: 'MCQ',
+    text: '',
+    options: ['', '', '', ''],
+    correctAnswer: '',
+    correctText: '',
+    rubric: '',
+    points: 1,
+    explanation: '',
+  };
+}
+
+function makeEmptyCreateForm(): CreateExamForm {
+  return {
+    title: '',
+    subject: '',
+    description: '',
+    classroomName: '',
+    startDate: '',
+    endDate: '',
+    durationMinutes: 60,
+    passingScore: 50,
+    password: '',
+    shuffleQuestions: false,
+    shuffleOptions: false,
+    allowReview: true,
+    showResultImmediately: false,
+    parentVisible: false,
+    antiCheatEnabled: true,
+    category: 'OFFICIAL',
+    examPeriod: 'NONE',
+    showAnswersAfter: true,
+    allowRetakes: true,
+    isSeries: false,
+    seriesCount: 4,
+    seriesIntervalDays: 7,
+    questions: [],
+  };
 }
 
 // ===== Helpers =====
@@ -238,6 +340,51 @@ function questionTypeBadgeClass(t: string): string {
   }
 }
 
+function categoryLabel(c: ExamCategory | undefined | null): string {
+  switch (c) {
+    case 'TRAINING': return 'تدريبي';
+    case 'OFFICIAL':
+    default: return 'رسمي';
+  }
+}
+
+function categoryBadgeClass(c: ExamCategory | undefined | null): string {
+  switch (c) {
+    case 'TRAINING':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+    case 'OFFICIAL':
+    default:
+      return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
+  }
+}
+
+function examPeriodLabel(p: ExamPeriod | undefined | null): string {
+  switch (p) {
+    case 'WEEKLY': return 'أسبوعي';
+    case 'MIDMONTH': return 'نصف شهري';
+    case 'MONTHLY': return 'شهري';
+    case 'CUMULATIVE': return 'تراكمي';
+    case 'NONE':
+    default: return 'بدون فئة';
+  }
+}
+
+function examPeriodBadgeClass(p: ExamPeriod | undefined | null): string {
+  switch (p) {
+    case 'WEEKLY':
+      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200 dark:border-sky-800';
+    case 'MIDMONTH':
+      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
+    case 'MONTHLY':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+    case 'CUMULATIVE':
+      return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+    case 'NONE':
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+  }
+}
+
 // ===== KPI Cards config =====
 const kpiConfig = [
   {
@@ -284,6 +431,7 @@ export default function TeacherExamsPage({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ExamStatus>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | ExamCategory>('all');
 
   // Detail modal state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -291,6 +439,12 @@ export default function TeacherExamsPage({
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailExam, setDetailExam] = useState<ExamDetail | null>(null);
   const [submissionsStats, setSubmissionsStats] = useState<SubmissionsStats | null>(null);
+
+  // Create dialog state
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateExamForm>(makeEmptyCreateForm());
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
 
   // Mounted ref (prevent setState after unmount)
   const mountedRef = useRef(true);
@@ -334,6 +488,8 @@ export default function TeacherExamsPage({
       params.set('teacherId', teacherId);
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (statusFilter !== 'all') params.set('status', statusFilter);
+      // Note: category filtering is done client-side because the GET endpoint
+      // returns the category field for each exam; we filter the array directly.
       params.set('limit', '100');
 
       const res = await fetch(`/api/exams/teacher?${params.toString()}`);
@@ -426,12 +582,304 @@ export default function TeacherExamsPage({
     }
   }, [schoolId, teacherId]);
 
-  // ===== Compute KPIs =====
+  // ===== Create exam handlers =====
+  const updateCreateField = useCallback((patch: Partial<CreateExamForm>) => {
+    setCreateForm((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const addQuestion = useCallback(() => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: [...prev.questions, makeEmptyQuestion(prev.questions.length)],
+    }));
+  }, []);
+
+  const updateQuestion = useCallback((qid: string, patch: Partial<DraftQuestion>) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)),
+    }));
+  }, []);
+
+  const removeQuestion = useCallback((qid: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.filter((q) => q.id !== qid),
+    }));
+  }, []);
+
+  const addOption = useCallback((qid: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid || q.options.length >= 8) return q;
+        return { ...q, options: [...q.options, ''] };
+      }),
+    }));
+  }, []);
+
+  const updateOption = useCallback((qid: string, optIndex: number, value: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid) return q;
+        const newOptions = [...q.options];
+        newOptions[optIndex] = value;
+        let newCorrect = q.correctAnswer;
+        if (q.correctAnswer === q.options[optIndex]) {
+          newCorrect = value;
+        }
+        return { ...q, options: newOptions, correctAnswer: newCorrect };
+      }),
+    }));
+  }, []);
+
+  const removeOption = useCallback((qid: string, optIndex: number) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid || q.options.length <= 2) return q;
+        const removedValue = q.options[optIndex];
+        const newOptions = q.options.filter((_, i) => i !== optIndex);
+        let newCorrect = q.correctAnswer;
+        if (q.correctAnswer === removedValue) newCorrect = '';
+        return { ...q, options: newOptions, correctAnswer: newCorrect };
+      }),
+    }));
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm(makeEmptyCreateForm());
+    setCreateErrors({});
+  }, []);
+
+  const validateCreateForm = useCallback((): {
+    ok: boolean;
+    errors: Record<string, string>;
+    message?: string;
+  } => {
+    const errors: Record<string, string> = {};
+    const f = createForm;
+    let message: string | undefined;
+
+    if (!f.title.trim()) errors.title = 'عنوان الامتحان مطلوب';
+    if (!f.subject.trim()) errors.subject = 'المادة مطلوبة';
+
+    // في وضع السلسلة، يُحسب endDate تلقائياً (نافذة أسبوع لكل امتحان)
+    // لذا لا نطلب من المستخدم إدخاله.
+    const isSeriesMode = f.category === 'TRAINING' && f.isSeries;
+    if (!f.startDate) errors.startDate = 'وقت الفتح مطلوب';
+    if (!isSeriesMode && !f.endDate) errors.endDate = 'وقت الإغلاق مطلوب';
+    if (!isSeriesMode && f.startDate && f.endDate) {
+      const s = new Date(f.startDate);
+      const e = new Date(f.endDate);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s >= e) {
+        errors.endDate = 'وقت الإغلاق يجب أن يكون بعد وقت الفتح';
+      }
+    }
+
+    // التحقق من حقول السلسلة
+    if (isSeriesMode) {
+      if (!Number.isFinite(f.seriesCount) || f.seriesCount < 2 || f.seriesCount > 12) {
+        errors.seriesCount = 'عدد الامتحانات يجب أن يكون بين 2 و 12';
+        if (!message) message = 'عدد الامتحانات في السلسلة يجب أن يكون بين 2 و 12';
+      }
+      if (![7, 14, 30].includes(f.seriesIntervalDays)) {
+        errors.seriesIntervalDays = 'فترة التكرار غير صالحة';
+      }
+    }
+
+    if (!f.durationMinutes || f.durationMinutes < 1) {
+      errors.durationMinutes = 'المدة يجب أن تكون دقيقة على الأقل';
+    }
+
+    for (let i = 0; i < f.questions.length; i++) {
+      const q = f.questions[i];
+      const key = `q-${q.id}`;
+      if (!q.text.trim()) {
+        errors[key] = 'نص السؤال مطلوب';
+        if (!message) message = `السؤال ${i + 1}: نص السؤال مطلوب`;
+        continue;
+      }
+      if (q.type === 'MCQ') {
+        const nonEmpty = q.options.filter((o) => o.trim().length > 0);
+        if (nonEmpty.length < 2) {
+          errors[key] = 'يتطلب خيارين على الأقل';
+          if (!message) message = `السؤال ${i + 1}: يتطلب خيارين على الأقل`;
+        } else if (!q.correctAnswer) {
+          errors[key] = 'حدد الإجابة الصحيحة';
+          if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+        }
+      }
+      if (q.type === 'TRUE_FALSE' && !q.correctAnswer) {
+        errors[key] = 'حدد الإجابة الصحيحة';
+        if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+      }
+      if (q.points < 0 || q.points > 100) {
+        errors[key] = 'الدرجة بين 0 و 100';
+        if (!message) message = `السؤال ${i + 1}: الدرجة يجب أن تكون بين 0 و 100`;
+      }
+    }
+
+    return { ok: Object.keys(errors).length === 0, errors, message };
+  }, [createForm]);
+
+  const submitCreate = useCallback(
+    async (publish: boolean) => {
+      const validation = validateCreateForm();
+      if (!validation.ok) {
+        setCreateErrors(validation.errors);
+        toast.error(validation.message || 'يرجى تصحيح الأخطاء في النموذج');
+        return;
+      }
+
+      setCreateErrors({});
+      setCreateSubmitting(true);
+
+      try {
+        const f = createForm;
+        const isTraining = f.category === 'TRAINING';
+        const isSeriesMode = isTraining && f.isSeries;
+
+        const body: Record<string, unknown> = {
+          title: f.title.trim(),
+          subject: f.subject.trim(),
+          startDate: new Date(f.startDate).toISOString(),
+          durationMinutes: f.durationMinutes,
+          shuffleQuestions: f.shuffleQuestions,
+          shuffleOptions: f.shuffleOptions,
+          allowReview: f.allowReview,
+          showResultImmediately: f.showResultImmediately,
+          parentVisible: f.parentVisible,
+          antiCheatEnabled: f.antiCheatEnabled,
+          passingScore: f.passingScore,
+          category: f.category,
+          examPeriod: isTraining ? f.examPeriod : 'NONE',
+          showAnswersAfter: f.showAnswersAfter,
+          allowRetakes: f.allowRetakes,
+        };
+        // في وضع السلسلة: endDate يُحسب تلقائياً على الخادم (نافذة أسبوع لكل امتحان)
+        if (!isSeriesMode) {
+          body.endDate = new Date(f.endDate).toISOString();
+        }
+        if (f.description.trim()) body.description = f.description.trim();
+        if (f.classroomName.trim()) body.classroomName = f.classroomName.trim();
+        // Only send password for OFFICIAL exams; TRAINING exams are open
+        if (!isTraining && f.password.trim()) body.password = f.password.trim();
+
+        // حقول السلسلة (تُرسل فقط لـ endpoint السلسلة)
+        if (isSeriesMode) {
+          body.seriesCount = Math.min(12, Math.max(2, f.seriesCount));
+          body.seriesIntervalDays = f.seriesIntervalDays;
+          body.publish = publish;
+        }
+
+        const questions = f.questions.map((q, i) => {
+          const out: Record<string, unknown> = {
+            type: q.type,
+            text: q.text.trim(),
+            points: q.points,
+            order: i + 1,
+          };
+          if (q.type === 'MCQ') {
+            out.options = q.options.map((o) => o.trim()).filter((o) => o.length > 0);
+            out.correctAnswer = q.correctAnswer;
+          } else if (q.type === 'TRUE_FALSE') {
+            out.correctAnswer = q.correctAnswer;
+          } else if (q.type === 'SHORT') {
+            if (q.correctText.trim()) out.correctText = q.correctText.trim();
+          } else if (q.type === 'ESSAY') {
+            if (q.rubric.trim()) out.rubric = { text: q.rubric.trim() };
+          }
+          if (q.explanation.trim()) out.explanation = q.explanation.trim();
+          return out;
+        });
+        if (questions.length > 0) body.questions = questions;
+
+        const params = new URLSearchParams();
+        params.set('schoolId', schoolId);
+        params.set('teacherId', teacherId);
+
+        const endpoint = isSeriesMode
+          ? `/api/exams/teacher/series?${params.toString()}`
+          : `/api/exams/teacher?${params.toString()}`;
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || 'فشل إنشاء الامتحان');
+        }
+
+        if (isSeriesMode) {
+          // استجابة السلسلة: { success, created, published, message, exams }
+          const createdCount: number = data?.created ?? 0;
+          const publishedCount: number = data?.published ?? 0;
+          if (publish && publishedCount < createdCount) {
+            toast.warning(
+              `تم إنشاء ${createdCount} امتحان في السلسلة (نُشر منها ${publishedCount})`
+            );
+          } else {
+            toast.success(
+              data?.message || `تم إنشاء ${createdCount} امتحانات بنجاح في السلسلة`
+            );
+          }
+        } else {
+          // استجابة الامتحان المفرد
+          const newExamId: string | undefined = data?.examId;
+          if (publish && newExamId) {
+            try {
+              const pubRes = await fetch(
+                `/api/exams/teacher/${newExamId}/publish?${params.toString()}`,
+                { method: 'POST' }
+              );
+              const pubData = await pubRes.json();
+              if (!pubRes.ok) {
+                toast.warning(
+                  `تم حفظ الامتحان كمسودة، لكن فشل النشر: ${pubData?.error || 'خطأ غير معروف'}`
+                );
+              } else {
+                toast.success('تم إنشاء الامتحان ونشره بنجاح');
+              }
+            } catch (pubErr) {
+              const msg = pubErr instanceof Error ? pubErr.message : 'فشل النشر';
+              toast.warning(`تم حفظ الامتحان كمسودة، لكن فشل النشر: ${msg}`);
+            }
+          } else {
+            toast.success('تم حفظ الامتحان كمسودة');
+          }
+        }
+
+        if (mountedRef.current) {
+          setShowCreateDialog(false);
+          resetCreateForm();
+        }
+        fetchExams(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'فشل إنشاء الامتحان';
+        toast.error(msg);
+      } finally {
+        if (mountedRef.current) setCreateSubmitting(false);
+      }
+    },
+    [createForm, validateCreateForm, schoolId, teacherId, fetchExams, resetCreateForm]
+  );
+
+  // ===== Client-side category filter (server returns category field per exam) =====
+  const filteredExams =
+    categoryFilter === 'all'
+      ? exams
+      : exams.filter((e) => (e.category || 'OFFICIAL') === categoryFilter);
+
+  // ===== Compute KPIs (based on filtered list) =====
   const kpis = {
-    total: exams.length,
-    published: exams.filter((e) => e.status === 'PUBLISHED').length,
-    upcoming: exams.filter((e) => e.timeStatus === 'UPCOMING').length,
-    submissions: exams.reduce((sum, e) => sum + (e.submissionsCount || 0), 0),
+    total: filteredExams.length,
+    published: filteredExams.filter((e) => e.status === 'PUBLISHED').length,
+    upcoming: filteredExams.filter((e) => e.timeStatus === 'UPCOMING').length,
+    submissions: filteredExams.reduce((sum, e) => sum + (e.submissionsCount || 0), 0),
   };
 
   // ===== Render =====
@@ -460,16 +908,26 @@ export default function TeacherExamsPage({
                 <p className="text-violet-200 text-xs truncate">{teacherName}</p>
               </div>
             </div>
-            <Button
-              onClick={() => fetchExams(false)}
-              variant="outline"
-              size="sm"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">تحديث</span>
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                size="sm"
+                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-lg"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">إنشاء امتحان جديد</span>
+              </Button>
+              <Button
+                onClick={() => fetchExams(false)}
+                variant="outline"
+                size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">تحديث</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -534,6 +992,31 @@ export default function TeacherExamsPage({
         {/* Filters row */}
         <Card className="border-0 shadow-sm mb-6">
           <CardContent className="p-4">
+            {/* Category tabs (all / official / training) */}
+            <div className="mb-3">
+              <Tabs
+                value={categoryFilter}
+                onValueChange={(v) =>
+                  setCategoryFilter(v as 'all' | ExamCategory)
+                }
+              >
+                <TabsList className="h-9">
+                  <TabsTrigger value="all" className="gap-1.5">
+                    <FileText className="w-3.5 h-3.5" />
+                    الكل
+                  </TabsTrigger>
+                  <TabsTrigger value="OFFICIAL" className="gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    رسمي
+                  </TabsTrigger>
+                  <TabsTrigger value="TRAINING" className="gap-1.5">
+                    <Dumbbell className="w-3.5 h-3.5" />
+                    تدريبي
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
             <div className="flex flex-col md:flex-row gap-3">
               {/* Search */}
               <div className="flex-1">
@@ -639,7 +1122,7 @@ export default function TeacherExamsPage({
         )}
 
         {/* Empty state */}
-        {!loading && !error && exams.length === 0 && (
+        {!loading && !error && filteredExams.length === 0 && (
           <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700 shadow-sm mb-6">
             <CardContent className="p-10 text-center">
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 dark:from-violet-900/30 dark:to-fuchsia-900/30 flex items-center justify-center">
@@ -656,7 +1139,7 @@ export default function TeacherExamsPage({
         )}
 
         {/* Exams list */}
-        {!error && exams.length > 0 && (
+        {!error && filteredExams.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3 px-1">
               <div className="flex items-center gap-2">
@@ -665,12 +1148,12 @@ export default function TeacherExamsPage({
                   قائمة الامتحانات
                 </h2>
                 <Badge variant="secondary" className="text-[10px]">
-                  {exams.length}
+                  {filteredExams.length}
                 </Badge>
               </div>
             </div>
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pl-1 teacher-exams-scroll">
-              {exams.map((exam) => (
+              {filteredExams.map((exam) => (
                 <Card
                   key={exam.id}
                   className="border-0 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
@@ -686,6 +1169,10 @@ export default function TeacherExamsPage({
                           {exam.hasPassword && (
                             <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           )}
+                          {/* Training indicator icon next to title */}
+                          {exam.category === 'TRAINING' && (
+                            <Dumbbell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge className={`text-[10px] border ${questionTypeBadgeClass('MCQ')}`}>
@@ -698,9 +1185,25 @@ export default function TeacherExamsPage({
                               {exam.classroomName}
                             </Badge>
                           )}
+                          {/* Exam period badge (training only, when not NONE) */}
+                          {exam.category === 'TRAINING' && exam.examPeriod && exam.examPeriod !== 'NONE' && (
+                            <Badge className={`text-[10px] border ${examPeriodBadgeClass(exam.examPeriod)}`}>
+                              <CalendarDays className="w-3 h-3 ml-1" />
+                              {examPeriodLabel(exam.examPeriod)}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                        {/* Category badge (official vs training) */}
+                        <Badge className={`text-[10px] border ${categoryBadgeClass(exam.category)}`}>
+                          {exam.category === 'TRAINING' ? (
+                            <Dumbbell className="w-3 h-3 ml-1" />
+                          ) : (
+                            <ShieldCheck className="w-3 h-3 ml-1" />
+                          )}
+                          {categoryLabel(exam.category)}
+                        </Badge>
                         <Badge className={`text-[10px] border ${statusBadgeClass(exam.status)}`}>
                           {statusLabel(exam.status)}
                         </Badge>
@@ -734,10 +1237,19 @@ export default function TeacherExamsPage({
                           <span>نجاح: {exam.passingScore}%</span>
                         </div>
                       )}
-                      <div className="flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{exam.maxAttempts} محاولة</span>
-                      </div>
+                      {/* Retakes indicator for training */}
+                      {exam.category === 'TRAINING' && exam.allowRetakes && (
+                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                          <Repeat2 className="w-3.5 h-3.5" />
+                          <span>محاولات غير محدودة</span>
+                        </div>
+                      )}
+                      {!(exam.category === 'TRAINING' && exam.allowRetakes) && (
+                        <div className="flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{exam.maxAttempts} محاولة</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Dates */}
@@ -1005,6 +1517,529 @@ export default function TeacherExamsPage({
         </DialogContent>
       </Dialog>
 
+      {/* Create Exam Dialog */}
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(v) => {
+          if (!createSubmitting) {
+            setShowCreateDialog(v);
+            if (!v) resetCreateForm();
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0"
+          onPointerDownOutside={(e) => {
+            if (createSubmitting) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (createSubmitting) e.preventDefault();
+          }}
+        >
+          <DialogHeader className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+            <DialogTitle className="text-xl font-bold text-[#2A374E] dark:text-white flex items-center gap-2">
+              <Plus className="w-5 h-5 text-violet-600" />
+              إنشاء امتحان جديد
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              املأ بيانات الامتحان الأساسية، ثم أضف الأسئلة. يمكنك الحفظ كمسودة أو النشر مباشرةً.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Scrollable form body */}
+          <div className="flex-1 overflow-y-auto p-6 teacher-exams-scroll">
+            <div className="space-y-6">
+              {/* Section 1: Basic exam data */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+                    بيانات الامتحان الأساسية
+                  </h3>
+                </div>
+
+                {/* Exam Category (OFFICIAL / TRAINING) */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">نوع الامتحان</Label>
+                  <ToggleGroup
+                    type="single"
+                    value={createForm.category}
+                    onValueChange={(v) => {
+                      if (v) updateCreateField({ category: v as ExamCategory });
+                    }}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <ToggleGroupItem
+                      value="OFFICIAL"
+                      aria-label="امتحان رسمي"
+                      className="flex-1 gap-1.5 data-[state=on]:bg-violet-50 data-[state=on]:text-violet-700 dark:data-[state=on]:bg-violet-900/30 dark:data-[state=on]:text-violet-300"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span className="text-xs font-medium">رسمي</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="TRAINING"
+                      aria-label="امتحان تدريبي"
+                      className="flex-1 gap-1.5 data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700 dark:data-[state=on]:bg-amber-900/30 dark:data-[state=on]:text-amber-300"
+                    >
+                      <Dumbbell className="w-4 h-4" />
+                      <span className="text-xs font-medium">تدريبي</span>
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    {createForm.category === 'TRAINING'
+                      ? 'امتحان تدريبي مع إعادة المحاولة (مثل Oracle Academy) — لا يؤثر على درجة الطالب الرسمية.'
+                      : 'امتحان رسمي حقيقي يؤثر على درجة الطالب.'}
+                  </p>
+                </div>
+
+                {/* Title */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-title" className="text-sm font-medium">
+                    عنوان الامتحان <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="ce-title"
+                    value={createForm.title}
+                    onChange={(e) => updateCreateField({ title: e.target.value })}
+                    placeholder="مثال: امتحان الفصل الأول - الرياضيات"
+                    className={createErrors.title ? 'border-rose-400' : ''}
+                  />
+                  {createErrors.title && (
+                    <p className="text-xs text-rose-500">{createErrors.title}</p>
+                  )}
+                </div>
+
+                {/* Subject + Classroom */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-subject" className="text-sm font-medium">
+                      المادة <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-subject"
+                      value={createForm.subject}
+                      onChange={(e) => updateCreateField({ subject: e.target.value })}
+                      placeholder="مثال: الرياضيات"
+                      className={createErrors.subject ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.subject && (
+                      <p className="text-xs text-rose-500">{createErrors.subject}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-classroom" className="text-sm font-medium">
+                      الفصل المستهدف
+                    </Label>
+                    <Input
+                      id="ce-classroom"
+                      value={createForm.classroomName}
+                      onChange={(e) => updateCreateField({ classroomName: e.target.value })}
+                      placeholder="مثال: الصف السادس - أ"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-desc" className="text-sm font-medium">
+                    الوصف
+                  </Label>
+                  <Textarea
+                    id="ce-desc"
+                    value={createForm.description}
+                    onChange={(e) => updateCreateField({ description: e.target.value })}
+                    placeholder="وصف مختصر للامتحان (اختياري)"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Start + End dates */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-start" className="text-sm font-medium">
+                      وقت الفتح <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-start"
+                      type="datetime-local"
+                      value={createForm.startDate}
+                      onChange={(e) => updateCreateField({ startDate: e.target.value })}
+                      className={createErrors.startDate ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.startDate && (
+                      <p className="text-xs text-rose-500">{createErrors.startDate}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    {createForm.category === 'TRAINING' && createForm.isSeries ? (
+                      <>
+                        <Label className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          نافذة كل امتحان (تلقائي)
+                        </Label>
+                        <div className="h-10 flex items-center gap-1.5 px-3 rounded-md border border-amber-200 bg-amber-50/70 dark:bg-amber-900/20 dark:border-amber-800/60 text-xs text-amber-700 dark:text-amber-300">
+                          <Repeat2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>7 أيام من تاريخ بدء كل امتحان في السلسلة</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Label htmlFor="ce-end" className="text-sm font-medium">
+                          وقت الإغلاق <span className="text-rose-500">*</span>
+                        </Label>
+                        <Input
+                          id="ce-end"
+                          type="datetime-local"
+                          value={createForm.endDate}
+                          onChange={(e) => updateCreateField({ endDate: e.target.value })}
+                          className={createErrors.endDate ? 'border-rose-400' : ''}
+                        />
+                        {createErrors.endDate && (
+                          <p className="text-xs text-rose-500">{createErrors.endDate}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Duration + Passing score */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-duration" className="text-sm font-medium">
+                      المدة بالدقائق <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-duration"
+                      type="number"
+                      min={1}
+                      value={createForm.durationMinutes}
+                      onChange={(e) =>
+                        updateCreateField({ durationMinutes: parseInt(e.target.value) || 0 })
+                      }
+                      className={createErrors.durationMinutes ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.durationMinutes && (
+                      <p className="text-xs text-rose-500">{createErrors.durationMinutes}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-passing" className="text-sm font-medium">
+                      درجة النجاح (%)
+                    </Label>
+                    <Input
+                      id="ce-passing"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={createForm.passingScore}
+                      onChange={(e) =>
+                        updateCreateField({ passingScore: parseInt(e.target.value) || 0 })
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Password (OFFICIAL only) */}
+                {createForm.category === 'OFFICIAL' && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-password" className="text-sm font-medium">
+                      كلمة سر الدخول (اختياري)
+                    </Label>
+                    <Input
+                      id="ce-password"
+                      type="text"
+                      value={createForm.password}
+                      onChange={(e) => updateCreateField({ password: e.target.value })}
+                      placeholder="اتركها فارغة لعدم الحماية (4 أحرف على الأقل)"
+                    />
+                  </div>
+                )}
+
+                {/* Training-only settings */}
+                {createForm.category === 'TRAINING' && (
+                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-900/10 p-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                      <Dumbbell className="w-3.5 h-3.5" />
+                      إعدادات الامتحان التدريبي
+                    </div>
+
+                    {/* Exam Period */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ce-period" className="text-sm font-medium">
+                        الفئة الزمنية
+                      </Label>
+                      <Select
+                        value={createForm.examPeriod}
+                        onValueChange={(v) =>
+                          updateCreateField({ examPeriod: v as ExamPeriod })
+                        }
+                      >
+                        <SelectTrigger id="ce-period" className="w-full h-10">
+                          <SelectValue placeholder="اختر الفئة الزمنية" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="WEEKLY">أسبوعي</SelectItem>
+                          <SelectItem value="MIDMONTH">نصف شهري</SelectItem>
+                          <SelectItem value="MONTHLY">شهري</SelectItem>
+                          <SelectItem value="CUMULATIVE">تراكمي</SelectItem>
+                          <SelectItem value="NONE">بدون فئة</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Training toggles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <ToggleRow
+                        label="إعادة المحاولة بدون حد"
+                        checked={createForm.allowRetakes}
+                        onCheckedChange={(v) => updateCreateField({ allowRetakes: v })}
+                      />
+                      <ToggleRow
+                        label="إظهار الإجابات الصحيحة بعد التسليم"
+                        checked={createForm.showAnswersAfter}
+                        onCheckedChange={(v) => updateCreateField({ showAnswersAfter: v })}
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed flex items-start gap-1">
+                      <EyeOff className="w-3 h-3 mt-0.5 shrink-0" />
+                      الامتحان التدريبي مفتوح بدون كلمة سر للطلاب.
+                    </p>
+                  </div>
+                )}
+
+                {/* Series creation (training only) — Oracle Academy style */}
+                {createForm.category === 'TRAINING' && (
+                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/30 dark:bg-amber-900/10 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                        <Repeat2 className="w-3.5 h-3.5" />
+                        سلسلة امتحانات (Oracle Academy)
+                      </div>
+                      <Switch
+                        checked={createForm.isSeries}
+                        onCheckedChange={(v) => updateCreateField({ isSeries: v })}
+                        aria-label="إنشاء كـ سلسلة امتحانات"
+                      />
+                    </div>
+
+                    {!createForm.isSeries ? (
+                      <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed">
+                        فعّل لإنشاء عدة امتحانات تدريبية دفعة واحدة بتواريخ متتالية.
+                      </p>
+                    ) : (
+                      <div className="space-y-3 pt-2 border-t border-amber-200/60 dark:border-amber-800/40">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Interval select */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ce-series-interval" className="text-xs font-medium">
+                              تكرار السلسلة
+                            </Label>
+                            <Select
+                              value={String(createForm.seriesIntervalDays)}
+                              onValueChange={(v) =>
+                                updateCreateField({ seriesIntervalDays: Number(v) })
+                              }
+                            >
+                              <SelectTrigger id="ce-series-interval" className="w-full h-9 text-xs">
+                                <SelectValue placeholder="اختر فترة التكرار" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="7">أسبوعي — كل أسبوع</SelectItem>
+                                <SelectItem value="14">نصف شهري — كل أسبوعين</SelectItem>
+                                <SelectItem value="30">شهري — كل شهر</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Count input */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="ce-series-count" className="text-xs font-medium">
+                              عدد الامتحانات في السلسلة
+                            </Label>
+                            <Input
+                              id="ce-series-count"
+                              type="number"
+                              min={2}
+                              max={12}
+                              value={createForm.seriesCount}
+                              onChange={(e) => {
+                                const v = parseInt(e.target.value) || 2;
+                                updateCreateField({
+                                  seriesCount: Math.min(12, Math.max(2, v)),
+                                });
+                              }}
+                              className={`h-9 text-xs ${
+                                createErrors.seriesCount ? 'border-rose-400' : ''
+                              }`}
+                            />
+                            {createErrors.seriesCount && (
+                              <p className="text-xs text-rose-500">
+                                {createErrors.seriesCount}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Hint */}
+                        <div className="rounded-md bg-amber-100/60 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60 px-3 py-2">
+                          <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed">
+                            سيتم إنشاء <strong>{createForm.seriesCount}</strong> امتحانات تلقائياً،
+                            يبدأ الأول في التاريخ المحدد، والباقي يتكرر حسب الفترة
+                            {createForm.seriesIntervalDays === 7
+                              ? ' (كل أسبوع)'
+                              : createForm.seriesIntervalDays === 14
+                              ? ' (كل أسبوعين)'
+                              : ' (كل شهر)'}
+                            . كل امتحان يبقى مفتوحاً لمدة أسبوع من تاريخ بدئه.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Settings toggles */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">الإعدادات</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <ToggleRow
+                      label="خلط الأسئلة"
+                      checked={createForm.shuffleQuestions}
+                      onCheckedChange={(v) => updateCreateField({ shuffleQuestions: v })}
+                    />
+                    <ToggleRow
+                      label="خلط الخيارات"
+                      checked={createForm.shuffleOptions}
+                      onCheckedChange={(v) => updateCreateField({ shuffleOptions: v })}
+                    />
+                    <ToggleRow
+                      label="السماح بالمراجعة"
+                      checked={createForm.allowReview}
+                      onCheckedChange={(v) => updateCreateField({ allowReview: v })}
+                    />
+                    <ToggleRow
+                      label="إظهار النتيجة فوراً"
+                      checked={createForm.showResultImmediately}
+                      onCheckedChange={(v) => updateCreateField({ showResultImmediately: v })}
+                    />
+                    <ToggleRow
+                      label="ظاهر لأولياء الأمور"
+                      checked={createForm.parentVisible}
+                      onCheckedChange={(v) => updateCreateField({ parentVisible: v })}
+                    />
+                    <ToggleRow
+                      label="مكافحة الغش"
+                      checked={createForm.antiCheatEnabled}
+                      onCheckedChange={(v) => updateCreateField({ antiCheatEnabled: v })}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 dark:border-gray-700" />
+
+              {/* Section 2: Questions */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-rose-500 flex items-center justify-center shrink-0">
+                      <ListChecks className="w-4 h-4 text-white" />
+                    </div>
+                    <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+                      الأسئلة ({createForm.questions.length})
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={addQuestion}
+                    size="sm"
+                    variant="outline"
+                    className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                  >
+                    <Plus className="w-4 h-4" />
+                    إضافة سؤال
+                  </Button>
+                </div>
+
+                {createForm.questions.length === 0 ? (
+                  <div className="text-center py-8 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700">
+                    <HelpCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      يمكنك إضافة الأسئلة لاحقاً من تعديل الامتحان
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {createForm.questions.map((q, qIdx) => (
+                      <DraftQuestionCard
+                        key={q.id}
+                        question={q}
+                        index={qIdx}
+                        error={createErrors[`q-${q.id}`]}
+                        onChange={(patch) => updateQuestion(q.id, patch)}
+                        onRemove={() => removeQuestion(q.id)}
+                        onAddOption={() => addOption(q.id)}
+                        onUpdateOption={(oi, val) => updateOption(q.id, oi, val)}
+                        onRemoveOption={(oi) => removeOption(q.id, oi)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-gray-100 dark:border-gray-800 shrink-0 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => submitCreate(true)}
+              disabled={createSubmitting}
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-lg"
+            >
+              {createSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              نشر الامتحان
+            </Button>
+            <Button
+              type="button"
+              onClick={() => submitCreate(false)}
+              disabled={createSubmitting}
+              variant="outline"
+              className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            >
+              {createSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              حفظ المسودة
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!createSubmitting) {
+                  setShowCreateDialog(false);
+                  resetCreateForm();
+                }
+              }}
+              variant="ghost"
+              disabled={createSubmitting}
+            >
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Custom scrollbar styles (scoped via Tailwind class + global tag) */}
       <style jsx global>{`
         .teacher-exams-scroll {
@@ -1153,6 +2188,257 @@ function QuestionCard({ question, index }: { question: ExamQuestion; index: numb
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ===== Create Exam sub-components =====
+
+function ToggleRow({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+      <span className="text-xs text-gray-700 dark:text-gray-300">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function DraftQuestionCard({
+  question: q,
+  index,
+  error,
+  onChange,
+  onRemove,
+  onAddOption,
+  onUpdateOption,
+  onRemoveOption,
+}: {
+  question: DraftQuestion;
+  index: number;
+  error?: string;
+  onChange: (patch: Partial<DraftQuestion>) => void;
+  onRemove: () => void;
+  onAddOption: () => void;
+  onUpdateOption: (optIndex: number, value: string) => void;
+  onRemoveOption: (optIndex: number) => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border overflow-hidden ${
+        error
+          ? 'border-rose-300 dark:border-rose-700'
+          : 'border-gray-200 dark:border-gray-700'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+          <span className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {index + 1}
+          </span>
+          <Select
+            value={q.type}
+            onValueChange={(v) => onChange({ type: v as QuestionType })}
+          >
+            <SelectTrigger className="w-40 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MCQ">اختيار من متعدد</SelectItem>
+              <SelectItem value="TRUE_FALSE">صح / خطأ</SelectItem>
+              <SelectItem value="SHORT">إجابة قصيرة</SelectItem>
+              <SelectItem value="ESSAY">سؤال مقالي</SelectItem>
+            </SelectContent>
+          </Select>
+          {error && (
+            <span className="text-xs text-rose-500 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              {error}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={q.points}
+              onChange={(e) => onChange({ points: parseInt(e.target.value) || 0 })}
+              className="w-16 h-8 text-xs"
+            />
+            <span className="text-xs text-amber-600 dark:text-amber-400">نقطة</span>
+          </div>
+          <Button
+            type="button"
+            onClick={onRemove}
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-3 space-y-3">
+        {/* Question text */}
+        <Textarea
+          value={q.text}
+          onChange={(e) => onChange({ text: e.target.value })}
+          placeholder="نص السؤال..."
+          rows={2}
+          className={error && !q.text.trim() ? 'border-rose-400' : ''}
+        />
+
+        {/* MCQ options */}
+        {q.type === 'MCQ' && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              الخيارات (اضغط على الحرف لتحديد الإجابة الصحيحة):
+            </p>
+            {q.options.map((opt, oi) => {
+              const isCorrect = !!q.correctAnswer && q.correctAnswer === opt && opt.trim().length > 0;
+              return (
+                <div key={oi} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onChange({ correctAnswer: opt })}
+                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                      isCorrect
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-emerald-400'
+                    }`}
+                    aria-label={`تحديد كإجابة صحيحة: ${optionLetter(oi)}`}
+                  >
+                    {isCorrect ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      optionLetter(oi)
+                    )}
+                  </button>
+                  <Input
+                    value={opt}
+                    onChange={(e) => onUpdateOption(oi, e.target.value)}
+                    placeholder={`الخيار ${optionLetter(oi)}`}
+                    className="flex-1 h-8 text-sm"
+                  />
+                  {q.options.length > 2 && (
+                    <Button
+                      type="button"
+                      onClick={() => onRemoveOption(oi)}
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-gray-400 hover:text-rose-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+            {q.options.length < 8 && (
+              <Button
+                type="button"
+                onClick={onAddOption}
+                size="sm"
+                variant="ghost"
+                className="text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 h-8"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                إضافة خيار
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* TRUE_FALSE */}
+        {q.type === 'TRUE_FALSE' && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400">الإجابة الصحيحة:</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onChange({ correctAnswer: 'true' })}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  q.correctAnswer === 'true'
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-400'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                صحيح
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ correctAnswer: 'false' })}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  q.correctAnswer === 'false'
+                    ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-500 text-rose-700 dark:text-rose-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-rose-400'
+                }`}
+              >
+                <XCircle className="w-4 h-4" />
+                خطأ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SHORT */}
+        {q.type === 'SHORT' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-500 dark:text-gray-400">الإجابة النموذجية</Label>
+            <Input
+              value={q.correctText}
+              onChange={(e) => onChange({ correctText: e.target.value })}
+              placeholder="الإجابة الصحيحة (اختياري)"
+              className="h-9 text-sm"
+            />
+          </div>
+        )}
+
+        {/* ESSAY */}
+        {q.type === 'ESSAY' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-500 dark:text-gray-400">معايير التصحيح</Label>
+            <Textarea
+              value={q.rubric}
+              onChange={(e) => onChange({ rubric: e.target.value })}
+              placeholder="معايير تصحيح السؤال المقالي (اختياري)..."
+              rows={2}
+            />
+          </div>
+        )}
+
+        {/* Explanation */}
+        <div className="space-y-1.5">
+          <div>
+            <Label className="text-xs text-gray-500 dark:text-gray-400">
+              تفسير الإجابة (اختياري)
+            </Label>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
+              <BookOpen className="w-3 h-3 shrink-0" />
+              يظهر للطالب بعد التسليم في الامتحانات التدريبية (للمراجعة)
+            </p>
+          </div>
+          <Textarea
+            value={q.explanation}
+            onChange={(e) => onChange({ explanation: e.target.value })}
+            placeholder="اكتب شرحاً موجزاً يساعد الطالب على فهم الإجابة الصحيحة..."
+            rows={2}
+          />
+        </div>
       </div>
     </div>
   );

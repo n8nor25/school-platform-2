@@ -31,13 +31,16 @@
  * ============================================================
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   ArrowRight, ArrowLeft, Clock, FileText, AlertTriangle, CheckCircle2,
   XCircle, Eye, EyeOff, Upload, Send, Loader2, RefreshCw, ChevronRight,
   Award, Shield, Lock, LogOut, Info, Camera, FileCheck, AlertCircle,
   ListChecks, RotateCcw, MessageSquareWarning, Timer, Hash, User,
-  BookOpen, Calendar, GraduationCap
+  BookOpen, Calendar, GraduationCap, Bookmark, BookmarkCheck,
+  Wifi, WifiOff, Search, Filter, History, TrendingUp, Trophy,
+  Target, Percent, Printer, ChevronLeft, Keyboard,
+  Dumbbell, Repeat2, Activity, Sparkles, ShieldCheck, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -50,11 +53,18 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { useExamProctor } from '@/hooks/use-exam-proctor';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+  ResponsiveContainer, Cell, LineChart, Line, Legend as RLegend,
+} from 'recharts';
 
 // ===== Types =====
 
@@ -70,6 +80,10 @@ interface StudentInfo {
   studentName: string;
   schoolId: string;
 }
+
+// ===== أنواع الامتحانات التدريبية (جديدة) =====
+type ExamCategory = 'OFFICIAL' | 'TRAINING';
+type ExamPeriod = 'NONE' | 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE';
 
 interface AvailableExam {
   id: string;
@@ -93,6 +107,50 @@ interface AvailableExam {
   allowTextAnswers: boolean;
   allowImageAnswers: boolean;
   allowPdfAnswers: boolean;
+  // ===== حقول الامتحانات التدريبية (اختيارية للتوافق الخلفي) =====
+  category?: ExamCategory;
+  examPeriod?: ExamPeriod;
+  showAnswersAfter?: boolean;
+  allowRetakes?: boolean;
+  isTraining?: boolean;
+  attemptsRemaining?: number; // 99 إذا allowRetakes (غير محدودة)
+  bestScore?: number | null;
+  submissions?: unknown[];
+}
+
+// ===== استجابة /api/exams/student (مقسّمة) =====
+interface ExamsStudentResponse {
+  available?: AvailableExam[];
+  inProgress?: AvailableExam[];
+  upcoming?: AvailableExam[];
+  endedOrExhausted?: AvailableExam[];
+  // دعم الاستجابة القديمة
+  exams?: AvailableExam[];
+}
+
+// ===== منحنى الأداء (placeholder — الـ API يُبنى في Task ID 6) =====
+interface PerformancePoint {
+  label: string;
+  score: number;
+  classAverage?: number; // متوسط الفصل لنفس الامتحان — خط المقارنة
+  date?: string;
+  examTitle?: string;
+  subject?: string;
+}
+
+interface PerformanceData {
+  isEmpty?: boolean;
+  points?: PerformancePoint[];
+  avgScore?: number;
+  avgTraining?: number | null;
+  avgOfficial?: number | null;
+  bestScore?: number | null;
+  trend?: 'up' | 'down' | 'stable';
+  totalExams?: number;
+  // إحصائيات الفصل (Task 6b)
+  avgClassScore?: number | null; // متوسط الفصل العام
+  classRank?: number | null; // ترتيب الطالب (1 = الأفضل)
+  classSize?: number; // عدد طلاب الفصل
 }
 
 interface Question {
@@ -104,6 +162,7 @@ interface Question {
   order: number;
   hasAttachment?: boolean;
   attachmentUrl?: string | null;
+  explanation?: string | null;
 }
 
 interface SubmissionInfo {
@@ -115,8 +174,14 @@ interface SubmissionInfo {
 }
 
 interface ExamStartResponse {
-  submission: SubmissionInfo;
-  exam: {
+  submissionId: string;
+  resumed?: boolean;
+  attemptNumber?: number;
+  durationMinutes?: number;
+  questionsCount?: number;
+  shuffled?: boolean;
+  questions?: Question[];
+  exam?: {
     id: string;
     title: string;
     durationMinutes: number;
@@ -127,8 +192,10 @@ interface ExamStartResponse {
     antiCheatEnabled: boolean;
     showResultImmediately: boolean;
   };
-  questions: Question[];
-  resumed?: boolean;
+  submission?: {
+    id: string;
+    remainingSeconds: number;
+  };
 }
 
 interface SavedAnswer {
@@ -149,6 +216,44 @@ interface ModerationInfo {
   reasons: string[];
   categories: string[];
   confidence: number;
+}
+
+// ===== إحصائيات الطالب =====
+interface StudentStats {
+  isEmpty: boolean;
+  kpis: {
+    totalExams: number;
+    avgScore: number;
+    passRate: number;
+    bestScore: number;
+    totalAppeals: number;
+  };
+  timeline: Array<{
+    examTitle: string;
+    subject: string;
+    score: number;
+    passed: boolean | null;
+    date: string;
+  }>;
+  subjectBreakdown: Array<{
+    subject: string;
+    avgScore: number;
+    examCount: number;
+    passRate: number;
+  }>;
+  recentResults: Array<{
+    submissionId: string;
+    examId: string;
+    examTitle: string;
+    subject: string;
+    percentage: number;
+    totalScore: number | null;
+    maxScore: number | null;
+    passed: boolean | null;
+    status: string;
+    submittedAt: string;
+  }>;
+  isTestMode?: boolean;
 }
 
 // ===== Helpers =====
@@ -193,6 +298,66 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   FILE_PDF: 'إجابة بملف PDF',
 };
 
+// ===== Helpers للامتحانات التدريبية =====
+
+function isTrainingExam(exam: AvailableExam): boolean {
+  return exam.isTraining === true || exam.category === 'TRAINING';
+}
+
+function categoryLabel(c: ExamCategory | undefined | null): string {
+  switch (c) {
+    case 'TRAINING': return 'تدريبي';
+    case 'OFFICIAL':
+    default: return 'رسمي';
+  }
+}
+
+function categoryBadgeClass(c: ExamCategory | undefined | null): string {
+  switch (c) {
+    case 'TRAINING':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+    case 'OFFICIAL':
+    default:
+      return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
+  }
+}
+
+function examPeriodLabel(p: ExamPeriod | undefined | null): string {
+  switch (p) {
+    case 'WEEKLY': return 'أسبوعي';
+    case 'MIDMONTH': return 'نصف شهري';
+    case 'MONTHLY': return 'شهري';
+    case 'CUMULATIVE': return 'تراكمي';
+    case 'NONE':
+    default: return 'بدون فئة';
+  }
+}
+
+function examPeriodBadgeClass(p: ExamPeriod | undefined | null): string {
+  switch (p) {
+    case 'WEEKLY':
+      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200 dark:border-sky-800';
+    case 'MIDMONTH':
+      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
+    case 'MONTHLY':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+    case 'CUMULATIVE':
+      return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+    case 'NONE':
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+  }
+}
+
+// هل الامتحان في حالة "منتهي/مُستنزف"؟
+function isEndedOrExhausted(exam: AvailableExam): boolean {
+  if (exam.timeStatus === 'ENDED') return true;
+  const remaining = typeof exam.attemptsRemaining === 'number'
+    ? exam.attemptsRemaining
+    : exam.attemptsLeft;
+  return remaining === 0;
+}
+
 // ===== Main Component =====
 
 export default function StudentExamsPage({ onBack, schoolId }: StudentExamsPageProps) {
@@ -219,7 +384,7 @@ export default function StudentExamsPage({ onBack, schoolId }: StudentExamsPageP
   // بدء الامتحان بنجاح
   const handleStartSuccess = (data: ExamStartResponse) => {
     setStartData(data);
-    setSubmissionId(data.submission.id);
+    setSubmissionId(data.submissionId);
     setScreen('runner');
   };
 
@@ -364,6 +529,16 @@ function StudentLogin({
   const [schoolIdInput, setSchoolIdInput] = useState(schoolId || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // مزامنة schoolIdInput مع الـ prop عندما يتوفر (selectedSchoolId يُحمّل من store
+  // بعد أول render). نُلّف setState بـ setTimeout لتجنّب تحذير set-state-in-effect.
+  useEffect(() => {
+    if (schoolId && schoolId !== schoolIdInput) {
+      const id = schoolId;
+      const t = setTimeout(() => setSchoolIdInput(id), 0);
+      return () => clearTimeout(t);
+    }
+  }, [schoolId, schoolIdInput]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -519,20 +694,49 @@ function ExamsList({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ===== إحصائيات الطالب =====
+  const [stats, setStats] = useState<StudentStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // ===== الفلترة والتبويب =====
+  const [activeTab, setActiveTab] = useState<'available' | 'history'>('available');
+  // التبويب الرئيسي: رسمي / تدريبي (يفتلر قائمة الامتحانات حسب category)
+  const [categoryTab, setCategoryTab] = useState<ExamCategory>('OFFICIAL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
   const loadExams = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(buildUrl('/api/exams/available', student), {
-        headers: { 'x-student-id': student.studentId },
-      });
-      const data = await res.json();
+      // الـ API المحدّث: /api/exams/student?schoolId&studentId&studentName
+      // يُرجع استجابة مقسّمة: available, inProgress, upcoming, endedOrExhausted
+      const res = await fetch(
+        buildUrl('/api/exams/student', student, { studentName: student.studentName }),
+        { headers: { 'x-student-id': student.studentId } },
+      );
+      const data: ExamsStudentResponse = await res.json();
       if (!res.ok) {
-        setError(data.error || 'فشل جلب الامتحانات');
+        setError((data as unknown as { error?: string }).error || 'فشل جلب الامتحانات');
         setExams([]);
-      } else {
-        setExams(data.exams || []);
+        return;
       }
+      // جمّع كل الأقسام في قائمة واحدة (مع دعم الاستجابة القديمة data.exams)
+      const list: AvailableExam[] = [];
+      if (Array.isArray(data.available)) list.push(...data.available);
+      if (Array.isArray(data.inProgress)) list.push(...data.inProgress);
+      if (Array.isArray(data.upcoming)) list.push(...data.upcoming);
+      if (Array.isArray(data.endedOrExhausted)) list.push(...data.endedOrExhausted);
+      if (list.length === 0 && Array.isArray(data.exams)) list.push(...data.exams);
+      // ابحث: إزالة التكرار بناءً على id
+      const seen = new Set<string>();
+      const deduped = list.filter((e) => {
+        if (seen.has(e.id)) return false;
+        seen.add(e.id);
+        return true;
+      });
+      setExams(deduped);
     } catch (e) {
       setError('تعذّر الاتصال بالخادم');
       setExams([]);
@@ -541,15 +745,75 @@ function ExamsList({
     }
   }, [student]);
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const res = await fetch(buildUrl('/api/exams/student-stats', student), {
+        headers: { 'x-student-id': student.studentId },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStats(data as StudentStats);
+      } else {
+        setStats(null);
+      }
+    } catch (e) {
+      setStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [student]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await loadExams();
+      await Promise.all([loadExams(), loadStats()]);
       if (cancelled) return;
     })();
     return () => { cancelled = true; };
   }, []);
 
+  // قائمة المواد المتاحة للفلترة (ضمن التبويب الحالي)
+  const examsInCategory = useMemo(
+    () => exams.filter((e) => (isTrainingExam(e) ? 'TRAINING' : 'OFFICIAL') === categoryTab),
+    [exams, categoryTab],
+  );
+
+  const availableSubjects = useMemo(() => {
+    const set = new Set<string>();
+    examsInCategory.forEach((e) => { if (e.subject) set.add(e.subject); });
+    stats?.subjectBreakdown.forEach((s) => set.add(s.subject));
+    return Array.from(set).sort();
+  }, [examsInCategory, stats]);
+
+  // أعداد كل تبويب رئيسي
+  const officialCount = useMemo(
+    () => exams.filter((e) => !isTrainingExam(e)).length,
+    [exams],
+  );
+  const trainingCount = useMemo(
+    () => exams.filter((e) => isTrainingExam(e)).length,
+    [exams],
+  );
+
+  // تطبيق الفلترة على امتحانات التبويب الحالي
+  const filteredExams = useMemo(() => {
+    return examsInCategory.filter((exam) => {
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const matches =
+          exam.title.toLowerCase().includes(q) ||
+          exam.subject.toLowerCase().includes(q) ||
+          (exam.teacherName || '').toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      if (subjectFilter !== 'all' && exam.subject !== subjectFilter) return false;
+      if (statusFilter !== 'all' && exam.timeStatus !== statusFilter) return false;
+      return true;
+    });
+  }, [examsInCategory, searchTerm, subjectFilter, statusFilter]);
+
+  // ===== شاشة التحميل =====
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -559,6 +823,7 @@ function ExamsList({
     );
   }
 
+  // ===== شاشة الخطأ =====
   if (error) {
     return (
       <div className="max-w-md mx-auto py-12">
@@ -574,17 +839,837 @@ function ExamsList({
     );
   }
 
-  if (exams.length === 0) {
+  return (
+    <div className="space-y-5">
+      {/* ====== رأس إحصائيات الطالب ====== */}
+      <StudentStatsHeader stats={stats} loading={statsLoading} studentName={student.studentName} />
+
+      {/* ====== منحنى أدائي (placeholder — الـ API يُبنى في Task ID 6) ====== */}
+      <PerformanceCurve student={student} />
+
+      {/* ====== تبويب: متاحة / منجزة ====== */}
+      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('available')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === 'available'
+              ? 'bg-white text-[#610000] shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          المتاحة
+          {exams.length > 0 && (
+            <Badge variant="secondary" className="text-xs px-1.5 py-0">{exams.length}</Badge>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === 'history'
+              ? 'bg-white text-[#610000] shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          النتائج السابقة
+          {stats && !stats.isEmpty && stats.kpis.totalExams > 0 && (
+            <Badge variant="secondary" className="text-xs px-1.5 py-0">{stats.kpis.totalExams}</Badge>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'available' ? (
+        <>
+          {/* ====== التبويب الرئيسي: رسمي / تدريبي ====== */}
+          <Tabs value={categoryTab} onValueChange={(v) => setCategoryTab(v as ExamCategory)} className="w-full">
+            <TabsList className="h-10">
+              <TabsTrigger value="OFFICIAL" className="px-4 gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-violet-600" />
+                <span>الامتحانات الرسمية</span>
+                {officialCount > 0 && (
+                  <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">{officialCount}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="TRAINING" className="px-4 gap-1.5">
+                <Dumbbell className="w-4 h-4 text-amber-600" />
+                <span>الامتحانات التدريبية</span>
+                {trainingCount > 0 && (
+                  <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1 bg-amber-100 text-amber-700">{trainingCount}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* ====== شريط الفلترة ====== */}
+          {examsInCategory.length > 0 && (
+            <div className="bg-white rounded-xl border p-3 flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="ابحث بالعنوان أو المادة أو المعلم..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pr-9 h-9"
+                />
+              </div>
+              <select
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#610000]/30"
+              >
+                <option value="all">كل المواد</option>
+                {availableSubjects.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#610000]/30"
+              >
+                <option value="all">كل الحالات</option>
+                <option value="OPEN">مفتوح الآن</option>
+                <option value="UPCOMING">قادم</option>
+                <option value="ENDED">منتهي</option>
+              </select>
+              {(searchTerm || subjectFilter !== 'all' || statusFilter !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setSearchTerm(''); setSubjectFilter('all'); setStatusFilter('all'); }}
+                  className="h-9 text-gray-500"
+                >
+                  <XCircle className="w-4 h-4 ml-1" /> مسح
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={loadExams} className="h-9 mr-auto">
+                <RefreshCw className="w-4 h-4 ml-1" /> تحديث
+              </Button>
+            </div>
+          )}
+
+          {/* ====== قائمة الامتحانات ====== */}
+          {filteredExams.length === 0 ? (
+            <div className="max-w-md mx-auto py-12 text-center">
+              <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
+                categoryTab === 'TRAINING' ? 'bg-amber-100' : 'bg-gray-100'
+              }`}>
+                {categoryTab === 'TRAINING'
+                  ? <Dumbbell className="w-10 h-10 text-amber-400" />
+                  : <FileText className="w-10 h-10 text-gray-400" />}
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {examsInCategory.length === 0
+                  ? (categoryTab === 'TRAINING' ? 'لا توجد امتحانات تدريبية' : 'لا توجد امتحانات رسمية متاحة')
+                  : 'لا نتائج مطابقة'}
+              </h3>
+              <p className="text-gray-500 text-sm mb-4">
+                {examsInCategory.length === 0
+                  ? (categoryTab === 'TRAINING'
+                      ? 'لا توجد امتحانات تدريبية مفتوحة حالياً. تابع صفحتك للاطلاع على الجديد.'
+                      : 'لا توجد امتحانات رسمية مفتوحة حالياً. تابع صفحتك للاطلاع على الامتحانات الجديدة.')
+                  : 'جرّب تعديل معايير البحث أو الفلترة.'}
+              </p>
+              {examsInCategory.length === 0 ? (
+                <Button onClick={loadExams} variant="outline">
+                  <RefreshCw className="w-4 h-4 ml-2" /> تحديث
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => { setSearchTerm(''); setSubjectFilter('all'); setStatusFilter('all'); }}
+                >
+                  <Filter className="w-4 h-4 ml-2" /> إعادة ضبط الفلترة
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredExams.map((exam) => (
+                <ExamCard key={exam.id} exam={exam} onSelect={onSelectExam} />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        /* ====== تبويب النتائج السابقة ====== */
+        <HistoryTab stats={stats} loading={statsLoading} onRetry={loadStats} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+//  StudentStatsHeader — رأس إحصائيات الطالب (KPIs + مخطط)
+// ============================================================
+function StudentStatsHeader({
+  stats,
+  loading,
+  studentName,
+}: {
+  stats: StudentStats | null;
+  loading: boolean;
+  studentName: string;
+}) {
+  if (loading) {
+    return (
+      <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="h-4 w-32 bg-white/20 rounded mb-1 animate-pulse" />
+              <div className="h-3 w-24 bg-white/10 rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="bg-white/10 rounded-lg p-3">
+                <div className="h-8 w-12 bg-white/20 rounded animate-pulse mb-2" />
+                <div className="h-3 w-16 bg-white/10 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!stats || stats.isEmpty) {
+    return (
+      <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">أهلاً، {studentName}</h3>
+              <p className="text-white/80 text-sm">لم تخض أي امتحان بعد — ابدأ أول امتحان متاح!</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { kpis, timeline } = stats;
+  const chartData = timeline.map((t, i) => ({
+    name: `#${i + 1}`,
+    score: t.score,
+    title: t.examTitle,
+  }));
+
+  return (
+    <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg">أهلاً، {studentName}</h3>
+              <p className="text-white/80 text-sm">ملخّص أدائك في الامتحانات الإلكترونية</p>
+            </div>
+          </div>
+          {stats.isTestMode && (
+            <Badge className="bg-white/20 text-white border-0 hover:bg-white/20">
+              وضع تجريبي
+            </Badge>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <StatPill icon={<FileCheck className="w-4 h-4" />} label="امتحانات منجزة" value={String(kpis.totalExams)} />
+          <StatPill icon={<TrendingUp className="w-4 h-4" />} label="متوسط الدرجات" value={`${kpis.avgScore}%`} />
+          <StatPill icon={<Percent className="w-4 h-4" />} label="نسبة النجاح" value={`${kpis.passRate}%`} />
+          <StatPill icon={<Trophy className="w-4 h-4" />} label="أعلى نتيجة" value={`${kpis.bestScore}%`} />
+        </div>
+
+        {/* مخطط الأداء الزمني */}
+        {chartData.length > 1 && (
+          <div className="bg-white/10 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-white/80 font-medium">اتجاه الأداء (آخر {chartData.length} امتحانات)</span>
+              <span className="text-xs text-white/60">الدرجة %</span>
+            </div>
+            <div className="h-24">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.6)" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 100]} stroke="rgba(255,255,255,0.6)" fontSize={10} tickLine={false} axisLine={false} />
+                  <RTooltip
+                    contentStyle={{ background: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: '#fff' }}
+                    formatter={(v: number) => [`${v}%`, 'الدرجة']}
+                    labelFormatter={(_l: number, payload) => {
+                      const p = payload?.[0]?.payload;
+                      return p?.title || '';
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#fff"
+                    strokeWidth={2.5}
+                    dot={{ fill: '#fff', r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="bg-white/10 rounded-lg p-3">
+      <div className="flex items-center gap-1.5 text-white/70 text-xs mb-1">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+    </div>
+  );
+}
+
+// ============================================================
+//  PerformanceCurve — منحنى أداء الطالب مع خط متوسط الفصل
+//  الـ API: GET /api/exams/student/performance?schoolId&studentId
+//  الاستجابة المتوقعة (من Task ID 6 + 6b):
+//    { success: true, data: { studentName, timeline[], byPeriod[], bySubject[],
+//                              stats: { ..., avgClassScore, classRank, classSize } } }
+//  - كل عنصر في timeline يحوي percentage (درجة الطالب) + classAverage (متوسط الفصل).
+//  - نرسم خطين: amber/orange للطالب (متين) و slate/blue dashed لمتوسط الفصل.
+//  - 3 بطاقات إحصائية فوق الـ chart: معدلي / متوسط الفصل / ترتيبي.
+//  - fallback آمن إذا فشل الـ fetch (placeholder "قريباً").
+//  - ندعم أيضاً شكل مبسّط {points, avgScore} لأغراض الاختبار.
+// ============================================================
+function PerformanceCurve({ student }: { student: StudentInfo }) {
+  const [data, setData] = useState<PerformanceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    // mountedRef pattern لتفادي setState بعد unmount
+    const mountedRef = { current: true };
+    (async () => {
+      try {
+        const res = await fetch(buildUrl('/api/exams/student/performance', student), {
+          headers: { 'x-student-id': student.studentId },
+        });
+        if (!mountedRef.current) return;
+        if (!res.ok) {
+          // fallback آمن: لا نُظهر خطأ للمستخدم، فقط placeholder
+          setFailed(true);
+          setData(null);
+          return;
+        }
+        const json = await res.json();
+        if (!mountedRef.current) return;
+        // الـ API يُرجع {success, data: {...}} — نأخذ data
+        const payload = (json && typeof json === 'object' && 'data' in json
+          ? (json as { data?: unknown }).data
+          : json) as PerformanceData | undefined;
+        // طبيعّي: لو الـ API يُرجع timeline (شكل Task 6/6b)،حوّله إلى points
+        const normalized = normalizePerformanceData(payload);
+        setData(normalized);
+        setFailed(false);
+      } catch {
+        if (!mountedRef.current) return;
+        // fallback آمن: تعامل مع فشل الشبكة بهدوء
+        setFailed(true);
+        setData(null);
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    })();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [student]);
+
+  // ===== Loading skeleton =====
+  if (loading) {
+    return (
+      <Card className="border-amber-200 shadow-sm overflow-hidden bg-amber-50/40">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-8 h-8 rounded-lg" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+            </div>
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </div>
+          <Skeleton className="h-32 w-full rounded-lg" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const hasData =
+    !!data &&
+    !data.isEmpty &&
+    Array.isArray(data.points) &&
+    data.points.length > 0;
+
+  // هل يوجد بيانات متوسط الفصل على الأقل لنقطة واحدة؟
+  const hasClassLine =
+    hasData &&
+    Array.isArray(data!.points) &&
+    data!.points.some((p) => typeof p.classAverage === 'number');
+
+  // "معدلي": نُفضّل avgOfficial (الرسمي) فإن لم يوجد فـ avgTraining،
+  // وإلا avgScore (المتوسط العام). قد تكون null لو لا بيانات.
+  const myAvg =
+    data?.avgOfficial != null
+      ? data.avgOfficial
+      : data?.avgTraining != null
+      ? data.avgTraining
+      : data?.avgScore ?? null;
+
+  const classAvg = data?.avgClassScore ?? null;
+  const classRank = data?.classRank ?? null;
+  const classSize = data?.classSize ?? 0;
+
+  return (
+    <Card className="border-amber-200 shadow-sm overflow-hidden bg-gradient-to-l from-amber-50 to-orange-50">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-amber-700" />
+            </div>
+            <div>
+              <CardTitle className="text-sm text-gray-900">منحنى أدائي</CardTitle>
+              <p className="text-xs text-gray-500">تتبّع تطوّر درجاتك مقابل متوسط الفصل</p>
+            </div>
+          </div>
+          {hasData && myAvg != null && (
+            <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+              متوسطي {myAvg}%
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        {hasData ? (
+          <>
+            {/* ===== 3 بطاقات إحصائية: معدلي / متوسط الفصل / ترتيبي ===== */}
+            <div className="grid grid-cols-3 gap-2">
+              <PerfStatCard
+                icon={<Target className="w-3.5 h-3.5" />}
+                label="معدلي"
+                value={myAvg != null ? `${myAvg}%` : '—'}
+                tone="amber"
+              />
+              <PerfStatCard
+                icon={<Users className="w-3.5 h-3.5" />}
+                label="متوسط الفصل"
+                value={classAvg != null ? `${classAvg}%` : '—'}
+                tone="slate"
+              />
+              <PerfStatCard
+                icon={<Trophy className="w-3.5 h-3.5" />}
+                label="ترتيبي"
+                value={classRank != null ? `${classRank} / ${classSize || '?'}` : '—'}
+                tone="slate"
+              />
+            </div>
+
+            {/* ===== LineChart بخطين: الطالب + متوسط الفصل ===== */}
+            <div className="h-36">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data!.points} margin={{ top: 4, right: 8, bottom: 0, left: -28 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#fde68a" />
+                  <XAxis dataKey="label" stroke="#a16207" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 100]} stroke="#a16207" fontSize={10} tickLine={false} axisLine={false} />
+                  <RTooltip
+                    contentStyle={{
+                      background: '#fff',
+                      border: '1px solid #fde68a',
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                    // نوع الإرجاع الصريح [string, string] يمنع TS من
+                    // تضييق TName إلى union من الـ literals، مما يكسر
+                    // overload الـ labelFormatter.
+                    formatter={(value: number, name: string): [string, string] => {
+                      if (name === 'classAverage') {
+                        return [`${value}%`, 'متوسط الفصل'];
+                      }
+                      return [`${value}%`, 'درجتي'];
+                    }}
+                    labelFormatter={(_l: number, payload) => {
+                      const p = payload?.[0]?.payload as PerformancePoint | undefined;
+                      return p?.examTitle || p?.label || '';
+                    }}
+                  />
+                  <RLegend
+                    wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                    formatter={(value: string) =>
+                      value === 'classAverage' ? 'متوسط الفصل' : 'أدائي'
+                    }
+                  />
+                  {/* خط الطالب: amber/orange متين */}
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    name="score"
+                    stroke="#d97706"
+                    strokeWidth={2.5}
+                    dot={{ fill: '#d97706', r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                  {/* خط متوسط الفصل: slate/blue dashed (يظهر فقط إذا توفّرت البيانات) */}
+                  {hasClassLine && (
+                    <Line
+                      type="monotone"
+                      dataKey="classAverage"
+                      name="classAverage"
+                      stroke="#64748b"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={{ fill: '#64748b', r: 2.5 }}
+                      activeDot={{ r: 4 }}
+                      connectNulls
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        ) : (
+          <div className="h-32 flex flex-col items-center justify-center text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-2">
+              <Sparkles className="w-5 h-5 text-amber-600" />
+            </div>
+            <p className="text-sm font-medium text-amber-800 mb-0.5">منحنى الأداء قريباً</p>
+            <p className="text-xs text-amber-700/80 max-w-sm">
+              {failed
+                ? 'تعذّر تحميل بيانات الأداء حالياً. ستظهر هنا بمجرد توفّرها.'
+                : 'سيظهر منحنى أدائك عبر الامتحانات هنا بمجرد توفّر بيانات كافية.'}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// بطاقة إحصائية صغيرة للـ PerformanceCurve — ثلاث نغمات لونية:
+// amber (للطالب) / slate (للفصل).
+function PerfStatCard({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: 'amber' | 'slate';
+}) {
+  const tones =
+    tone === 'amber'
+      ? {
+          wrap: 'bg-amber-50/70 border-amber-200',
+          iconWrap: 'bg-amber-100 text-amber-700',
+          value: 'text-amber-900',
+          label: 'text-amber-700/80',
+        }
+      : {
+          wrap: 'bg-slate-50/80 border-slate-200',
+          iconWrap: 'bg-slate-200/70 text-slate-600',
+          value: 'text-slate-800',
+          label: 'text-slate-500',
+        };
+  return (
+    <div className={`rounded-lg border ${tones.wrap} px-2.5 py-2 flex flex-col gap-1`}>
+      <div className="flex items-center gap-1">
+        <span className={`inline-flex w-5 h-5 items-center justify-center rounded ${tones.iconWrap}`}>
+          {icon}
+        </span>
+        <span className={`text-[11px] ${tones.label}`}>{label}</span>
+      </div>
+      <span className={`text-base font-bold leading-none ${tones.value}`}>{value}</span>
+    </div>
+  );
+}
+
+// يطبّع الاستجابة من /api/exams/student/performance إلى PerformanceData.
+// يدعم شكل Task 6 (timeline) وشكل مبسّط (points).
+function normalizePerformanceData(raw: PerformanceData | undefined | null): PerformanceData {
+  if (!raw || typeof raw !== 'object') return { isEmpty: true, points: [] };
+
+  // شكل مبسّط: points + avgScore
+  if (Array.isArray((raw as PerformanceData).points)) {
+    return raw as PerformanceData;
+  }
+
+  // شكل Task 6/6b: timeline + stats
+  const r = raw as PerformanceData & {
+    timeline?: Array<{
+      date?: string;
+      examTitle?: string;
+      subject?: string;
+      percentage?: number;
+      classAverage?: number;
+      attemptNumber?: number;
+    }>;
+    stats?: {
+      avgTraining?: number | null;
+      avgOfficial?: number | null;
+      bestScore?: number | null;
+      totalAttempts?: number;
+      avgClassScore?: number | null;
+      classRank?: number | null;
+      classSize?: number;
+    };
+  };
+
+  const timeline = Array.isArray(r.timeline) ? r.timeline : [];
+  if (timeline.length === 0) return { isEmpty: true, points: [] };
+
+  const points: PerformancePoint[] = timeline.map((t, i) => ({
+    label: `#${i + 1}`,
+    score: typeof t.percentage === 'number' ? t.percentage : 0,
+    // classAverage: متوسط الفصل لنفس الامتحان — يُرجعه الـ API دائماً
+    // (يساوي درجة الطالب إذا لم يوجد آخرون). نُمرّره كما هو.
+    classAverage: typeof t.classAverage === 'number' ? t.classAverage : undefined,
+    date: t.date,
+    examTitle: t.examTitle,
+    subject: t.subject,
+  }));
+
+  // متوسط الطالب = متوسط كل نسبه
+  const validScores = timeline
+    .map((t) => t.percentage)
+    .filter((p): p is number => typeof p === 'number');
+  const avgScore = validScores.length > 0
+    ? Math.round((validScores.reduce((a, b) => a + b, 0) / validScores.length) * 10) / 10
+    : undefined;
+
+  return {
+    isEmpty: false,
+    points,
+    avgScore,
+    avgTraining: r.stats?.avgTraining ?? undefined,
+    avgOfficial: r.stats?.avgOfficial ?? undefined,
+    bestScore: r.stats?.bestScore ?? undefined,
+    totalExams: r.stats?.totalAttempts,
+    // إحصائيات الفصل (Task 6b)
+    avgClassScore: r.stats?.avgClassScore ?? undefined,
+    classRank: r.stats?.classRank ?? undefined,
+    classSize: r.stats?.classSize,
+  };
+}
+
+// ============================================================
+//  ExamCard — بطاقة امتحان (مستخرجة لإعادة الاستخدام)
+// ============================================================
+function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: AvailableExam) => void }) {
+  const training = isTrainingExam(exam);
+  const status = exam.timeStatus;
+  const statusInfo =
+    status === 'UPCOMING'
+      ? { label: 'قادم', color: 'bg-amber-100 text-amber-800 border-amber-200' }
+      : status === 'OPEN'
+      ? { label: 'مفتوح', color: 'bg-green-100 text-green-800 border-green-200' }
+      : { label: 'منتهي', color: 'bg-gray-100 text-gray-600 border-gray-200' };
+
+  // منطق الزر: استئناف / إعادة محاولة / ابدأ / انتهت المحاولات
+  const ended = isEndedOrExhausted(exam);
+  const canRetry = training && exam.allowRetakes === true && (exam.attemptsUsed > 0 || ended);
+  const exhausted = ended && exam.allowRetakes !== true;
+
+  // لو allowRetakes === true: المحاولات غير محدودة (attemptsRemaining = 99)
+  const attemptsRemaining = typeof exam.attemptsRemaining === 'number'
+    ? exam.attemptsRemaining
+    : exam.attemptsLeft;
+  const showUnlimited = exam.allowRetakes === true;
+
+  // لوحة ألوان البطاقة حسب النوع
+  const cardBorder = training
+    ? (exam.hasActiveSubmission ? 'border-amber-300 bg-amber-50/40' : 'border-amber-200 bg-amber-50/20')
+    : (exam.hasActiveSubmission ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200');
+  const primaryBtnClass = training
+    ? 'w-full bg-amber-600 hover:bg-amber-700 text-white'
+    : 'w-full bg-[#610000] hover:bg-[#4a0000] text-white';
+
+  return (
+    <Card
+      className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border ${cardBorder}`}
+      onClick={() => onSelect(exam)}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            {/* ====== شارات الامتحان التدريبي ====== */}
+            {training && (
+              <div className="flex items-center gap-1 flex-wrap mb-1.5">
+                <Badge className={`text-[10px] border ${categoryBadgeClass('TRAINING')}`}>
+                  <Dumbbell className="w-3 h-3 ml-0.5" />
+                  تدريبي
+                </Badge>
+                {exam.examPeriod && exam.examPeriod !== 'NONE' && (
+                  <Badge className={`text-[10px] border ${examPeriodBadgeClass(exam.examPeriod)}`}>
+                    {examPeriodLabel(exam.examPeriod)}
+                  </Badge>
+                )}
+                {exam.allowRetakes === true && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 cursor-help">
+                        <Repeat2 className="w-3 h-3" />
+                        محاولات غير محدودة
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>هذا الامتحان التدريبي يسمح بإعادة المحاولة دون حد</TooltipContent>
+                  </Tooltip>
+                )}
+                {exam.showAnswersAfter === true && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center justify-center w-5 h-5 text-amber-700 bg-amber-50 border border-amber-200 rounded cursor-help">
+                        <Eye className="w-3 h-3" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>يعرض الإجابات الصحيحة بعد التسليم</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+            <CardTitle className="text-base text-gray-900 leading-snug">
+              {exam.title}
+            </CardTitle>
+            <CardDescription className="text-xs mt-1">
+              {exam.subject}
+              {exam.classroomName ? ` • ${exam.classroomName}` : ''}
+              {exam.teacherName ? ` • أ/ ${exam.teacherName}` : ''}
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className={`flex-shrink-0 ${statusInfo.color}`}>
+            {statusInfo.label}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 pb-3">
+        {exam.description && (
+          <p className="text-sm text-gray-600 line-clamp-2 mb-3">{exam.description}</p>
+        )}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-gray-600">
+            <Clock className="w-3.5 h-3.5 text-gray-400" />
+            {exam.durationMinutes} دقيقة
+          </div>
+          <div className="flex items-center gap-1.5 text-gray-600">
+            <ListChecks className="w-3.5 h-3.5 text-gray-400" />
+            {exam.questionsCount} سؤال
+          </div>
+          <div className="flex items-center gap-1.5 text-gray-600">
+            <Hash className="w-3.5 h-3.5 text-gray-400" />
+            {showUnlimited ? 'محاولات غير محدودة' : `${attemptsRemaining} محاولة متبقية`}
+          </div>
+          <div className="flex items-center gap-1.5 text-gray-600">
+            {exam.hasPassword ? (
+              <><Lock className="w-3.5 h-3.5 text-gray-400" /> بكلمة سر</>
+            ) : (
+              <><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> بدون سر</>
+            )}
+          </div>
+        </div>
+        {exam.antiCheatEnabled && (
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+            <Shield className="w-3.5 h-3.5" />
+            مراقبة ذكية مفعّلة
+          </div>
+        )}
+      </CardContent>
+      <CardFooter className="pt-0 pb-3">
+        {exhausted ? (
+          <Button
+            className="w-full bg-gray-200 text-gray-500 cursor-not-allowed hover:bg-gray-200"
+            size="sm"
+            variant="default"
+            disabled
+            onClick={(e) => e.stopPropagation()}
+          >
+            <XCircle className="w-4 h-4 ml-1" /> انتهت المحاولات
+          </Button>
+        ) : (
+          <Button
+            className={primaryBtnClass}
+            size="sm"
+            variant="default"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(exam);
+            }}
+          >
+            {exam.hasActiveSubmission ? (
+              <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
+            ) : canRetry ? (
+              <><Repeat2 className="w-4 h-4 ml-1" /> إعادة المحاولة</>
+            ) : (
+              <>ابدأ الامتحان <ArrowLeft className="w-4 h-4 mr-1" /></>
+            )}
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}
+
+// ============================================================
+//  HistoryTab — تبويب النتائج السابقة
+// ============================================================
+function HistoryTab({
+  stats,
+  loading,
+  onRetry,
+}: {
+  stats: StudentStats | null;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="w-10 h-10 text-[#610000] animate-spin mb-3" />
+        <p className="text-gray-500 text-sm">جاري تحميل النتائج السابقة...</p>
+      </div>
+    );
+  }
+
+  if (!stats || stats.isEmpty) {
     return (
       <div className="max-w-md mx-auto py-12 text-center">
         <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <FileText className="w-10 h-10 text-gray-400" />
+          <History className="w-10 h-10 text-gray-400" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 mb-2">لا توجد امتحانات متاحة</h3>
-        <p className="text-gray-500 text-sm mb-4">
-          لا توجد امتحانات مفتوحة حالياً. تابع صفحتك للاطلاع على الامتحانات الجديدة.
-        </p>
-        <Button onClick={loadExams} variant="outline">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">لا توجد نتائج سابقة</h3>
+        <p className="text-gray-500 text-sm mb-4">لم تُكمل أي امتحان بعد.</p>
+        <Button onClick={onRetry} variant="outline">
           <RefreshCw className="w-4 h-4 ml-2" /> تحديث
         </Button>
       </div>
@@ -592,100 +1677,89 @@ function ExamsList({
   }
 
   return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">الامتحانات المتاحة</h2>
-        <p className="text-sm text-gray-500">{exams.length} امتحان متاح لك حالياً</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {exams.map((exam) => {
-          const status = exam.timeStatus;
-          const statusInfo =
-            status === 'UPCOMING'
-              ? { label: 'قادم', color: 'bg-amber-100 text-amber-800 border-amber-200' }
-              : status === 'OPEN'
-              ? { label: 'مفتوح', color: 'bg-green-100 text-green-800 border-green-200' }
-              : { label: 'منتهي', color: 'bg-gray-100 text-gray-600 border-gray-200' };
-
-          return (
-            <Card
-              key={exam.id}
-              className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border ${
-                exam.hasActiveSubmission ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'
-              }`}
-              onClick={() => onSelectExam(exam)}
-            >
-              <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <CardTitle className="text-base text-gray-900 leading-snug">
-                          {exam.title}
-                        </CardTitle>
-                        <CardDescription className="text-xs mt-1">
-                          {exam.subject}
-                          {exam.classroomName ? ` • ${exam.classroomName}` : ''}
-                          {exam.teacherName ? ` • أ/ ${exam.teacherName}` : ''}
-                        </CardDescription>
-                      </div>
-                      <Badge variant="outline" className={`flex-shrink-0 ${statusInfo.color}`}>
-                        {statusInfo.label}
-                      </Badge>
+    <div className="space-y-4">
+      {/* تفصيل حسب المادة */}
+      {stats.subjectBreakdown.length > 0 && (
+        <Card className="shadow-sm border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#610000]" />
+              الأداء حسب المادة
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-2">
+              {stats.subjectBreakdown.map((s) => (
+                <div key={s.subject} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-sm text-gray-900 truncate">{s.subject}</span>
+                      <Badge variant="outline" className="text-xs">{s.examCount} امتحان</Badge>
                     </div>
-              </CardHeader>
-              <CardContent className="pt-0 pb-3">
-                {exam.description && (
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-3">{exam.description}</p>
-                )}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-gray-600">
-                    <Clock className="w-3.5 h-3.5 text-gray-400" />
-                    {exam.durationMinutes} دقيقة
+                    <div className="flex items-center gap-2">
+                      <Progress value={s.avgScore} className="h-1.5 flex-1" />
+                      <span className="text-xs text-gray-500 w-12 text-left">{s.avgScore}%</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-600">
-                    <ListChecks className="w-3.5 h-3.5 text-gray-400" />
-                    {exam.questionsCount} سؤال
+                  <div className="text-left">
+                    <div className="text-xs text-gray-400">نجاح</div>
+                    <div className={`text-sm font-bold ${s.passRate >= 50 ? 'text-green-600' : 'text-amber-600'}`}>
+                      {s.passRate}%
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-600">
-                    <Hash className="w-3.5 h-3.5 text-gray-400" />
-                    {exam.attemptsLeft} محاولة متبقية
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* آخر النتائج */}
+      <Card className="shadow-sm border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Award className="w-4 h-4 text-[#610000]" />
+            آخر النتائج
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {stats.recentResults.map((r) => {
+              const passed = r.passed === true;
+              const failed = r.passed === false;
+              return (
+                <div key={r.submissionId} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    passed ? 'bg-green-100 text-green-700' :
+                    failed ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>
+                    {passed ? <CheckCircle2 className="w-5 h-5" /> : failed ? <XCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-600">
-                    {exam.hasPassword ? (
-                      <><Lock className="w-3.5 h-3.5 text-gray-400" /> بكلمة سر</>
-                    ) : (
-                      <><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> بدون سر</>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-gray-900 truncate">{r.examTitle}</div>
+                    <div className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
+                      <span>{r.subject}</span>
+                      <span>•</span>
+                      <span>{formatDate(r.submittedAt)}</span>
+                    </div>
+                  </div>
+                  <div className="text-left flex-shrink-0">
+                    <div className={`text-lg font-bold ${
+                      passed ? 'text-green-600' : failed ? 'text-red-600' : 'text-amber-600'
+                    }`}>
+                      {r.percentage}%
+                    </div>
+                    {r.totalScore !== null && r.maxScore !== null && (
+                      <div className="text-xs text-gray-400">{r.totalScore}/{r.maxScore}</div>
                     )}
                   </div>
                 </div>
-                {exam.antiCheatEnabled && (
-                  <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
-                    <Shield className="w-3.5 h-3.5" />
-                    مراقبة ذكية مفعّلة
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="pt-0 pb-3">
-                <Button
-                  className="w-full bg-[#610000] hover:bg-[#4a0000] text-white"
-                  size="sm"
-                  variant="default"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectExam(exam);
-                  }}
-                >
-                  {exam.hasActiveSubmission ? (
-                    <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
-                  ) : (
-                    <>ابدأ الامتحان <ArrowLeft className="w-4 h-4 mr-1" /></>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -723,7 +1797,7 @@ function ExamIntro({
     setLoading(true);
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/${exam.id}/start`, student),
+        buildUrl(`/api/exams/student/${exam.id}/start`, student),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -904,10 +1978,10 @@ interface ExamRunnerProps {
 }
 
 function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRunnerProps) {
-  const questions = startData.questions;
+  const questions = startData.questions || [];
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, { text?: string; imageUrl?: string; fileUrl?: string }>>({});
-  const [remainingSeconds, setRemainingSeconds] = useState(startData.submission.remainingSeconds);
+  const [remainingSeconds, setRemainingSeconds] = useState(startData.submission?.remainingSeconds ?? (startData.durationMinutes ? startData.durationMinutes * 60 : 1800));
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({});
   const [moderationWarnings, setModerationWarnings] = useState<Record<string, ModerationInfo | null>>({});
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'done' | 'error'>>({});
@@ -917,9 +1991,22 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [autoCloseWarning, setAutoCloseWarning] = useState(false);
 
+  // ===== تحسينات جديدة =====
+  // تعليم الأسئلة للمراجعة لاحقاً
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
+  // فلترة المستكشف (الكل / للمراجعة / غير مُجاب)
+  const [navFilter, setNavFilter] = useState<'all' | 'flagged' | 'unanswered'>('all');
+  // حالة الاتصال بالخادم
+  const [isOnline, setIsOnline] = useState(true);
+  // إظهار تلميح اختصارات لوحة المفاتيح
+  const [showShortcutsHint, setShowShortcutsHint] = useState(false);
+  // عرض/إخفاء لوحة اختصارات لوحة المفاتيح
+  const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
+
   const currentQuestion = questions[currentIdx];
   const totalAnswered = Object.values(answers).filter(a => a.text?.trim() || a.imageUrl || a.fileUrl).length;
   const progress = questions.length > 0 ? (totalAnswered / questions.length) * 100 : 0;
+  const flaggedCount = flaggedQuestions.size;
 
   // ===== المراقبة (WebSocket) =====
   const proctor = useExamProctor({ role: 'student' });
@@ -947,7 +2034,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
       // إرسال للـ WebSocket
       proctor.sendViolation({ type, severity, details });
       // إرسال للسيرفر للتسجيل الدائم
-      fetch(buildUrl(`/api/exams/${exam.id}/proctor`, student), {
+      fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/violation`, student), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
         body: JSON.stringify({
@@ -998,7 +2085,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
   const handleAutoSubmit = useCallback(async () => {
     setSubmitting(true);
     try {
-      await fetch(buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }), {
+      await fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/submit`, student), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
         body: JSON.stringify({ force: true }),
@@ -1032,7 +2119,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     (async () => {
       try {
         const res = await fetch(
-          buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
+          buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student),
           { headers: { 'x-student-id': student.studentId } }
         );
         const data = await res.json();
@@ -1057,7 +2144,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     setSaveStatus(s => ({ ...s, [questionId]: 'saving' }));
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
+        buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -1100,7 +2187,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(
-        buildUrl(`/api/exams/${exam.id}/answers/${questionId}/upload`, student, { submissionId }),
+        buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student, { questionId }),
         {
           method: 'POST',
           headers: { 'x-student-id': student.studentId },
@@ -1143,7 +2230,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     setSubmitError(null);
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }),
+        buildUrl(`/api/exams/student/submissions/${submissionId}/submit`, student),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -1180,11 +2267,157 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     if (idx >= 0 && idx < questions.length) setCurrentIdx(idx);
   };
 
+  // ===== تعليم سؤال للمراجعة =====
+  const toggleFlag = useCallback((questionId: string) => {
+    setFlaggedQuestions(prev => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  }, []);
+
+  const isFlagged = (questionId: string) => flaggedQuestions.has(questionId);
+
+  // ===== الانتقال للسؤال التالي غير المُجاب =====
+  const goToNextUnanswered = useCallback(() => {
+    for (let i = currentIdx + 1; i < questions.length; i++) {
+      const q = questions[i];
+      const a = answers[q.id];
+      if (!a?.text?.trim() && !a?.imageUrl && !a?.fileUrl) {
+        setCurrentIdx(i);
+        return;
+      }
+    }
+    // لو لم نجد بعد الحالي، نبحث قبله
+    for (let i = 0; i < currentIdx; i++) {
+      const q = questions[i];
+      const a = answers[q.id];
+      if (!a?.text?.trim() && !a?.imageUrl && !a?.fileUrl) {
+        setCurrentIdx(i);
+        return;
+      }
+    }
+  }, [currentIdx, questions, answers]);
+
+  // ===== beforeunload: تحذير قبل مغادرة الصفحة أثناء الامتحان =====
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'سيتم فقدان تقدّمك في الامتحان إذا غادرت الصفحة.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
+  // ===== مؤشر حالة الاتصال (online/offline) =====
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    // نُلّف setState بـ setTimeout لتجنّب تحذير set-state-in-effect
+    const t = setTimeout(() => setIsOnline(navigator.onLine), 0);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  // ===== اختصارات لوحة المفاتيح أثناء الامتحان =====
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // تجاهل إذا كان المستخدم يكتب في حقل نصي (إلا لمفاتيح التنقل الخاصة)
+      const target = e.target as HTMLElement;
+      const isTyping =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      // ArrowLeft / ArrowRight للتنقل بين الأسئلة (حتى أثناء الكتابة في textareas)
+      // في RTL: السهم الأيسر = التالي، السهم الأيمن = السابق
+      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        goToQuestion(currentIdx + 1 < questions.length ? currentIdx + 1 : currentIdx);
+        return;
+      }
+      if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        goToQuestion(currentIdx > 0 ? currentIdx - 1 : currentIdx);
+        return;
+      }
+
+      // اختصارات أخرى فقط إن لم يكن يكتب
+      if (isTyping) return;
+
+      // F: تعليم السؤال للمراجعة
+      if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleFlag(currentQuestion.id);
+        return;
+      }
+      // N: السؤال التالي غير المُجاب
+      if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        goToNextUnanswered();
+        return;
+      }
+      // ? : إظهار لوحة الاختصارات
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setShowShortcutsPanel(s => !s);
+        return;
+      }
+      // Esc: إغلاق لوحة الاختصارات
+      if (e.key === 'Escape') {
+        setShowShortcutsPanel(false);
+        return;
+      }
+      // أرقام 1-9 للقفز للأسئلة
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey) {
+        const idx = num - 1;
+        if (idx < questions.length) {
+          e.preventDefault();
+          setCurrentIdx(idx);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [currentIdx, questions.length, currentQuestion.id, toggleFlag, goToNextUnanswered]);
+
+  // تلميح الاختصارات عند أول دخول (يظهر مرة واحدة)
+  useEffect(() => {
+    const seen = sessionStorage.getItem('exam-shortcuts-hint-seen');
+    if (!seen) {
+      const t = setTimeout(() => setShowShortcutsHint(true), 2000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+  const dismissShortcutsHint = useCallback(() => {
+    setShowShortcutsHint(false);
+    sessionStorage.setItem('exam-shortcuts-hint-seen', '1');
+  }, []);
+
   const timeWarning = remainingSeconds <= 60;
   const timeCritical = remainingSeconds <= 30;
 
   return (
     <div className="space-y-4">
+      {/* ====== تنبيه عدم الاتصال ====== */}
+      {!isOnline && (
+        <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
+          <WifiOff className="w-4 h-4" />
+          <AlertTitle>لا يوجد اتصال بالإنترنت</AlertTitle>
+          <AlertDescription>
+            تقدّمك يُحفظ محلياً وسيُزامَن تلقائياً عند عودة الاتصال. لا تغلق الصفحة.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* شريط المعلومات العلوي */}
       <div className="sticky top-[57px] z-30 bg-white rounded-xl shadow-sm border p-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1199,9 +2432,30 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
             </div>
             <div className="text-xs text-gray-500 hidden sm:block">
               <span className="font-medium text-gray-700">{totalAnswered}</span> / {questions.length} سؤال
+              {flaggedCount > 0 && (
+                <span className="mr-2 text-amber-600 flex items-center gap-0.5">
+                  <Bookmark className="w-3 h-3 inline" /> {flaggedCount} للمراجعة
+                </span>
+              )}
+            </div>
+            {/* مؤشر الاتصال */}
+            <div className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${
+              isOnline ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50'
+            }`} title={isOnline ? 'متصل' : 'غير متصل'}>
+              {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+              <span className="hidden md:inline">{isOnline ? 'متصل' : 'غير متصل'}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowShortcutsPanel(s => !s)}
+              title="اختصارات لوحة المفاتيح (?)"
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <Keyboard className="w-4 h-4" />
+            </Button>
             {violationCount > 0 && (
               <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
                 <AlertTriangle className="w-3 h-3 ml-1" /> {violationCount} انتهاك
@@ -1219,6 +2473,51 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
         <Progress value={progress} className="h-1.5 mt-2" />
       </div>
 
+      {/* ====== تلميح اختصارات لوحة المفاتيح ====== */}
+      {showShortcutsHint && !showShortcutsPanel && (
+        <div className="bg-[#610000] text-white rounded-xl p-3 flex items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Keyboard className="w-4 h-4 flex-shrink-0" />
+            <span>تعلّم اختصارات لوحة المفاتيح لتسريع الامتحان! اضغط <kbd className="bg-white/20 px-1.5 py-0.5 rounded text-xs">؟</kbd></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 h-7" onClick={() => { setShowShortcutsPanel(true); dismissShortcutsHint(); }}>
+              عرض
+            </Button>
+            <Button size="sm" variant="ghost" className="text-white/70 hover:bg-white/20 hover:text-white h-7 px-2" onClick={dismissShortcutsHint}>
+              <XCircle className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ====== لوحة اختصارات لوحة المفاتيح ====== */}
+      {showShortcutsPanel && (
+        <Card className="border-[#610000]/20 shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Keyboard className="w-4 h-4 text-[#610000]" />
+                اختصارات لوحة المفاتيح
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowShortcutsPanel(false)}>
+                <XCircle className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+              <ShortcutRow keys={['→']} label="السؤال التالي" />
+              <ShortcutRow keys={['←']} label="السؤال السابق" />
+              <ShortcutRow keys={['F']} label="تعليم للمراجعة" />
+              <ShortcutRow keys={['N']} label="التالي غير المُجاب" />
+              <ShortcutRow keys={['1-9']} label="قفز لسؤال" />
+              <ShortcutRow keys={['؟']} label="إظهار/إخفاء اللوحة" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* تنبيه الإغلاق التلقائي */}
       {autoCloseWarning && (
         <Alert variant="destructive">
@@ -1233,7 +2532,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
         <Card className="shadow-sm border-0">
           <CardHeader className="pb-3 border-b">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="bg-[#610000]/5 text-[#610000]">
                   سؤال {currentIdx + 1} / {questions.length}
                 </Badge>
@@ -1243,22 +2542,38 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
                 <Badge variant="outline" className="text-xs">
                   {currentQuestion.points} درجة
                 </Badge>
+                {isFlagged(currentQuestion.id) && (
+                  <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">
+                    <BookmarkCheck className="w-3 h-3 ml-1" /> للمراجعة
+                  </Badge>
+                )}
               </div>
-              {saveStatus[currentQuestion.id] === 'saving' && (
-                <span className="text-xs text-gray-500 flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> يحفظ...
-                </span>
-              )}
-              {saveStatus[currentQuestion.id] === 'saved' && (
-                <span className="text-xs text-green-600 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> حُفظ
-                </span>
-              )}
-              {saveStatus[currentQuestion.id] === 'error' && (
-                <span className="text-xs text-red-600 flex items-center gap-1">
-                  <XCircle className="w-3 h-3" /> فشل الحفظ
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {saveStatus[currentQuestion.id] === 'saving' && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> يحفظ...
+                  </span>
+                )}
+                {saveStatus[currentQuestion.id] === 'saved' && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> حُفظ
+                  </span>
+                )}
+                {saveStatus[currentQuestion.id] === 'error' && (
+                  <span className="text-xs text-red-600 flex items-center gap-1">
+                    <XCircle className="w-3 h-3" /> فشل الحفظ
+                  </span>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => toggleFlag(currentQuestion.id)}
+                  title="تعليم للمراجعة (F)"
+                  className={`h-7 px-2 ${isFlagged(currentQuestion.id) ? 'text-amber-600' : 'text-gray-400 hover:text-amber-600'}`}
+                >
+                  {isFlagged(currentQuestion.id) ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-5">
@@ -1289,9 +2604,9 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
               answer={answers[currentQuestion.id]}
               uploadStatus={uploadStatus[currentQuestion.id]}
               moderation={moderationWarnings[currentQuestion.id]}
-              allowText={startData.exam.allowTextAnswers}
-              allowImage={startData.exam.allowImageAnswers}
-              allowPdf={startData.exam.allowPdfAnswers}
+              allowText={startData.exam?.allowTextAnswers ?? true}
+              allowImage={startData.exam?.allowImageAnswers ?? true}
+              allowPdf={startData.exam?.allowPdfAnswers ?? false}
               onTextChange={(v) => handleTextChange(currentQuestion.id, v)}
               onUpload={(file) => handleUpload(currentQuestion.id, file)}
             />
@@ -1328,27 +2643,74 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
         {/* مستكشف الأسئلة */}
         <Card className="shadow-sm border-0 h-fit sticky top-[140px]">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">الأسئلة</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">الأسئلة</CardTitle>
+              {flaggedCount > 0 && (
+                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                  <Bookmark className="w-3 h-3 ml-1" /> {flaggedCount}
+                </Badge>
+              )}
+            </div>
+            {/* فلترة المستكشف */}
+            <div className="flex gap-1 mt-2">
+              <button
+                onClick={() => setNavFilter('all')}
+                className={`flex-1 text-xs py-1 px-2 rounded-md transition-colors ${
+                  navFilter === 'all' ? 'bg-[#610000]/10 text-[#610000] font-medium' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                الكل
+              </button>
+              <button
+                onClick={() => setNavFilter('flagged')}
+                className={`flex-1 text-xs py-1 px-2 rounded-md transition-colors flex items-center justify-center gap-1 ${
+                  navFilter === 'flagged' ? 'bg-amber-100 text-amber-700 font-medium' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                <Bookmark className="w-3 h-3" /> للمراجعة
+              </button>
+              <button
+                onClick={() => setNavFilter('unanswered')}
+                className={`flex-1 text-xs py-1 px-2 rounded-md transition-colors ${
+                  navFilter === 'unanswered' ? 'bg-gray-200 text-gray-700 font-medium' : 'text-gray-500 hover:bg-gray-100'
+                }`}
+              >
+                غير مُجاب
+              </button>
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="grid grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[60vh] overflow-y-auto">
+            <div className="grid grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[50vh] overflow-y-auto">
               {questions.map((q, idx) => {
                 const isAnswered = !!(answers[q.id]?.text?.trim() || answers[q.id]?.imageUrl || answers[q.id]?.fileUrl);
                 const isCurrent = idx === currentIdx;
+                const flagged = isFlagged(q.id);
+
+                // تطبيق فلترة المستكشف
+                if (navFilter === 'flagged' && !flagged) return null;
+                if (navFilter === 'unanswered' && isAnswered) return null;
+
                 return (
                   <button
                     key={q.id}
                     onClick={() => goToQuestion(idx)}
-                    className={`aspect-square rounded-lg text-sm font-medium border-2 transition-all ${
+                    className={`aspect-square rounded-lg text-sm font-medium border-2 transition-all relative ${
                       isCurrent
                         ? 'border-[#610000] bg-[#610000] text-white'
                         : isAnswered
                         ? 'border-green-300 bg-green-50 text-green-700 hover:border-green-400'
                         : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                     }`}
-                    title={`سؤال ${idx + 1}`}
+                    title={`سؤال ${idx + 1}${flagged ? ' • للمراجعة' : ''}${isAnswered ? ' • مُجاب' : ' • غير مُجاب'}`}
                   >
                     {idx + 1}
+                    {flagged && (
+                      <span className={`absolute -top-1 -right-1 w-3 h-3 rounded-full flex items-center justify-center ${
+                        isCurrent ? 'bg-white' : 'bg-amber-400'
+                      }`}>
+                        <Bookmark className={`w-2 h-2 ${isCurrent ? 'text-[#610000]' : 'text-white'}`} />
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1363,6 +2725,24 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
                 <div className="w-3 h-3 rounded border-2 border-gray-200 bg-white" />
                 <span>غير مُجاب ({questions.length - totalAnswered})</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded border-2 border-amber-400 bg-amber-50" />
+                <span>للمراجعة ({flaggedCount})</span>
+              </div>
+              {flaggedCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full h-7 mt-2 text-xs text-amber-700 hover:bg-amber-50"
+                  onClick={() => {
+                    // القفز لأول سؤال معلّم
+                    const firstFlaggedIdx = questions.findIndex(q => isFlagged(q.id));
+                    if (firstFlaggedIdx >= 0) goToQuestion(firstFlaggedIdx);
+                  }}
+                >
+                  <BookmarkCheck className="w-3 h-3 ml-1" /> اذهب لأول سؤال معلّم
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1738,6 +3118,24 @@ function PdfUploader({
 }
 
 // ============================================================
+//  ShortcutRow — صف اختصار في لوحة الاختصارات
+// ============================================================
+function ShortcutRow({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-1">
+        {keys.map((k) => (
+          <kbd key={k} className="bg-gray-100 border border-gray-300 rounded px-1.5 py-0.5 text-xs font-mono text-gray-700 min-w-[24px] text-center">
+            {k}
+          </kbd>
+        ))}
+      </div>
+      <span className="text-gray-600">{label}</span>
+    </div>
+  );
+}
+
+// ============================================================
 //  ⑤ ExamResult — النتيجة + مراجعة + التظلّم
 // ============================================================
 
@@ -1758,28 +3156,53 @@ function ExamResult({
   const [error, setError] = useState<string | null>(null);
   const [appealDialogFor, setAppealDialogFor] = useState<{ answerId: string; questionId: string; currentScore: number; maxScore: number } | null>(null);
   const [appeals, setAppeals] = useState<any[]>([]);
+  const [revealResults, setRevealResults] = useState(false);
 
   const loadResult = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [resResult, resQuestions, resAppeals] = await Promise.all([
-        fetch(buildUrl(`/api/exams/${exam.id}/result`, student, { submissionId }), {
+      const [resAppeals, resView] = await Promise.all([
+        fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/appeal`, student), {
           headers: { 'x-student-id': student.studentId },
-        }),
-        fetch(buildUrl(`/api/exams/${exam.id}`, student), {
-          headers: { 'x-student-id': student.studentId },
-        }),
-        fetch(buildUrl(`/api/exams/${exam.id}/appeals`, student), {
+        }).catch(() => null),
+        // نسخة التسليم — تكشف التفسير والإجابة الصحيحة بعد التسليم للامتحانات التدريبية (showAnswersAfter)
+        // أو الرسمية (showResultImmediately). revealResults=true يضمن عدم كشف أي شيء قبل الأوان.
+        fetch(buildUrl(`/api/exams/student/submissions/${submissionId}`, student), {
           headers: { 'x-student-id': student.studentId },
         }),
       ]);
-      const dataResult = await resResult.json();
-      const dataQuestions = await resQuestions.json();
-      const dataAppeals = await resAppeals.json();
-      if (resResult.ok) setResult(dataResult.result || dataResult);
-      else setError(dataResult.error || dataResult.message || 'فشل جلب النتيجة');
-      if (resQuestions.ok) setQuestions(dataQuestions.questions || []);
+      const dataAppeals = resAppeals ? await resAppeals.json().catch(() => ({} as any)) : ({} as any);
+      // نسخة التسليم قد تفشل بصمت (e.g. امتحان رسمي بدون showResultImmediately) — لا نُفشل كل التحميل
+      const dataView = await resView.json().catch(() => ({} as any));
+      if (resView.ok) setResult(dataView.submission || dataView);
+      else setError(dataView.error || dataView.message || 'فشل جلب النتيجة');
+
+      // ===== دمج التفسير في الأسئلة عند السماح بكشف النتائج =====
+      const view = dataView?.submission;
+      const isRevealed = view?.revealResults === true;
+      setRevealResults(isRevealed);
+      // الأسئلة تأتي من view.answers (كل answer يحوي question: {id, type, text, options, ...})
+      if (Array.isArray(view?.answers)) {
+        const rawQuestions: Question[] = view.answers.map((a: any) => ({
+          id: a?.questionId || a?.question?.id || '',
+          type: a?.question?.type || 'MCQ',
+          text: a?.question?.text || '',
+          options: a?.question?.options ? (typeof a.question.options === 'string' ? JSON.parse(a.question.options) : a.question.options) : null,
+          correctAnswer: isRevealed ? (a?.correctAnswer ?? a?.question?.correctAnswer ?? null) : null,
+          correctText: isRevealed ? (a?.correctText ?? a?.question?.correctText ?? null) : null,
+          points: a?.question?.points ?? 1,
+          order: a?.question?.order ?? 0,
+          explanation: isRevealed ? (a?.explanation ?? a?.question?.explanation ?? null) : null,
+          // بيانات إجابة الطالب
+          studentAnswer: a?.textAnswer ?? null,
+          isCorrect: a?.isCorrect ?? null,
+          score: a?.score ?? null,
+          maxScore: a?.maxScore ?? 1,
+          teacherNote: a?.teacherNote ?? null,
+        } as Question));
+        setQuestions(rawQuestions);
+      }
       if (resAppeals.ok) setAppeals(dataAppeals.appeals || []);
     } catch (e) {
       setError('تعذّر الاتصال بالخادم');
@@ -1798,7 +3221,7 @@ function ExamResult({
   }, []);
 
   const submitAppeal = async (answerId: string, reason: string, requestedScore?: number) => {
-    const res = await fetch(buildUrl(`/api/exams/${exam.id}/appeals`, student), {
+    const res = await fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/appeal`, student), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
       body: JSON.stringify({ answerId, reason, requestedScore }),
@@ -1871,11 +3294,38 @@ function ExamResult({
   const violationsCount = result?.violationsCount || 0;
   const answers = result?.answers || [];
 
+  // ===== إحصائيات الأسئلة للرسم البياني =====
+  const correctCount = answers.filter((a: any) => a.isCorrect === true).length;
+  const incorrectCount = answers.filter((a: any) => a.isCorrect === false).length;
+  const pendingCount = answers.filter((a: any) => a.isCorrect === null || a.isCorrect === undefined).length;
+  const hasChartData = correctCount + incorrectCount + pendingCount > 0;
+  const chartData = [
+    { name: 'صحيحة', value: correctCount, color: '#16a34a' },
+    { name: 'خاطئة', value: incorrectCount, color: '#dc2626' },
+    { name: 'قيد المراجعة', value: pendingCount, color: '#d97706' },
+  ].filter(d => d.value > 0);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 print:space-y-3">
       {/* بطاقة النتيجة الرئيسية */}
-      <Card className={`shadow-lg border-0 overflow-hidden ${passed ? 'ring-2 ring-green-500/20' : 'ring-2 ring-red-500/20'}`}>
-        <div className={`p-6 text-center ${passed ? 'bg-gradient-to-br from-green-600 to-green-700' : 'bg-gradient-to-br from-red-600 to-red-700'} text-white`}>
+      <Card className={`shadow-lg border-0 overflow-hidden ${passed ? 'ring-2 ring-green-500/20' : 'ring-2 ring-red-500/20'} print:shadow-none print:ring-1`}>
+        <div className={`p-6 text-center ${passed ? 'bg-gradient-to-br from-green-600 to-green-700' : 'bg-gradient-to-br from-red-600 to-red-700'} text-white print:bg-green-700`}>
+          <div className="flex items-center justify-between mb-3 print:hidden">
+            <span className="text-xs text-white/70">{result?.submittedAt && formatDate(result.submittedAt)}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handlePrint}
+              className="text-white hover:bg-white/20 h-8"
+              title="طباعة / حفظ PDF"
+            >
+              <Printer className="w-4 h-4 ml-1" /> طباعة
+            </Button>
+          </div>
           <div className="w-20 h-20 mx-auto rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-3">
             {passed ? <Award className="w-12 h-12" /> : <AlertCircle className="w-12 h-12" />}
           </div>
@@ -1923,9 +3373,65 @@ function ExamResult({
         </CardContent>
       </Card>
 
+      {/* ====== رسم بياني لأداء الأسئلة ====== */}
+      {hasChartData && (
+        <Card className="shadow-sm border-0 print:shadow-none print:border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Target className="w-4 h-4 text-[#610000]" />
+              توزيع نتائج الأسئلة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="h-32 w-32 flex-shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                    <XAxis type="number" stroke="#666" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" stroke="#666" fontSize={11} tickLine={false} axisLine={false} width={70} />
+                    <RTooltip
+                      contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }}
+                      formatter={(v: number) => [`${v} سؤال`, '']}
+                    />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                      {chartData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 min-w-[160px] space-y-2">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-green-50">
+                  <span className="flex items-center gap-2 text-sm text-green-800">
+                    <span className="w-3 h-3 rounded bg-green-600" /> إجابات صحيحة
+                  </span>
+                  <span className="font-bold text-green-700">{correctCount}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-red-50">
+                  <span className="flex items-center gap-2 text-sm text-red-800">
+                    <span className="w-3 h-3 rounded bg-red-600" /> إجابات خاطئة
+                  </span>
+                  <span className="font-bold text-red-700">{incorrectCount}</span>
+                </div>
+                {pendingCount > 0 && (
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50">
+                    <span className="flex items-center gap-2 text-sm text-amber-800">
+                      <span className="w-3 h-3 rounded bg-amber-600" /> قيد المراجعة
+                    </span>
+                    <span className="font-bold text-amber-700">{pendingCount}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* مراجعة الإجابات — تُظهر الدرجات حتى قبل التصحيح الكامل */}
       {answers.length > 0 && (
-        <Card className="shadow-sm border-0">
+        <Card className="shadow-sm border-0 print:shadow-none print:border">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ListChecks className="w-4 h-4 text-[#610000]" />
@@ -1963,6 +3469,19 @@ function ExamResult({
                     </div>
                   </div>
                   <p className="text-sm text-gray-800 mb-2 line-clamp-2">{q.text}</p>
+                  {/* التفسير — يُكشف فقط بعد التسليم للامتحانات التدريبية (showAnswersAfter)
+                      أو الرسمية (showResultImmediately). revealResults يضمن عدم الكشف قبل الأوان. */}
+                  {revealResults && q.explanation && (
+                    <div className="mt-2 rounded-md border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-2.5">
+                      <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                        التفسير
+                      </div>
+                      <p className="text-xs text-blue-900 dark:text-blue-100 whitespace-pre-wrap leading-relaxed">
+                        {q.explanation}
+                      </p>
+                    </div>
+                  )}
                   {ans.teacherNote && (
                     <div className="text-xs bg-blue-50 rounded p-2 text-blue-800 mt-2">
                       <strong>ملاحظة المعلم:</strong> {ans.teacherNote}

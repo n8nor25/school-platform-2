@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
       startDate: true, endDate: true, durationMinutes: true,
       passwordHash: true, maxAttempts: true, antiCheatEnabled: true,
       totalPoints: true, passingScore: true,
+      category: true, examPeriod: true, showAnswersAfter: true, allowRetakes: true,
       _count: { select: { questions: true } },
     },
     orderBy: { startDate: 'desc' },
@@ -64,9 +65,14 @@ export async function GET(req: NextRequest) {
       totalPoints: e.totalPoints,
       passingScore: e.passingScore,
       questionsCount: e._count.questions,
+      category: e.category,
+      examPeriod: e.examPeriod,
+      showAnswersAfter: e.showAnswersAfter,
+      allowRetakes: e.allowRetakes,
+      isTraining: e.category === 'TRAINING',
       timeStatus,
       attemptsUsed: completedAttempts,
-      attemptsRemaining: Math.max(0, e.maxAttempts - completedAttempts),
+      attemptsRemaining: e.allowRetakes ? 99 : Math.max(0, e.maxAttempts - completedAttempts),
       inProgressSubmissionId: inProgress?.id || null,
       bestScore: subs
         .filter(s => s.percentage != null)
@@ -76,11 +82,16 @@ export async function GET(req: NextRequest) {
   });
 
   // Split into available (OPEN) and other
-  const available = result.filter(e => e.timeStatus === 'OPEN' && e.attemptsRemaining > 0 && !e.inProgressSubmissionId);
+  // للامتحانات التدريبية مع allowRetakes: تبقى متاحة دائماً (محاولات غير محدودة)
+  const available = result.filter(e =>
+    e.timeStatus === 'OPEN' &&
+    !e.inProgressSubmissionId &&
+    (e.allowRetakes || e.attemptsRemaining > 0)
+  );
   const inProgressList = result.filter(e => e.inProgressSubmissionId);
   const upcoming = result.filter(e => e.timeStatus === 'UPCOMING');
   const endedOrExhausted = result.filter(e =>
-    (e.timeStatus === 'ENDED' || e.attemptsRemaining === 0) && !e.inProgressSubmissionId
+    (e.timeStatus === 'ENDED' || (!e.allowRetakes && e.attemptsRemaining === 0)) && !e.inProgressSubmissionId
   );
 
   return successResponse({

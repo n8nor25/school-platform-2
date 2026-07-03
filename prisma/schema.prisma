@@ -1018,6 +1018,21 @@ enum ExamStatus {
   ARCHIVED       // مؤرشف
 }
 
+// فئة الامتحان: تدريبي (practice) أو رسمي (official)
+enum ExamCategory {
+  TRAINING       // تدريبي — يسمح بإعادة المحاولة، تصحيح فوري، يعرض الإجابات
+  OFFICIAL       // رسمي — امتحان حقيقي يؤثر على الدرجة النهائية
+}
+
+// الفئة الزمنية للامتحان التدريبي (مثل Oracle Academy)
+enum ExamPeriod {
+  NONE           // بدون فئة (للرسمي أو المخصص)
+  WEEKLY         // أسبوعي (نهاية الأسبوع)
+  MIDMONTH       // نصف شهري (منتصف الشهر)
+  MONTHLY        // شهري (نهاية الشهر)
+  CUMULATIVE     // تراكمي (نهاية الترم)
+}
+
 enum QuestionType {
   MCQ            // اختيار من متعدد
   TRUE_FALSE     // صح/خطأ
@@ -1102,6 +1117,11 @@ model Exam {
   status           ExamStatus @default(DRAFT)
   totalPoints      Float     @default(0)
   passingScore     Float?    // درجة النجاح
+  // ===== امتحانات تدريبية (مثل Oracle Academy) =====
+  category         ExamCategory @default(OFFICIAL) // تدريبي أو رسمي
+  examPeriod       ExamPeriod   @default(NONE)     // الفئة الزمنية للتدريبي
+  showAnswersAfter Boolean   @default(false) // إظهار الإجابات الصحيحة بعد التسليم (للتدريبي)
+  allowRetakes     Boolean   @default(false) // السماح بإعادة المحاولة بدون حد (للتدريبي)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -1113,6 +1133,8 @@ model Exam {
   @@index([classroomId])
   @@index([status])
   @@index([startDate, endDate])
+  @@index([category])
+  @@index([examPeriod])
 }
 
 model Question {
@@ -1170,7 +1192,7 @@ model Submission {
   lastActivityAt  DateTime?
   gradedAt        DateTime?
   gradedById      String?
-  gradedByName    String           @default("")
+  gradedByName    String?          @default("")
   notes           String           @default("")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -1235,8 +1257,8 @@ model ExamViolation {
   school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   submissionId  String
   submission    Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  examId        String
-  studentId     String
+  examId        String         @default("")
+  studentId     String         @default("")
   type          ViolationType
   severity      Int           @default(1)  // 1=منخفض، 2=متوسط، 3=عالي
   details       String        @default("")

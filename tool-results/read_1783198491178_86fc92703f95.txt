@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef, useCallback } from 'react';
+     4→import {
+     5→  ArrowRight, RefreshCw, Search, FileText, ListChecks,
+     6→  ClipboardCheck, Clock, Award, Eye, AlertTriangle, Sparkles,
+     7→  CalendarDays, GraduationCap, CheckCircle2, XCircle, HelpCircle,
+     8→  ShieldCheck, Lock, BookOpen, Trophy, BarChart3,
+     9→  Plus, Trash2, Loader2, Save, Send, X,
+    10→  Dumbbell, Repeat2, EyeOff,
+    11→} from 'lucide-react';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Card, CardContent } from '@/components/ui/card';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Input } from '@/components/ui/input';
+    16→import { Label } from '@/components/ui/label';
+    17→import { Skeleton } from '@/components/ui/skeleton';
+    18→import { Textarea } from '@/components/ui/textarea';
+    19→import { Switch } from '@/components/ui/switch';
+    20→import {
+    21→  Dialog,
+    22→  DialogContent,
+    23→  DialogHeader,
+    24→  DialogTitle,
+    25→  DialogDescription,
+    26→} from '@/components/ui/dialog';
+    27→import {
+    28→  Select,
+    29→  SelectContent,
+    30→  SelectItem,
+    31→  SelectTrigger,
+    32→  SelectValue,
+    33→} from '@/components/ui/select';
+    34→import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+    35→import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    36→import { toast } from 'sonner';
+    37→
+    38→interface TeacherExamsPageProps {
+    39→  onBack: () => void;
+    40→  schoolId: string;
+    41→  teacherId: string;
+    42→  teacherName: string;
+    43→}
+    44→
+    45→// ===== Types =====
+    46→type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
+    47→type TimeStatus = 'UPCOMING' | 'OPEN' | 'ENDED';
+    48→type ExamCategory = 'OFFICIAL' | 'TRAINING';
+    49→type ExamPeriod = 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE' | 'NONE';
+    50→
+    51→interface ExamListItem {
+    52→  id: string;
+    53→  title: string;
+    54→  subject: string;
+    55→  classroomName: string;
+    56→  startDate: string;
+    57→  endDate: string;
+    58→  durationMinutes: number;
+    59→  status: ExamStatus;
+    60→  totalPoints: number;
+    61→  passingScore: number | null;
+    62→  maxAttempts: number;
+    63→  hasPassword: boolean;
+    64→  timeStatus: TimeStatus;
+    65→  submissionsCount: number;
+    66→  questionsCount: number;
+    67→  category?: ExamCategory;
+    68→  examPeriod?: ExamPeriod;
+    69→  showAnswersAfter?: boolean;
+    70→  allowRetakes?: boolean;
+    71→}
+    72→
+    73→interface ExamQuestion {
+    74→  id: string;
+    75→  type: string;
+    76→  text: string;
+    77→  options: string[] | null;
+    78→  correctAnswer: string | null;
+    79→  correctText: string | null;
+    80→  rubric: Record<string, unknown> | null;
+    81→  points: number;
+    82→  order: number;
+    83→  explanation: string | null;
+    84→  attachmentUrl: string | null;
+    85→  textModeration: string | null;
+    86→  imageModeration: string | null;
+    87→}
+    88→
+    89→interface ExamDetail {
+    90→  id: string;
+    91→  title: string;
+    92→  description: string;
+    93→  subject: string;
+    94→  teacherName: string;
+    95→  classroomId: string | null;
+    96→  classroomName: string;
+    97→  startDate: string;
+    98→  endDate: string;
+    99→  durationMinutes: number;
+   100→  hasPassword: boolean;
+   101→  shuffleQuestions: boolean;
+   102→  shuffleOptions: boolean;
+   103→  allowReview: boolean;
+   104→  showResultImmediately: boolean;
+   105→  parentVisible: boolean;
+   106→  maxAttempts: number;
+   107→  maxFileSizeMb: number;
+   108→  allowTextAnswers: boolean;
+   109→  allowImageAnswers: boolean;
+   110→  allowPdfAnswers: boolean;
+   111→  antiCheatEnabled: boolean;
+   112→  ipRestriction: string | null;
+   113→  status: ExamStatus;
+   114→  totalPoints: number;
+   115→  passingScore: number | null;
+   116→  createdAt: string;
+   117→  updatedAt: string;
+   118→  questionsCount: number;
+   119→  submissionsCount: number;
+   120→  questions: ExamQuestion[];
+   121→}
+   122→
+   123→interface SubmissionsStats {
+   124→  total: number;
+   125→  inProgress: number;
+   126→  submitted: number;
+   127→  graded: number;
+   128→  autoClosed: number;
+   129→  needsGrading: number;
+   130→  suspiciousCount: number;
+   131→  avgScore: number;
+   132→}
+   133→
+   134→interface ExamsListResponse {
+   135→  success: boolean;
+   136→  count: number;
+   137→  total: number;
+   138→  page: number;
+   139→  limit: number;
+   140→  totalPages: number;
+   141→  exams: ExamListItem[];
+   142→}
+   143→
+   144→interface ExamDetailResponse {
+   145→  success: boolean;
+   146→  exam: ExamDetail;
+   147→}
+   148→
+   149→interface SubmissionsResponse {
+   150→  success: boolean;
+   151→  count: number;
+   152→  total: number;
+   153→  page: number;
+   154→  limit: number;
+   155→  totalPages: number;
+   156→  stats: SubmissionsStats;
+   157→  submissions: unknown[];
+   158→}
+   159→
+   160→// ===== Create Exam types =====
+   161→type QuestionType = 'MCQ' | 'TRUE_FALSE' | 'SHORT' | 'ESSAY';
+   162→
+   163→interface DraftQuestion {
+   164→  id: string;
+   165→  type: QuestionType;
+   166→  text: string;
+   167→  options: string[];
+   168→  correctAnswer: string;
+   169→  correctText: string;
+   170→  rubric: string;
+   171→  points: number;
+   172→  explanation: string;
+   173→}
+   174→
+   175→interface CreateExamForm {
+   176→  title: string;
+   177→  subject: string;
+   178→  description: string;
+   179→  classroomName: string;
+   180→  startDate: string;
+   181→  endDate: string;
+   182→  durationMinutes: number;
+   183→  passingScore: number;
+   184→  password: string;
+   185→  shuffleQuestions: boolean;
+   186→  shuffleOptions: boolean;
+   187→  allowReview: boolean;
+   188→  showResultImmediately: boolean;
+   189→  parentVisible: boolean;
+   190→  antiCheatEnabled: boolean;
+   191→  category: ExamCategory;
+   192→  examPeriod: ExamPeriod;
+   193→  showAnswersAfter: boolean;
+   194→  allowRetakes: boolean;
+   195→  questions: DraftQuestion[];
+   196→}
+   197→
+   198→const ARABIC_OPTION_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح'];
+   199→
+   200→function optionLetter(i: number): string {
+   201→  return ARABIC_OPTION_LETTERS[i] || String(i + 1);
+   202→}
+   203→
+   204→function makeEmptyQuestion(index: number): DraftQuestion {
+   205→  return {
+   206→    id: `q-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+   207→    type: 'MCQ',
+   208→    text: '',
+   209→    options: ['', '', '', ''],
+   210→    correctAnswer: '',
+   211→    correctText: '',
+   212→    rubric: '',
+   213→    points: 1,
+   214→    explanation: '',
+   215→  };
+   216→}
+   217→
+   218→function makeEmptyCreateForm(): CreateExamForm {
+   219→  return {
+   220→    title: '',
+   221→    subject: '',
+   222→    description: '',
+   223→    classroomName: '',
+   224→    startDate: '',
+   225→    endDate: '',
+   226→    durationMinutes: 60,
+   227→    passingScore: 50,
+   228→    password: '',
+   229→    shuffleQuestions: false,
+   230→    shuffleOptions: false,
+   231→    allowReview: true,
+   232→    showResultImmediately: false,
+   233→    parentVisible: false,
+   234→    antiCheatEnabled: true,
+   235→    category: 'OFFICIAL',
+   236→    examPeriod: 'NONE',
+   237→    showAnswersAfter: true,
+   238→    allowRetakes: true,
+   239→    questions: [],
+   240→  };
+   241→}
+   242→
+   243→// ===== Helpers =====
+   244→function formatArabicDate(iso: string): string {
+   245→  try {
+   246→    const d = new Date(iso);
+   247→    if (isNaN(d.getTime())) return '—';
+   248→    return d.toLocaleDateString('ar-EG', {
+   249→      year: 'numeric',
+   250→      month: 'long',
+   251→      day: 'numeric',
+   252→      hour: '2-digit',
+   253→      minute: '2-digit',
+   254→    });
+   255→  } catch {
+   256→    return '—';
+   257→  }
+   258→}
+   259→
+   260→function formatArabicDateShort(iso: string): string {
+   261→  try {
+   262→    const d = new Date(iso);
+   263→    if (isNaN(d.getTime())) return '—';
+   264→    return d.toLocaleDateString('ar-EG', {
+   265→      year: 'numeric',
+   266→      month: 'short',
+   267→      day: 'numeric',
+   268→    });
+   269→  } catch {
+   270→    return '—';
+   271→  }
+   272→}
+   273→
+   274→function statusLabel(s: ExamStatus): string {
+   275→  switch (s) {
+   276→    case 'DRAFT': return 'مسودة';
+   277→    case 'PUBLISHED': return 'منشور';
+   278→    case 'CLOSED': return 'مغلق';
+   279→    case 'ARCHIVED': return 'مؤرشف';
+   280→    default: return s;
+   281→  }
+   282→}
+   283→
+   284→function statusBadgeClass(s: ExamStatus): string {
+   285→  switch (s) {
+   286→    case 'DRAFT': return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+   287→    case 'PUBLISHED': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+   288→    case 'CLOSED': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+   289→    case 'ARCHIVED': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+   290→    default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+   291→  }
+   292→}
+   293→
+   294→function timeStatusLabel(t: TimeStatus): string {
+   295→  switch (t) {
+   296→    case 'UPCOMING': return 'قادم';
+   297→    case 'OPEN': return 'مفتوح الآن';
+   298→    case 'ENDED': return 'منتهي';
+   299→    default: return t;
+   300→  }
+   301→}
+   302→
+   303→function timeStatusBadgeClass(t: TimeStatus): string {
+   304→  switch (t) {
+   305→    case 'UPCOMING': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+   306→    case 'OPEN': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+   307→    case 'ENDED': return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+   308→    default: return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+   309→  }
+   310→}
+   311→
+   312→function questionTypeLabel(t: string): string {
+   313→  switch (t) {
+   314→    case 'MCQ': return 'اختيار من متعدد';
+   315→    case 'TRUE_FALSE': return 'صح / خطأ';
+   316→    case 'SHORT': return 'إجابة قصيرة';
+   317→    case 'ESSAY': return 'سؤال مقالي';
+   318→    case 'IMAGE_ANSWER': return 'إجابة بصورة';
+   319→    case 'FILE_PDF': return 'ملف PDF';
+   320→    default: return t;
+   321→  }
+   322→}
+   323→
+   324→function questionTypeBadgeClass(t: string): string {
+   325→  switch (t) {
+   326→    case 'MCQ': return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
+   327→    case 'TRUE_FALSE': return 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800';
+   328→    case 'SHORT': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+   329→    case 'ESSAY': return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+   330→    case 'IMAGE_ANSWER': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+   331→    case 'FILE_PDF': return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+   332→    default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+   333→  }
+   334→}
+   335→
+   336→function categoryLabel(c: ExamCategory | undefined | null): string {
+   337→  switch (c) {
+   338→    case 'TRAINING': return 'تدريبي';
+   339→    case 'OFFICIAL':
+   340→    default: return 'رسمي';
+   341→  }
+   342→}
+   343→
+   344→function categoryBadgeClass(c: ExamCategory | undefined | null): string {
+   345→  switch (c) {
+   346→    case 'TRAINING':
+   347→      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+   348→    case 'OFFICIAL':
+   349→    default:
+   350→      return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
+   351→  }
+   352→}
+   353→
+   354→function examPeriodLabel(p: ExamPeriod | undefined | null): string {
+   355→  switch (p) {
+   356→    case 'WEEKLY': return 'أسبوعي';
+   357→    case 'MIDMONTH': return 'نصف شهري';
+   358→    case 'MONTHLY': return 'شهري';
+   359→    case 'CUMULATIVE': return 'تراكمي';
+   360→    case 'NONE':
+   361→    default: return 'بدون فئة';
+   362→  }
+   363→}
+   364→
+   365→function examPeriodBadgeClass(p: ExamPeriod | undefined | null): string {
+   366→  switch (p) {
+   367→    case 'WEEKLY':
+   368→      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200 dark:border-sky-800';
+   369→    case 'MIDMONTH':
+   370→      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
+   371→    case 'MONTHLY':
+   372→      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+   373→    case 'CUMULATIVE':
+   374→      return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+   375→    case 'NONE':
+   376→    default:
+   377→      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+   378→  }
+   379→}
+   380→
+   381→// ===== KPI Cards config =====
+   382→const kpiConfig = [
+   383→  {
+   384→    key: 'total',
+   385→    label: 'إجمالي الامتحانات',
+   386→    icon: FileText,
+   387→    gradient: 'from-violet-500 to-purple-600',
+   388→    bg: 'bg-violet-50 dark:bg-violet-900/20',
+   389→  },
+   390→  {
+   391→    key: 'published',
+   392→    label: 'منشور',
+   393→    icon: CheckCircle2,
+   394→    gradient: 'from-emerald-500 to-teal-600',
+   395→    bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+   396→  },
+   397→  {
+   398→    key: 'upcoming',
+   399→    label: 'قادم',
+   400→    icon: Clock,
+   401→    gradient: 'from-amber-500 to-orange-600',
+   402→    bg: 'bg-amber-50 dark:bg-amber-900/20',
+   403→  },
+   404→  {
+   405→    key: 'submissions',
+   406→    label: 'إجمالي التسليمات',
+   407→    icon: ClipboardCheck,
+   408→    gradient: 'from-rose-500 to-red-600',
+   409→    bg: 'bg-rose-50 dark:bg-rose-900/20',
+   410→  },
+   411→] as const;
+   412→
+   413→export default function TeacherExamsPage({
+   414→  onBack,
+   415→  schoolId,
+   416→  teacherId,
+   417→  teacherName,
+   418→}: TeacherExamsPageProps) {
+   419→  // ===== State =====
+   420→  const [fadeIn, setFadeIn] = useState(false);
+   421→  const [exams, setExams] = useState<ExamListItem[]>([]);
+   422→  const [loading, setLoading] = useState(false);
+   423→  const [error, setError] = useState<string | null>(null);
+   424→  const [search, setSearch] = useState('');
+   425→  const [debouncedSearch, setDebouncedSearch] = useState('');
+   426→  const [statusFilter, setStatusFilter] = useState<'all' | ExamStatus>('all');
+   427→  const [categoryFilter, setCategoryFilter] = useState<'all' | ExamCategory>('all');
+   428→
+   429→  // Detail modal state
+   430→  const [detailOpen, setDetailOpen] = useState(false);
+   431→  const [detailLoading, setDetailLoading] = useState(false);
+   432→  const [detailError, setDetailError] = useState<string | null>(null);
+   433→  const [detailExam, setDetailExam] = useState<ExamDetail | null>(null);
+   434→  const [submissionsStats, setSubmissionsStats] = useState<SubmissionsStats | null>(null);
+   435→
+   436→  // Create dialog state
+   437→  const [showCreateDialog, setShowCreateDialog] = useState(false);
+   438→  const [createSubmitting, setCreateSubmitting] = useState(false);
+   439→  const [createForm, setCreateForm] = useState<CreateExamForm>(makeEmptyCreateForm());
+   440→  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
+   441→
+   442→  // Mounted ref (prevent setState after unmount)
+   443→  const mountedRef = useRef(true);
+   444→
+   445→  // ===== Restore fadeIn =====
+   446→  useEffect(() => {
+   447→    const t = setTimeout(() => setFadeIn(true), 0);
+   448→    return () => clearTimeout(t);
+   449→  }, []);
+   450→
+   451→  // ===== mountedRef lifecycle =====
+   452→  useEffect(() => {
+   453→    mountedRef.current = true;
+   454→    return () => {
+   455→      mountedRef.current = false;
+   456→    };
+   457→  }, []);
+   458→
+   459→  // ===== Debounced search (300ms) =====
+   460→  useEffect(() => {
+   461→    const t = setTimeout(() => {
+   462→      if (mountedRef.current) setDebouncedSearch(search);
+   463→    }, 300);
+   464→    return () => clearTimeout(t);
+   465→  }, [search]);
+   466→
+   467→  // ===== Fetch exams =====
+   468→  const fetchExams = useCallback(async (silent: boolean = false) => {
+   469→    if (!mountedRef.current) return;
+   470→    if (!silent) {
+   471→      const t = setTimeout(() => setLoading(true), 0);
+   472→      void t;
+   473→    }
+   474→    if (!silent) {
+   475→      const t = setTimeout(() => setError(null), 0);
+   476→      void t;
+   477→    }
+   478→    try {
+   479→      const params = new URLSearchParams();
+   480→      params.set('schoolId', schoolId);
+   481→      params.set('teacherId', teacherId);
+   482→      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+   483→      if (statusFilter !== 'all') params.set('status', statusFilter);
+   484→      // Note: category filtering is done client-side because the GET endpoint
+   485→      // returns the category field for each exam; we filter the array directly.
+   486→      params.set('limit', '100');
+   487→
+   488→      const res = await fetch(`/api/exams/teacher?${params.toString()}`);
+   489→      const data = await res.json();
+   490→      if (!res.ok) {
+   491→        throw new Error(data?.error || 'فشل جلب الامتحانات');
+   492→      }
+   493→      if (!mountedRef.current) return;
+   494→      const list = (data as ExamsListResponse).exams || [];
+   495→      const t = setTimeout(() => setExams(list), 0);
+   496→      void t;
+   497→    } catch (err) {
+   498→      if (!mountedRef.current) return;
+   499→      const msg = err instanceof Error ? err.message : 'فشل جلب الامتحانات';
+   500→      const t = setTimeout(() => setError(msg), 0);
+   501→      void t;
+   502→      if (!silent) toast.error(msg);
+   503→    } finally {
+   504→      if (!mountedRef.current) return;
+   505→      const t = setTimeout(() => setLoading(false), 0);
+   506→      void t;
+   507→    }
+   508→  }, [schoolId, teacherId, debouncedSearch, statusFilter]);
+   509→
+   510→  // ===== Initial fetch + auto-refresh + focus =====
+   511→  useEffect(() => {
+   512→    fetchExams(false);
+   513→    const interval = setInterval(() => {
+   514→      fetchExams(true);
+   515→    }, 60_000);
+   516→    const onFocus = () => fetchExams(true);
+   517→    window.addEventListener('focus', onFocus);
+   518→    return () => {
+   519→      clearInterval(interval);
+   520→      window.removeEventListener('focus', onFocus);
+   521→    };
+   522→  }, [debouncedSearch, statusFilter, schoolId, teacherId]);
+   523→
+   524→  // ===== Fetch exam detail =====
+   525→  const openExamDetail = useCallback(async (examId: string) => {
+   526→    if (!mountedRef.current) return;
+   527→    const t1 = setTimeout(() => {
+   528→      setDetailOpen(true);
+   529→      setDetailLoading(true);
+   530→      setDetailError(null);
+   531→      setDetailExam(null);
+   532→      setSubmissionsStats(null);
+   533→    }, 0);
+   534→    void t1;
+   535→    try {
+   536→      const params = new URLSearchParams();
+   537→      params.set('schoolId', schoolId);
+   538→      params.set('teacherId', teacherId);
+   539→
+   540→      const [examRes, subsRes] = await Promise.allSettled([
+   541→        fetch(`/api/exams/teacher/${examId}?${params.toString()}`),
+   542→        fetch(`/api/exams/teacher/${examId}/submissions?${params.toString()}&limit=1`),
+   543→      ]);
+   544→
+   545→      if (!mountedRef.current) return;
+   546→
+   547→      if (examRes.status === 'fulfilled') {
+   548→        const examData = await examRes.value.json();
+   549→        if (!examRes.value.ok) {
+   550→          throw new Error(examData?.error || 'فشل جلب تفاصيل الامتحان');
+   551→        }
+   552→        const t = setTimeout(() => setDetailExam((examData as ExamDetailResponse).exam), 0);
+   553→        void t;
+   554→      } else {
+   555→        throw new Error('فشل الاتصال بالخادم');
+   556→      }
+   557→
+   558→      if (subsRes.status === 'fulfilled') {
+   559→        const subsData = await subsRes.value.json();
+   560→        if (subsRes.value.ok && subsData?.stats) {
+   561→          const t = setTimeout(() => setSubmissionsStats(subsData.stats as SubmissionsStats), 0);
+   562→          void t;
+   563→        }
+   564→      }
+   565→    } catch (err) {
+   566→      if (!mountedRef.current) return;
+   567→      const msg = err instanceof Error ? err.message : 'فشل جلب تفاصيل الامتحان';
+   568→      const t = setTimeout(() => setDetailError(msg), 0);
+   569→      void t;
+   570→      toast.error(msg);
+   571→    } finally {
+   572→      if (!mountedRef.current) return;
+   573→      const t = setTimeout(() => setDetailLoading(false), 0);
+   574→      void t;
+   575→    }
+   576→  }, [schoolId, teacherId]);
+   577→
+   578→  // ===== Create exam handlers =====
+   579→  const updateCreateField = useCallback((patch: Partial<CreateExamForm>) => {
+   580→    setCreateForm((prev) => ({ ...prev, ...patch }));
+   581→  }, []);
+   582→
+   583→  const addQuestion = useCallback(() => {
+   584→    setCreateForm((prev) => ({
+   585→      ...prev,
+   586→      questions: [...prev.questions, makeEmptyQuestion(prev.questions.length)],
+   587→    }));
+   588→  }, []);
+   589→
+   590→  const updateQuestion = useCallback((qid: string, patch: Partial<DraftQuestion>) => {
+   591→    setCreateForm((prev) => ({
+   592→      ...prev,
+   593→      questions: prev.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)),
+   594→    }));
+   595→  }, []);
+   596→
+   597→  const removeQuestion = useCallback((qid: string) => {
+   598→    setCreateForm((prev) => ({
+   599→      ...prev,
+   600→      questions: prev.questions.filter((q) => q.id !== qid),
+   601→    }));
+   602→  }, []);
+   603→
+   604→  const addOption = useCallback((qid: string) => {
+   605→    setCreateForm((prev) => ({
+   606→      ...prev,
+   607→      questions: prev.questions.map((q) => {
+   608→        if (q.id !== qid || q.options.length >= 8) return q;
+   609→        return { ...q, options: [...q.options, ''] };
+   610→      }),
+   611→    }));
+   612→  }, []);
+   613→
+   614→  const updateOption = useCallback((qid: string, optIndex: number, value: string) => {
+   615→    setCreateForm((prev) => ({
+   616→      ...prev,
+   617→      questions: prev.questions.map((q) => {
+   618→        if (q.id !== qid) return q;
+   619→        const newOptions = [...q.options];
+   620→        newOptions[optIndex] = value;
+   621→        let newCorrect = q.correctAnswer;
+   622→        if (q.correctAnswer === q.options[optIndex]) {
+   623→          newCorrect = value;
+   624→        }
+   625→        return { ...q, options: newOptions, correctAnswer: newCorrect };
+   626→      }),
+   627→    }));
+   628→  }, []);
+   629→
+   630→  const removeOption = useCallback((qid: string, optIndex: number) => {
+   631→    setCreateForm((prev) => ({
+   632→      ...prev,
+   633→      questions: prev.questions.map((q) => {
+   634→        if (q.id !== qid || q.options.length <= 2) return q;
+   635→        const removedValue = q.options[optIndex];
+   636→        const newOptions = q.options.filter((_, i) => i !== optIndex);
+   637→        let newCorrect = q.correctAnswer;
+   638→        if (q.correctAnswer === removedValue) newCorrect = '';
+   639→        return { ...q, options: newOptions, correctAnswer: newCorrect };
+   640→      }),
+   641→    }));
+   642→  }, []);
+   643→
+   644→  const resetCreateForm = useCallback(() => {
+   645→    setCreateForm(makeEmptyCreateForm());
+   646→    setCreateErrors({});
+   647→  }, []);
+   648→
+   649→  const validateCreateForm = useCallback((): {
+   650→    ok: boolean;
+   651→    errors: Record<string, string>;
+   652→    message?: string;
+   653→  } => {
+   654→    const errors: Record<string, string> = {};
+   655→    const f = createForm;
+   656→    let message: string | undefined;
+   657→
+   658→    if (!f.title.trim()) errors.title = 'عنوان الامتحان مطلوب';
+   659→    if (!f.subject.trim()) errors.subject = 'المادة مطلوبة';
+   660→
+   661→    if (!f.startDate) errors.startDate = 'وقت الفتح مطلوب';
+   662→    if (!f.endDate) errors.endDate = 'وقت الإغلاق مطلوب';
+   663→    if (f.startDate && f.endDate) {
+   664→      const s = new Date(f.startDate);
+   665→      const e = new Date(f.endDate);
+   666→      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s >= e) {
+   667→        errors.endDate = 'وقت الإغلاق يجب أن يكون بعد وقت الفتح';
+   668→      }
+   669→    }
+   670→
+   671→    if (!f.durationMinutes || f.durationMinutes < 1) {
+   672→      errors.durationMinutes = 'المدة يجب أن تكون دقيقة على الأقل';
+   673→    }
+   674→
+   675→    for (let i = 0; i < f.questions.length; i++) {
+   676→      const q = f.questions[i];
+   677→      const key = `q-${q.id}`;
+   678→      if (!q.text.trim()) {
+   679→        errors[key] = 'نص السؤال مطلوب';
+   680→        if (!message) message = `السؤال ${i + 1}: نص السؤال مطلوب`;
+   681→        continue;
+   682→      }
+   683→      if (q.type === 'MCQ') {
+   684→        const nonEmpty = q.options.filter((o) => o.trim().length > 0);
+   685→        if (nonEmpty.length < 2) {
+   686→          errors[key] = 'يتطلب خيارين على الأقل';
+   687→          if (!message) message = `السؤال ${i + 1}: يتطلب خيارين على الأقل`;
+   688→        } else if (!q.correctAnswer) {
+   689→          errors[key] = 'حدد الإجابة الصحيحة';
+   690→          if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+   691→        }
+   692→      }
+   693→      if (q.type === 'TRUE_FALSE' && !q.correctAnswer) {
+   694→        errors[key] = 'حدد الإجابة الصحيحة';
+   695→        if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+   696→      }
+   697→      if (q.points < 0 || q.points > 100) {
+   698→        errors[key] = 'الدرجة بين 0 و 100';
+   699→        if (!message) message = `السؤال ${i + 1}: الدرجة يجب أن تكون بين 0 و 100`;
+   700→      }
+   701→    }
+   702→
+   703→    return { ok: Object.keys(errors).length === 0, errors, message };
+   704→  }, [createForm]);
+   705→
+   706→  const submitCreate = useCallback(
+   707→    async (publish: boolean) => {
+   708→      const validation = validateCreateForm();
+   709→      if (!validation.ok) {
+   710→        setCreateErrors(validation.errors);
+   711→        toast.error(validation.message || 'يرجى تصحيح الأخطاء في النموذج');
+   712→        return;
+   713→      }
+   714→
+   715→      setCreateErrors({});
+   716→      setCreateSubmitting(true);
+   717→
+   718→      try {
+   719→        const f = createForm;
+   720→        const isTraining = f.category === 'TRAINING';
+   721→        const body: Record<string, unknown> = {
+   722→          title: f.title.trim(),
+   723→          subject: f.subject.trim(),
+   724→          startDate: new Date(f.startDate).toISOString(),
+   725→          endDate: new Date(f.endDate).toISOString(),
+   726→          durationMinutes: f.durationMinutes,
+   727→          shuffleQuestions: f.shuffleQuestions,
+   728→          shuffleOptions: f.shuffleOptions,
+   729→          allowReview: f.allowReview,
+   730→          showResultImmediately: f.showResultImmediately,
+   731→          parentVisible: f.parentVisible,
+   732→          antiCheatEnabled: f.antiCheatEnabled,
+   733→          passingScore: f.passingScore,
+   734→          category: f.category,
+   735→          examPeriod: isTraining ? f.examPeriod : 'NONE',
+   736→          showAnswersAfter: f.showAnswersAfter,
+   737→          allowRetakes: f.allowRetakes,
+   738→        };
+   739→        if (f.description.trim()) body.description = f.description.trim();
+   740→        if (f.classroomName.trim()) body.classroomName = f.classroomName.trim();
+   741→        // Only send password for OFFICIAL exams; TRAINING exams are open
+   742→        if (!isTraining && f.password.trim()) body.password = f.password.trim();
+   743→
+   744→        const questions = f.questions.map((q, i) => {
+   745→          const out: Record<string, unknown> = {
+   746→            type: q.type,
+   747→            text: q.text.trim(),
+   748→            points: q.points,
+   749→            order: i + 1,
+   750→          };
+   751→          if (q.type === 'MCQ') {
+   752→            out.options = q.options.map((o) => o.trim()).filter((o) => o.length > 0);
+   753→            out.correctAnswer = q.correctAnswer;
+   754→          } else if (q.type === 'TRUE_FALSE') {
+   755→            out.correctAnswer = q.correctAnswer;
+   756→          } else if (q.type === 'SHORT') {
+   757→            if (q.correctText.trim()) out.correctText = q.correctText.trim();
+   758→          } else if (q.type === 'ESSAY') {
+   759→            if (q.rubric.trim()) out.rubric = { text: q.rubric.trim() };
+   760→          }
+   761→          if (q.explanation.trim()) out.explanation = q.explanation.trim();
+   762→          return out;
+   763→        });
+   764→        if (questions.length > 0) body.questions = questions;
+   765→
+   766→        const params = new URLSearchParams();
+   767→        params.set('schoolId', schoolId);
+   768→        params.set('teacherId', teacherId);
+   769→
+   770→        const res = await fetch(`/api/exams/teacher?${params.toString()}`, {
+   771→          method: 'POST',
+   772→          headers: { 'Content-Type': 'application/json' },
+   773→          body: JSON.stringify(body),
+   774→        });
+   775→        const data = await res.json();
+   776→        if (!res.ok) {
+   777→          throw new Error(data?.error || 'فشل إنشاء الامتحان');
+   778→        }
+   779→
+   780→        const newExamId: string | undefined = data?.examId;
+   781→
+   782→        if (publish && newExamId) {
+   783→          try {
+   784→            const pubRes = await fetch(
+   785→              `/api/exams/teacher/${newExamId}/publish?${params.toString()}`,
+   786→              { method: 'POST' }
+   787→            );
+   788→            const pubData = await pubRes.json();
+   789→            if (!pubRes.ok) {
+   790→              toast.warning(
+   791→                `تم حفظ الامتحان كمسودة، لكن فشل النشر: ${pubData?.error || 'خطأ غير معروف'}`
+   792→              );
+   793→            } else {
+   794→              toast.success('تم إنشاء الامتحان ونشره بنجاح');
+   795→            }
+   796→          } catch (pubErr) {
+   797→            const msg = pubErr instanceof Error ? pubErr.message : 'فشل النشر';
+   798→            toast.warning(`تم حفظ الامتحان كمسودة، لكن فشل النشر: ${msg}`);
+   799→          }
+   800→        } else {
+   801→          toast.success('تم حفظ الامتحان كمسودة');
+   802→        }
+   803→
+   804→        if (mountedRef.current) {
+   805→          setShowCreateDialog(false);
+   806→          resetCreateForm();
+   807→        }
+   808→        fetchExams(false);
+   809→      } catch (err) {
+   810→        const msg = err instanceof Error ? err.message : 'فشل إنشاء الامتحان';
+   811→        toast.error(msg);
+   812→      } finally {
+   813→        if (mountedRef.current) setCreateSubmitting(false);
+   814→      }
+   815→    },
+   816→    [createForm, validateCreateForm, schoolId, teacherId, fetchExams, resetCreateForm]
+   817→  );
+   818→
+   819→  // ===== Client-side category filter (server returns category field per exam) =====
+   820→  const filteredExams =
+   821→    categoryFilter === 'all'
+   822→      ? exams
+   823→      : exams.filter((e) => (e.category || 'OFFICIAL') === categoryFilter);
+   824→
+   825→  // ===== Compute KPIs (based on filtered list) =====
+   826→  const kpis = {
+   827→    total: filteredExams.length,
+   828→    published: filteredExams.filter((e) => e.status === 'PUBLISHED').length,
+   829→    upcoming: filteredExams.filter((e) => e.timeStatus === 'UPCOMING').length,
+   830→    submissions: filteredExams.reduce((sum, e) => sum + (e.submissionsCount || 0), 0),
+   831→  };
+   832→
+   833→  // ===== Render =====
+   834→  return (
+   835→    <div
+   836→      className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-violet-50/20 to-slate-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"
+   837→      dir="rtl"
+   838→    >
+   839→      {/* Header */}
+   840→      <header className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white shadow-xl sticky top-0 z-50">
+   841→        <div className="container mx-auto px-4 py-4">
+   842→          <div className="flex items-center justify-between gap-3">
+   843→            <button
+   844→              onClick={onBack}
+   845→              className="flex items-center gap-2 text-white hover:text-violet-300 transition-colors shrink-0"
+   846→            >
+   847→              <ArrowRight className="w-5 h-5" />
+   848→              <span className="font-medium hidden sm:inline">العودة للوحة التحكم</span>
+   849→            </button>
+   850→            <div className="flex items-center gap-3 min-w-0">
+   851→              <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg shrink-0">
+   852→                <FileText className="w-6 h-6 text-white" />
+   853→              </div>
+   854→              <div className="min-w-0">
+   855→                <h1 className="text-base md:text-xl font-bold truncate">إدارة الامتحانات</h1>
+   856→                <p className="text-violet-200 text-xs truncate">{teacherName}</p>
+   857→              </div>
+   858→            </div>
+   859→            <div className="flex items-center gap-2 shrink-0">
+   860→              <Button
+   861→                onClick={() => setShowCreateDialog(true)}
+   862→                size="sm"
+   863→                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-lg"
+   864→              >
+   865→                <Plus className="w-4 h-4" />
+   866→                <span className="hidden sm:inline">إنشاء امتحان جديد</span>
+   867→              </Button>
+   868→              <Button
+   869→                onClick={() => fetchExams(false)}
+   870→                variant="outline"
+   871→                size="sm"
+   872→                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
+   873→                disabled={loading}
+   874→              >
+   875→                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+   876→                <span className="hidden sm:inline">تحديث</span>
+   877→              </Button>
+   878→            </div>
+   879→          </div>
+   880→        </div>
+   881→      </header>
+   882→
+   883→      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
+   884→        {/* Page intro banner */}
+   885→        <div
+   886→          className={`mb-6 transition-all duration-700 ${
+   887→            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+   888→          }`}
+   889→        >
+   890→          <div className="relative overflow-hidden rounded-2xl">
+   891→            <div className="absolute -inset-[2px] bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-2xl blur-[1px] opacity-60" />
+   892→            <Card className="relative border-0 shadow-2xl rounded-2xl overflow-hidden">
+   893→              <CardContent className="p-0">
+   894→                <div className="bg-gradient-to-l from-violet-700 via-purple-700 to-fuchsia-700 p-6 md:p-8 text-white relative overflow-hidden">
+   895→                  <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+   896→                  <div className="absolute bottom-0 right-0 w-48 h-48 bg-white/5 rounded-full translate-x-1/4 translate-y-1/4" />
+   897→                  <div className="relative z-10 flex items-center gap-4">
+   898→                    <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center ring-4 ring-white/20 shrink-0">
+   899→                      <Sparkles className="w-7 h-7 text-white" />
+   900→                    </div>
+   901→                    <div>
+   902→                      <h2 className="text-xl md:text-2xl font-bold mb-1">إدارة الامتحانات الإلكترونية</h2>
+   903→                      <p className="text-violet-100/90 text-sm">
+   904→                        تابع امتحاناتك، التسليمات، والإحصائيات في مكان واحد
+   905→                      </p>
+   906→                    </div>
+   907→                  </div>
+   908→                </div>
+   909→              </CardContent>
+   910→            </Card>
+   911→          </div>
+   912→        </div>
+   913→
+   914→        {/* KPI Cards */}
+   915→        <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+   916→          {kpiConfig.map((k) => {
+   917→            const Icon = k.icon;
+   918→            const value = kpis[k.key];
+   919→            return (
+   920→              <Card
+   921→                key={k.key}
+   922→                className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+   923→              >
+   924→                <CardContent className="p-5">
+   925→                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${k.gradient} flex items-center justify-center shadow-md mb-3`}>
+   926→                    <Icon className="w-6 h-6 text-white" />
+   927→                  </div>
+   928→                  <div className="text-3xl font-bold text-[#2A374E] dark:text-white mb-0.5">
+   929→                    {loading && exams.length === 0 ? '—' : value}
+   930→                  </div>
+   931→                  <div className="text-xs text-gray-500 dark:text-gray-400">
+   932→                    {k.label}
+   933→                  </div>
+   934→                </CardContent>
+   935→              </Card>
+   936→            );
+   937→          })}
+   938→        </div>
+   939→
+   940→        {/* Filters row */}
+   941→        <Card className="border-0 shadow-sm mb-6">
+   942→          <CardContent className="p-4">
+   943→            {/* Category tabs (all / official / training) */}
+   944→            <div className="mb-3">
+   945→              <Tabs
+   946→                value={categoryFilter}
+   947→                onValueChange={(v) =>
+   948→                  setCategoryFilter(v as 'all' | ExamCategory)
+   949→                }
+   950→              >
+   951→                <TabsList className="h-9">
+   952→                  <TabsTrigger value="all" className="gap-1.5">
+   953→                    <FileText className="w-3.5 h-3.5" />
+   954→                    الكل
+   955→                  </TabsTrigger>
+   956→                  <TabsTrigger value="OFFICIAL" className="gap-1.5">
+   957→                    <ShieldCheck className="w-3.5 h-3.5" />
+   958→                    رسمي
+   959→                  </TabsTrigger>
+   960→                  <TabsTrigger value="TRAINING" className="gap-1.5">
+   961→                    <Dumbbell className="w-3.5 h-3.5" />
+   962→                    تدريبي
+   963→                  </TabsTrigger>
+   964→                </TabsList>
+   965→              </Tabs>
+   966→            </div>
+   967→
+   968→            <div className="flex flex-col md:flex-row gap-3">
+   969→              {/* Search */}
+   970→              <div className="flex-1">
+   971→                <Label htmlFor="exam-search" className="sr-only">
+   972→                  بحث
+   973→                </Label>
+   974→                <div className="relative">
+   975→                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+   976→                  <Input
+   977→                    id="exam-search"
+   978→                    type="text"
+   979→                    value={search}
+   980→                    onChange={(e) => setSearch(e.target.value)}
+   981→                    placeholder="ابحث بالعنوان أو المادة..."
+   982→                    className="pr-9 h-10"
+   983→                  />
+   984→                </div>
+   985→              </div>
+   986→
+   987→              {/* Status filter */}
+   988→              <div className="md:w-48">
+   989→                <Label htmlFor="exam-status" className="sr-only">
+   990→                  الحالة
+   991→                </Label>
+   992→                <Select
+   993→                  value={statusFilter}
+   994→                  onValueChange={(v) => setStatusFilter(v as 'all' | ExamStatus)}
+   995→                >
+   996→                  <SelectTrigger id="exam-status" className="w-full h-10">
+   997→                    <SelectValue placeholder="كل الحالات" />
+   998→                  </SelectTrigger>
+   999→                  <SelectContent>
+  1000→                    <SelectItem value="all">كل الحالات</SelectItem>
+  1001→                    <SelectItem value="DRAFT">مسودة</SelectItem>
+  1002→                    <SelectItem value="PUBLISHED">منشور</SelectItem>
+  1003→                    <SelectItem value="CLOSED">مغلق</SelectItem>
+  1004→                    <SelectItem value="ARCHIVED">مؤرشف</SelectItem>
+  1005→                  </SelectContent>
+  1006→                </Select>
+  1007→              </div>
+  1008→
+  1009→              {/* Refresh button */}
+  1010→              <Button
+  1011→                onClick={() => fetchExams(false)}
+  1012→                variant="outline"
+  1013→                className="h-10 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+  1014→                disabled={loading}
+  1015→              >
+  1016→                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+  1017→                <span className="hidden sm:inline">تحديث</span>
+  1018→              </Button>
+  1019→            </div>
+  1020→          </CardContent>
+  1021→        </Card>
+  1022→
+  1023→        {/* Error state */}
+  1024→        {error && !loading && (
+  1025→          <Card className="border-rose-200 dark:border-rose-800 shadow-sm mb-6">
+  1026→            <CardContent className="p-6 text-center">
+  1027→              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+  1028→                <AlertTriangle className="w-7 h-7 text-rose-600 dark:text-rose-400" />
+  1029→              </div>
+  1030→              <h3 className="font-bold text-[#2A374E] dark:text-white mb-1">فشل تحميل الامتحانات</h3>
+  1031→              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{error}</p>
+  1032→              <Button
+  1033→                onClick={() => fetchExams(false)}
+  1034→                className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
+  1035→              >
+  1036→                <RefreshCw className="w-4 h-4" />
+  1037→                إعادة المحاولة
+  1038→              </Button>
+  1039→            </CardContent>
+  1040→          </Card>
+  1041→        )}
+  1042→
+  1043→        {/* Loading skeletons */}
+  1044→        {loading && exams.length === 0 && !error && (
+  1045→          <div className="space-y-4 mb-6">
+  1046→            {[0, 1, 2].map((i) => (
+  1047→              <Card key={i} className="border-0 shadow-sm">
+  1048→                <CardContent className="p-5">
+  1049→                  <div className="flex items-start justify-between gap-4 mb-3">
+  1050→                    <div className="flex-1 space-y-2">
+  1051→                      <Skeleton className="h-5 w-2/3" />
+  1052→                      <Skeleton className="h-4 w-1/3" />
+  1053→                    </div>
+  1054→                    <Skeleton className="h-6 w-20 rounded-full" />
+  1055→                  </div>
+  1056→                  <div className="flex flex-wrap gap-2 mb-3">
+  1057→                    <Skeleton className="h-6 w-16 rounded-full" />
+  1058→                    <Skeleton className="h-6 w-16 rounded-full" />
+  1059→                    <Skeleton className="h-6 w-16 rounded-full" />
+  1060→                  </div>
+  1061→                  <div className="flex flex-wrap gap-4">
+  1062→                    <Skeleton className="h-4 w-24" />
+  1063→                    <Skeleton className="h-4 w-24" />
+  1064→                    <Skeleton className="h-4 w-24" />
+  1065→                  </div>
+  1066→                </CardContent>
+  1067→              </Card>
+  1068→            ))}
+  1069→          </div>
+  1070→        )}
+  1071→
+  1072→        {/* Empty state */}
+  1073→        {!loading && !error && filteredExams.length === 0 && (
+  1074→          <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+  1075→            <CardContent className="p-10 text-center">
+  1076→              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 dark:from-violet-900/30 dark:to-fuchsia-900/30 flex items-center justify-center">
+  1077→                <FileText className="w-8 h-8 text-violet-500" />
+  1078→              </div>
+  1079→              <h3 className="font-bold text-[#2A374E] dark:text-white text-lg mb-1">
+  1080→                لا توجد امتحانات بعد
+  1081→              </h3>
+  1082→              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto leading-relaxed">
+  1083→                لم يتم العثور على امتحانات تطابق معايير البحث الحالية. حاول تعديل الفلاتر أو إنشاء امتحان جديد من خلال منشئ الامتحانات.
+  1084→              </p>
+  1085→            </CardContent>
+  1086→          </Card>
+  1087→        )}
+  1088→
+  1089→        {/* Exams list */}
+  1090→        {!error && filteredExams.length > 0 && (
+  1091→          <div className="mb-6">
+  1092→            <div className="flex items-center justify-between mb-3 px-1">
+  1093→              <div className="flex items-center gap-2">
+  1094→                <ListChecks className="w-5 h-5 text-violet-600" />
+  1095→                <h2 className="text-base font-bold text-[#2A374E] dark:text-white">
+  1096→                  قائمة الامتحانات
+  1097→                </h2>
+  1098→                <Badge variant="secondary" className="text-[10px]">
+  1099→                  {filteredExams.length}
+  1100→                </Badge>
+  1101→              </div>
+  1102→            </div>
+  1103→            <div className="space-y-3 max-h-[60vh] overflow-y-auto pl-1 teacher-exams-scroll">
+  1104→              {filteredExams.map((exam) => (
+  1105→                <Card
+  1106→                  key={exam.id}
+  1107→                  className="border-0 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+  1108→                >
+  1109→                  <CardContent className="p-5">
+  1110→                    {/* Top row: title + status badges */}
+  1111→                    <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+  1112→                      <div className="flex-1 min-w-0">
+  1113→                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+  1114→                          <h3 className="font-bold text-[#2A374E] dark:text-white text-base leading-snug break-words">
+  1115→                            {exam.title}
+  1116→                          </h3>
+  1117→                          {exam.hasPassword && (
+  1118→                            <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+  1119→                          )}
+  1120→                          {/* Training indicator icon next to title */}
+  1121→                          {exam.category === 'TRAINING' && (
+  1122→                            <Dumbbell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+  1123→                          )}
+  1124→                        </div>
+  1125→                        <div className="flex items-center gap-2 flex-wrap">
+  1126→                          <Badge className={`text-[10px] border ${questionTypeBadgeClass('MCQ')}`}>
+  1127→                            <BookOpen className="w-3 h-3 ml-1" />
+  1128→                            {exam.subject}
+  1129→                          </Badge>
+  1130→                          {exam.classroomName && (
+  1131→                            <Badge variant="outline" className="text-[10px]">
+  1132→                              <GraduationCap className="w-3 h-3 ml-1" />
+  1133→                              {exam.classroomName}
+  1134→                            </Badge>
+  1135→                          )}
+  1136→                          {/* Exam period badge (training only, when not NONE) */}
+  1137→                          {exam.category === 'TRAINING' && exam.examPeriod && exam.examPeriod !== 'NONE' && (
+  1138→                            <Badge className={`text-[10px] border ${examPeriodBadgeClass(exam.examPeriod)}`}>
+  1139→                              <CalendarDays className="w-3 h-3 ml-1" />
+  1140→                              {examPeriodLabel(exam.examPeriod)}
+  1141→                            </Badge>
+  1142→                          )}
+  1143→                        </div>
+  1144→                      </div>
+  1145→                      <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+  1146→                        {/* Category badge (official vs training) */}
+  1147→                        <Badge className={`text-[10px] border ${categoryBadgeClass(exam.category)}`}>
+  1148→                          {exam.category === 'TRAINING' ? (
+  1149→                            <Dumbbell className="w-3 h-3 ml-1" />
+  1150→                          ) : (
+  1151→                            <ShieldCheck className="w-3 h-3 ml-1" />
+  1152→                          )}
+  1153→                          {categoryLabel(exam.category)}
+  1154→                        </Badge>
+  1155→                        <Badge className={`text-[10px] border ${statusBadgeClass(exam.status)}`}>
+  1156→                          {statusLabel(exam.status)}
+  1157→                        </Badge>
+  1158→                        <Badge className={`text-[10px] border ${timeStatusBadgeClass(exam.timeStatus)}`}>
+  1159→                          {timeStatusLabel(exam.timeStatus)}
+  1160→                        </Badge>
+  1161→                      </div>
+  1162→                    </div>
+  1163→
+  1164→                    {/* Meta row */}
+  1165→                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-600 dark:text-gray-400 mb-3">
+  1166→                      <div className="flex items-center gap-1.5">
+  1167→                        <ListChecks className="w-3.5 h-3.5 text-violet-500" />
+  1168→                        <span>{exam.questionsCount} سؤال</span>
+  1169→                      </div>
+  1170→                      <div className="flex items-center gap-1.5">
+  1171→                        <ClipboardCheck className="w-3.5 h-3.5 text-rose-500" />
+  1172→                        <span>{exam.submissionsCount} تسليم</span>
+  1173→                      </div>
+  1174→                      <div className="flex items-center gap-1.5">
+  1175→                        <Clock className="w-3.5 h-3.5 text-amber-500" />
+  1176→                        <span>{exam.durationMinutes} دقيقة</span>
+  1177→                      </div>
+  1178→                      <div className="flex items-center gap-1.5">
+  1179→                        <Award className="w-3.5 h-3.5 text-fuchsia-500" />
+  1180→                        <span>{exam.totalPoints} نقطة</span>
+  1181→                      </div>
+  1182→                      {exam.passingScore !== null && (
+  1183→                        <div className="flex items-center gap-1.5">
+  1184→                          <Trophy className="w-3.5 h-3.5 text-emerald-500" />
+  1185→                          <span>نجاح: {exam.passingScore}%</span>
+  1186→                        </div>
+  1187→                      )}
+  1188→                      {/* Retakes indicator for training */}
+  1189→                      {exam.category === 'TRAINING' && exam.allowRetakes && (
+  1190→                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+  1191→                          <Repeat2 className="w-3.5 h-3.5" />
+  1192→                          <span>محاولات غير محدودة</span>
+  1193→                        </div>
+  1194→                      )}
+  1195→                      {!(exam.category === 'TRAINING' && exam.allowRetakes) && (
+  1196→                        <div className="flex items-center gap-1.5">
+  1197→                          <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+  1198→                          <span>{exam.maxAttempts} محاولة</span>
+  1199→                        </div>
+  1200→                      )}
+  1201→                    </div>
+  1202→
+  1203→                    {/* Dates */}
+  1204→                    <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 mb-3 flex-wrap">
+  1205→                      <CalendarDays className="w-3.5 h-3.5" />
+  1206→                      <span dir="auto">
+  1207→                        {formatArabicDateShort(exam.startDate)} ← {formatArabicDateShort(exam.endDate)}
+  1208→                      </span>
+  1209→                    </div>
+  1210→
+  1211→                    {/* Action button */}
+  1212→                    <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
+  1213→                      <Button
+  1214→                        onClick={() => openExamDetail(exam.id)}
+  1215→                        size="sm"
+  1216→                        className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white h-9"
+  1217→                      >
+  1218→                        <Eye className="w-4 h-4" />
+  1219→                        عرض التفاصيل
+  1220→                      </Button>
+  1221→                    </div>
+  1222→                  </CardContent>
+  1223→                </Card>
+  1224→              ))}
+  1225→            </div>
+  1226→          </div>
+  1227→        )}
+  1228→      </main>
+  1229→
+  1230→      {/* Sticky footer */}
+  1231→      <footer className="mt-auto bg-[#1a2332] text-white/70 text-center text-xs py-3">
+  1232→        <div className="container mx-auto px-4 flex items-center justify-center gap-2 flex-wrap">
+  1233→          <ShieldCheck className="w-3.5 h-3.5" />
+  1234→          <span>إدارة الامتحانات</span>
+  1235→          <span className="opacity-50">|</span>
+  1236→          <span>© {new Date().getFullYear()}</span>
+  1237→        </div>
+  1238→      </footer>
+  1239→
+  1240→      {/* Detail Modal */}
+  1241→      <Dialog open={detailOpen} onOpenChange={(v) => {
+  1242→        if (mountedRef.current) {
+  1243→          const t = setTimeout(() => setDetailOpen(v), 0);
+  1244→          void t;
+  1245→        }
+  1246→      }}>
+  1247→        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+  1248→          <DialogHeader className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+  1249→            <DialogTitle className="text-xl font-bold text-[#2A374E] dark:text-white flex items-center gap-2">
+  1250→              <FileText className="w-5 h-5 text-violet-600" />
+  1251→              تفاصيل الامتحان
+  1252→            </DialogTitle>
+  1253→            <DialogDescription className="text-xs">
+  1254→              عرض كامل لمعلومات الامتحان، الأسئلة، والإحصائيات
+  1255→            </DialogDescription>
+  1256→          </DialogHeader>
+  1257→
+  1258→          {/* Detail body (scrollable) */}
+  1259→          <div className="flex-1 overflow-y-auto p-6 teacher-exams-scroll">
+  1260→            {/* Loading */}
+  1261→            {detailLoading && (
+  1262→              <div className="space-y-4">
+  1263→                <Skeleton className="h-6 w-2/3" />
+  1264→                <Skeleton className="h-4 w-1/2" />
+  1265→                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+  1266→                  {[0, 1, 2, 3].map((i) => (
+  1267→                    <Skeleton key={i} className="h-20" />
+  1268→                  ))}
+  1269→                </div>
+  1270→                <Skeleton className="h-32 w-full mt-4" />
+  1271→              </div>
+  1272→            )}
+  1273→
+  1274→            {/* Error */}
+  1275→            {detailError && !detailLoading && (
+  1276→              <div className="text-center py-10">
+  1277→                <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+  1278→                  <AlertTriangle className="w-7 h-7 text-rose-600 dark:text-rose-400" />
+  1279→                </div>
+  1280→                <h3 className="font-bold text-[#2A374E] dark:text-white mb-1">فشل تحميل التفاصيل</h3>
+  1281→                <p className="text-sm text-gray-500 dark:text-gray-400">{detailError}</p>
+  1282→              </div>
+  1283→            )}
+  1284→
+  1285→            {/* Detail content */}
+  1286→            {detailExam && !detailLoading && !detailError && (
+  1287→              <div className="space-y-5">
+  1288→                {/* Title block */}
+  1289→                <div className="rounded-xl bg-gradient-to-l from-violet-50 to-fuchsia-50 dark:from-violet-900/20 dark:to-fuchsia-900/20 p-4 border border-violet-200 dark:border-violet-800">
+  1290→                  <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+  1291→                    <h3 className="text-lg font-bold text-[#2A374E] dark:text-white leading-snug">
+  1292→                      {detailExam.title}
+  1293→                    </h3>
+  1294→                    <div className="flex items-center gap-1.5 flex-wrap">
+  1295→                      <Badge className={`text-[10px] border ${statusBadgeClass(detailExam.status)}`}>
+  1296→                        {statusLabel(detailExam.status)}
+  1297→                      </Badge>
+  1298→                      <Badge className={`text-[10px] border ${timeStatusBadgeClass(
+  1299→                        new Date() < new Date(detailExam.startDate)
+  1300→                          ? 'UPCOMING'
+  1301→                          : new Date() > new Date(detailExam.endDate)
+  1302→                          ? 'ENDED'
+  1303→                          : 'OPEN'
+  1304→                      )}`}>
+  1305→                        {timeStatusLabel(
+  1306→                          new Date() < new Date(detailExam.startDate)
+  1307→                            ? 'UPCOMING'
+  1308→                            : new Date() > new Date(detailExam.endDate)
+  1309→                            ? 'ENDED'
+  1310→                            : 'OPEN'
+  1311→                        )}
+  1312→                      </Badge>
+  1313→                    </div>
+  1314→                  </div>
+  1315→                  <div className="flex items-center gap-2 flex-wrap text-xs">
+  1316→                    <Badge className={`text-[10px] border ${questionTypeBadgeClass('MCQ')}`}>
+  1317→                      <BookOpen className="w-3 h-3 ml-1" />
+  1318→                      {detailExam.subject}
+  1319→                    </Badge>
+  1320→                    {detailExam.classroomName && (
+  1321→                      <Badge variant="outline" className="text-[10px]">
+  1322→                        <GraduationCap className="w-3 h-3 ml-1" />
+  1323→                        {detailExam.classroomName}
+  1324→                      </Badge>
+  1325→                    )}
+  1326→                    {detailExam.hasPassword && (
+  1327→                      <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+  1328→                        <Lock className="w-3 h-3 ml-1" />
+  1329→                        محمي بكلمة سر
+  1330→                      </Badge>
+  1331→                    )}
+  1332→                  </div>
+  1333→                </div>
+  1334→
+  1335→                {/* Description */}
+  1336→                {detailExam.description && (
+  1337→                  <div>
+  1338→                    <h4 className="text-sm font-bold text-[#2A374E] dark:text-white mb-1.5 flex items-center gap-1.5">
+  1339→                      <FileText className="w-4 h-4 text-violet-600" />
+  1340→                      الوصف
+  1341→                    </h4>
+  1342→                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+  1343→                      {detailExam.description}
+  1344→                    </p>
+  1345→                  </div>
+  1346→                )}
+  1347→
+  1348→                {/* Dates & duration */}
+  1349→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  1350→                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+  1351→                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+  1352→                      <CalendarDays className="w-3.5 h-3.5 text-amber-500" />
+  1353→                      تاريخ البدء
+  1354→                    </div>
+  1355→                    <p className="text-sm font-medium text-[#2A374E] dark:text-white" dir="auto">
+  1356→                      {formatArabicDate(detailExam.startDate)}
+  1357→                    </p>
+  1358→                  </div>
+  1359→                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+  1360→                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+  1361→                      <CalendarDays className="w-3.5 h-3.5 text-rose-500" />
+  1362→                      تاريخ الانتهاء
+  1363→                    </div>
+  1364→                    <p className="text-sm font-medium text-[#2A374E] dark:text-white" dir="auto">
+  1365→                      {formatArabicDate(detailExam.endDate)}
+  1366→                    </p>
+  1367→                  </div>
+  1368→                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+  1369→                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+  1370→                      <Clock className="w-3.5 h-3.5 text-violet-500" />
+  1371→                      المدة
+  1372→                    </div>
+  1373→                    <p className="text-sm font-medium text-[#2A374E] dark:text-white">
+  1374→                      {detailExam.durationMinutes} دقيقة
+  1375→                    </p>
+  1376→                  </div>
+  1377→                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+  1378→                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+  1379→                      <Award className="w-3.5 h-3.5 text-fuchsia-500" />
+  1380→                      إجمالي النقاط
+  1381→                    </div>
+  1382→                    <p className="text-sm font-medium text-[#2A374E] dark:text-white">
+  1383→                      {detailExam.totalPoints} نقطة
+  1384→                      {detailExam.passingScore !== null && (
+  1385→                        <span className="text-xs text-gray-500 mr-2">
+  1386→                          (نجاح: {detailExam.passingScore}%)
+  1387→                        </span>
+  1388→                      )}
+  1389→                    </p>
+  1390→                  </div>
+  1391→                </div>
+  1392→
+  1393→                {/* Settings */}
+  1394→                <div>
+  1395→                  <h4 className="text-sm font-bold text-[#2A374E] dark:text-white mb-2 flex items-center gap-1.5">
+  1396→                    <ShieldCheck className="w-4 h-4 text-violet-600" />
+  1397→                    الإعدادات
+  1398→                  </h4>
+  1399→                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+  1400→                    <SettingChip label="خلط الأسئلة" enabled={detailExam.shuffleQuestions} />
+  1401→                    <SettingChip label="خلط الخيارات" enabled={detailExam.shuffleOptions} />
+  1402→                    <SettingChip label="السماح بالمراجعة" enabled={detailExam.allowReview} />
+  1403→                    <SettingChip label="إظهار النتيجة فوراً" enabled={detailExam.showResultImmediately} />
+  1404→                    <SettingChip label="ظاهر لأولياء الأمور" enabled={detailExam.parentVisible} />
+  1405→                    <SettingChip label="مكافحة الغش" enabled={detailExam.antiCheatEnabled} />
+  1406→                  </div>
+  1407→                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+  1408→                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
+  1409→                      <RefreshCw className="w-3 h-3" />
+  1410→                      {detailExam.maxAttempts} محاولة كحد أقصى
+  1411→                    </span>
+  1412→                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800">
+  1413→                      <FileText className="w-3 h-3" />
+  1414→                      حد الملف: {detailExam.maxFileSizeMb}MB
+  1415→                    </span>
+  1416→                  </div>
+  1417→                </div>
+  1418→
+  1419→                {/* Submissions summary */}
+  1420→                {submissionsStats && (
+  1421→                  <div>
+  1422→                    <h4 className="text-sm font-bold text-[#2A374E] dark:text-white mb-2 flex items-center gap-1.5">
+  1423→                      <BarChart3 className="w-4 h-4 text-rose-600" />
+  1424→                      ملخص التسليمات
+  1425→                    </h4>
+  1426→                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+  1427→                      <StatBox label="إجمالي التسليمات" value={submissionsStats.total} color="violet" />
+  1428→                      <StatBox label="قيد التنفيذ" value={submissionsStats.inProgress} color="amber" />
+  1429→                      <StatBox label="مُسلَّمة" value={submissionsStats.submitted} color="fuchsia" />
+  1430→                      <StatBox label="مصححة" value={submissionsStats.graded} color="emerald" />
+  1431→                      <StatBox label="بانتظار التصحيح" value={submissionsStats.needsGrading} color="rose" />
+  1432→                      <StatBox
+  1433→                        label="متوسط الدرجة"
+  1434→                        value={`${Math.round(submissionsStats.avgScore || 0)}%`}
+  1435→                        color="violet"
+  1436→                      />
+  1437→                    </div>
+  1438→                  </div>
+  1439→                )}
+  1440→
+  1441→                {/* Questions list */}
+  1442→                <div>
+  1443→                  <h4 className="text-sm font-bold text-[#2A374E] dark:text-white mb-2 flex items-center gap-1.5">
+  1444→                    <ListChecks className="w-4 h-4 text-violet-600" />
+  1445→                    الأسئلة ({detailExam.questions.length})
+  1446→                  </h4>
+  1447→                  {detailExam.questions.length === 0 ? (
+  1448→                    <div className="text-center py-6 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+  1449→                      <HelpCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+  1450→                      <p className="text-sm text-gray-500 dark:text-gray-400">
+  1451→                        لا توجد أسئلة في هذا الامتحان بعد
+  1452→                      </p>
+  1453→                    </div>
+  1454→                  ) : (
+  1455→                    <div className="space-y-3">
+  1456→                      {detailExam.questions.map((q, idx) => (
+  1457→                        <QuestionCard key={q.id} question={q} index={idx} />
+  1458→                      ))}
+  1459→                    </div>
+  1460→                  )}
+  1461→                </div>
+  1462→              </div>
+  1463→            )}
+  1464→          </div>
+  1465→        </DialogContent>
+  1466→      </Dialog>
+  1467→
+  1468→      {/* Create Exam Dialog */}
+  1469→      <Dialog
+  1470→        open={showCreateDialog}
+  1471→        onOpenChange={(v) => {
+  1472→          if (!createSubmitting) {
+  1473→            setShowCreateDialog(v);
+  1474→            if (!v) resetCreateForm();
+  1475→          }
+  1476→        }}
+  1477→      >
+  1478→        <DialogContent
+  1479→          className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0"
+  1480→          onPointerDownOutside={(e) => {
+  1481→            if (createSubmitting) e.preventDefault();
+  1482→          }}
+  1483→          onEscapeKeyDown={(e) => {
+  1484→            if (createSubmitting) e.preventDefault();
+  1485→          }}
+  1486→        >
+  1487→          <DialogHeader className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+  1488→            <DialogTitle className="text-xl font-bold text-[#2A374E] dark:text-white flex items-center gap-2">
+  1489→              <Plus className="w-5 h-5 text-violet-600" />
+  1490→              إنشاء امتحان جديد
+  1491→            </DialogTitle>
+  1492→            <DialogDescription className="text-xs">
+  1493→              املأ بيانات الامتحان الأساسية، ثم أضف الأسئلة. يمكنك الحفظ كمسودة أو النشر مباشرةً.
+  1494→            </DialogDescription>
+  1495→          </DialogHeader>
+  1496→
+  1497→          {/* Scrollable form body */}
+  1498→          <div className="flex-1 overflow-y-auto p-6 teacher-exams-scroll">
+  1499→            <div className="space-y-6">
+  1500→              {/* Section 1: Basic exam data */}
+  1501→              <section className="space-y-4">
+  1502→                <div className="flex items-center gap-2">
+  1503→                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+  1504→                    <FileText className="w-4 h-4 text-white" />
+  1505→                  </div>
+  1506→                  <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+  1507→                    بيانات الامتحان الأساسية
+  1508→                  </h3>
+  1509→                </div>
+  1510→
+  1511→                {/* Exam Category (OFFICIAL / TRAINING) */}
+  1512→                <div className="space-y-2">
+  1513→                  <Label className="text-sm font-medium">نوع الامتحان</Label>
+  1514→                  <ToggleGroup
+  1515→                    type="single"
+  1516→                    value={createForm.category}
+  1517→                    onValueChange={(v) => {
+  1518→                      if (v) updateCreateField({ category: v as ExamCategory });
+  1519→                    }}
+  1520→                    variant="outline"
+  1521→                    className="w-full"
+  1522→                  >
+  1523→                    <ToggleGroupItem
+  1524→                      value="OFFICIAL"
+  1525→                      aria-label="امتحان رسمي"
+  1526→                      className="flex-1 gap-1.5 data-[state=on]:bg-violet-50 data-[state=on]:text-violet-700 dark:data-[state=on]:bg-violet-900/30 dark:data-[state=on]:text-violet-300"
+  1527→                    >
+  1528→                      <ShieldCheck className="w-4 h-4" />
+  1529→                      <span className="text-xs font-medium">رسمي</span>
+  1530→                    </ToggleGroupItem>
+  1531→                    <ToggleGroupItem
+  1532→                      value="TRAINING"
+  1533→                      aria-label="امتحان تدريبي"
+  1534→                      className="flex-1 gap-1.5 data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700 dark:data-[state=on]:bg-amber-900/30 dark:data-[state=on]:text-amber-300"
+  1535→                    >
+  1536→                      <Dumbbell className="w-4 h-4" />
+  1537→                      <span className="text-xs font-medium">تدريبي</span>
+  1538→                    </ToggleGroupItem>
+  1539→                  </ToggleGroup>
+  1540→                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+  1541→                    {createForm.category === 'TRAINING'
+  1542→                      ? 'امتحان تدريبي مع إعادة المحاولة (مثل Oracle Academy) — لا يؤثر على درجة الطالب الرسمية.'
+  1543→                      : 'امتحان رسمي حقيقي يؤثر على درجة الطالب.'}
+  1544→                  </p>
+  1545→                </div>
+  1546→
+  1547→                {/* Title */}
+  1548→                <div className="space-y-1.5">
+  1549→                  <Label htmlFor="ce-title" className="text-sm font-medium">
+  1550→                    عنوان الامتحان <span className="text-rose-500">*</span>
+  1551→                  </Label>
+  1552→                  <Input
+  1553→                    id="ce-title"
+  1554→                    value={createForm.title}
+  1555→                    onChange={(e) => updateCreateField({ title: e.target.value })}
+  1556→                    placeholder="مثال: امتحان الفصل الأول - الرياضيات"
+  1557→                    className={createErrors.title ? 'border-rose-400' : ''}
+  1558→                  />
+  1559→                  {createErrors.title && (
+  1560→                    <p className="text-xs text-rose-500">{createErrors.title}</p>
+  1561→                  )}
+  1562→                </div>
+  1563→
+  1564→                {/* Subject + Classroom */}
+  1565→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1566→                  <div className="space-y-1.5">
+  1567→                    <Label htmlFor="ce-subject" className="text-sm font-medium">
+  1568→                      المادة <span className="text-rose-500">*</span>
+  1569→                    </Label>
+  1570→                    <Input
+  1571→                      id="ce-subject"
+  1572→                      value={createForm.subject}
+  1573→                      onChange={(e) => updateCreateField({ subject: e.target.value })}
+  1574→                      placeholder="مثال: الرياضيات"
+  1575→                      className={createErrors.subject ? 'border-rose-400' : ''}
+  1576→                    />
+  1577→                    {createErrors.subject && (
+  1578→                      <p className="text-xs text-rose-500">{createErrors.subject}</p>
+  1579→                    )}
+  1580→                  </div>
+  1581→                  <div className="space-y-1.5">
+  1582→                    <Label htmlFor="ce-classroom" className="text-sm font-medium">
+  1583→                      الفصل المستهدف
+  1584→                    </Label>
+  1585→                    <Input
+  1586→                      id="ce-classroom"
+  1587→                      value={createForm.classroomName}
+  1588→                      onChange={(e) => updateCreateField({ classroomName: e.target.value })}
+  1589→                      placeholder="مثال: الصف السادس - أ"
+  1590→                    />
+  1591→                  </div>
+  1592→                </div>
+  1593→
+  1594→                {/* Description */}
+  1595→                <div className="space-y-1.5">
+  1596→                  <Label htmlFor="ce-desc" className="text-sm font-medium">
+  1597→                    الوصف
+  1598→                  </Label>
+  1599→                  <Textarea
+  1600→                    id="ce-desc"
+  1601→                    value={createForm.description}
+  1602→                    onChange={(e) => updateCreateField({ description: e.target.value })}
+  1603→                    placeholder="وصف مختصر للامتحان (اختياري)"
+  1604→                    rows={2}
+  1605→                  />
+  1606→                </div>
+  1607→
+  1608→                {/* Start + End dates */}
+  1609→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1610→                  <div className="space-y-1.5">
+  1611→                    <Label htmlFor="ce-start" className="text-sm font-medium">
+  1612→                      وقت الفتح <span className="text-rose-500">*</span>
+  1613→                    </Label>
+  1614→                    <Input
+  1615→                      id="ce-start"
+  1616→                      type="datetime-local"
+  1617→                      value={createForm.startDate}
+  1618→                      onChange={(e) => updateCreateField({ startDate: e.target.value })}
+  1619→                      className={createErrors.startDate ? 'border-rose-400' : ''}
+  1620→                    />
+  1621→                    {createErrors.startDate && (
+  1622→                      <p className="text-xs text-rose-500">{createErrors.startDate}</p>
+  1623→                    )}
+  1624→                  </div>
+  1625→                  <div className="space-y-1.5">
+  1626→                    <Label htmlFor="ce-end" className="text-sm font-medium">
+  1627→                      وقت الإغلاق <span className="text-rose-500">*</span>
+  1628→                    </Label>
+  1629→                    <Input
+  1630→                      id="ce-end"
+  1631→                      type="datetime-local"
+  1632→                      value={createForm.endDate}
+  1633→                      onChange={(e) => updateCreateField({ endDate: e.target.value })}
+  1634→                      className={createErrors.endDate ? 'border-rose-400' : ''}
+  1635→                    />
+  1636→                    {createErrors.endDate && (
+  1637→                      <p className="text-xs text-rose-500">{createErrors.endDate}</p>
+  1638→                    )}
+  1639→                  </div>
+  1640→                </div>
+  1641→
+  1642→                {/* Duration + Passing score */}
+  1643→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1644→                  <div className="space-y-1.5">
+  1645→                    <Label htmlFor="ce-duration" className="text-sm font-medium">
+  1646→                      المدة بالدقائق <span className="text-rose-500">*</span>
+  1647→                    </Label>
+  1648→                    <Input
+  1649→                      id="ce-duration"
+  1650→                      type="number"
+  1651→                      min={1}
+  1652→                      value={createForm.durationMinutes}
+  1653→                      onChange={(e) =>
+  1654→                        updateCreateField({ durationMinutes: parseInt(e.target.value) || 0 })
+  1655→                      }
+  1656→                      className={createErrors.durationMinutes ? 'border-rose-400' : ''}
+  1657→                    />
+  1658→                    {createErrors.durationMinutes && (
+  1659→                      <p className="text-xs text-rose-500">{createErrors.durationMinutes}</p>
+  1660→                    )}
+  1661→                  </div>
+  1662→                  <div className="space-y-1.5">
+  1663→                    <Label htmlFor="ce-passing" className="text-sm font-medium">
+  1664→                      درجة النجاح (%)
+  1665→                    </Label>
+  1666→                    <Input
+  1667→                      id="ce-passing"
+  1668→                      type="number"
+  1669→                      min={0}
+  1670→                      max={100}
+  1671→                      value={createForm.passingScore}
+  1672→                      onChange={(e) =>
+  1673→                        updateCreateField({ passingScore: parseInt(e.target.value) || 0 })
+  1674→                      }
+  1675→                    />
+  1676→                  </div>
+  1677→                </div>
+  1678→
+  1679→                {/* Password (OFFICIAL only) */}
+  1680→                {createForm.category === 'OFFICIAL' && (
+  1681→                  <div className="space-y-1.5">
+  1682→                    <Label htmlFor="ce-password" className="text-sm font-medium">
+  1683→                      كلمة سر الدخول (اختياري)
+  1684→                    </Label>
+  1685→                    <Input
+  1686→                      id="ce-password"
+  1687→                      type="text"
+  1688→                      value={createForm.password}
+  1689→                      onChange={(e) => updateCreateField({ password: e.target.value })}
+  1690→                      placeholder="اتركها فارغة لعدم الحماية (4 أحرف على الأقل)"
+  1691→                    />
+  1692→                  </div>
+  1693→                )}
+  1694→
+  1695→                {/* Training-only settings */}
+  1696→                {createForm.category === 'TRAINING' && (
+  1697→                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-900/10 p-3">
+  1698→                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+  1699→                      <Dumbbell className="w-3.5 h-3.5" />
+  1700→                      إعدادات الامتحان التدريبي
+  1701→                    </div>
+  1702→
+  1703→                    {/* Exam Period */}
+  1704→                    <div className="space-y-1.5">
+  1705→                      <Label htmlFor="ce-period" className="text-sm font-medium">
+  1706→                        الفئة الزمنية
+  1707→                      </Label>
+  1708→                      <Select
+  1709→                        value={createForm.examPeriod}
+  1710→                        onValueChange={(v) =>
+  1711→                          updateCreateField({ examPeriod: v as ExamPeriod })
+  1712→                        }
+  1713→                      >
+  1714→                        <SelectTrigger id="ce-period" className="w-full h-10">
+  1715→                          <SelectValue placeholder="اختر الفئة الزمنية" />
+  1716→                        </SelectTrigger>
+  1717→                        <SelectContent>
+  1718→                          <SelectItem value="WEEKLY">أسبوعي</SelectItem>
+  1719→                          <SelectItem value="MIDMONTH">نصف شهري</SelectItem>
+  1720→                          <SelectItem value="MONTHLY">شهري</SelectItem>
+  1721→                          <SelectItem value="CUMULATIVE">تراكمي</SelectItem>
+  1722→                          <SelectItem value="NONE">بدون فئة</SelectItem>
+  1723→                        </SelectContent>
+  1724→                      </Select>
+  1725→                    </div>
+  1726→
+  1727→                    {/* Training toggles */}
+  1728→                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1729→                      <ToggleRow
+  1730→                        label="إعادة المحاولة بدون حد"
+  1731→                        checked={createForm.allowRetakes}
+  1732→                        onCheckedChange={(v) => updateCreateField({ allowRetakes: v })}
+  1733→                      />
+  1734→                      <ToggleRow
+  1735→                        label="إظهار الإجابات الصحيحة بعد التسليم"
+  1736→                        checked={createForm.showAnswersAfter}
+  1737→                        onCheckedChange={(v) => updateCreateField({ showAnswersAfter: v })}
+  1738→                      />
+  1739→                    </div>
+  1740→
+  1741→                    <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed flex items-start gap-1">
+  1742→                      <EyeOff className="w-3 h-3 mt-0.5 shrink-0" />
+  1743→                      الامتحان التدريبي مفتوح بدون كلمة سر للطلاب.
+  1744→                    </p>
+  1745→                  </div>
+  1746→                )}
+  1747→
+  1748→                {/* Settings toggles */}
+  1749→                <div className="space-y-2">
+  1750→                  <Label className="text-sm font-medium">الإعدادات</Label>
+  1751→                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1752→                    <ToggleRow
+  1753→                      label="خلط الأسئلة"
+  1754→                      checked={createForm.shuffleQuestions}
+  1755→                      onCheckedChange={(v) => updateCreateField({ shuffleQuestions: v })}
+  1756→                    />
+  1757→                    <ToggleRow
+  1758→                      label="خلط الخيارات"
+  1759→                      checked={createForm.shuffleOptions}
+  1760→                      onCheckedChange={(v) => updateCreateField({ shuffleOptions: v })}
+  1761→                    />
+  1762→                    <ToggleRow
+  1763→                      label="السماح بالمراجعة"
+  1764→                      checked={createForm.allowReview}
+  1765→                      onCheckedChange={(v) => updateCreateField({ allowReview: v })}
+  1766→                    />
+  1767→                    <ToggleRow
+  1768→                      label="إظهار النتيجة فوراً"
+  1769→                      checked={createForm.showResultImmediately}
+  1770→                      onCheckedChange={(v) => updateCreateField({ showResultImmediately: v })}
+  1771→                    />
+  1772→                    <ToggleRow
+  1773→                      label="ظاهر لأولياء الأمور"
+  1774→                      checked={createForm.parentVisible}
+  1775→                      onCheckedChange={(v) => updateCreateField({ parentVisible: v })}
+  1776→                    />
+  1777→                    <ToggleRow
+  1778→                      label="مكافحة الغش"
+  1779→                      checked={createForm.antiCheatEnabled}
+  1780→                      onCheckedChange={(v) => updateCreateField({ antiCheatEnabled: v })}
+  1781→                    />
+  1782→                  </div>
+  1783→                </div>
+  1784→              </section>
+  1785→
+  1786→              {/* Divider */}
+  1787→              <div className="border-t border-gray-200 dark:border-gray-700" />
+  1788→
+  1789→              {/* Section 2: Questions */}
+  1790→              <section className="space-y-4">
+  1791→                <div className="flex items-center justify-between gap-2 flex-wrap">
+  1792→                  <div className="flex items-center gap-2">
+  1793→                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-rose-500 flex items-center justify-center shrink-0">
+  1794→                      <ListChecks className="w-4 h-4 text-white" />
+  1795→                    </div>
+  1796→                    <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+  1797→                      الأسئلة ({createForm.questions.length})
+  1798→                    </h3>
+  1799→                  </div>
+  1800→                  <Button
+  1801→                    type="button"
+  1802→                    onClick={addQuestion}
+  1803→                    size="sm"
+  1804→                    variant="outline"
+  1805→                    className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+  1806→                  >
+  1807→                    <Plus className="w-4 h-4" />
+  1808→                    إضافة سؤال
+  1809→                  </Button>
+  1810→                </div>
+  1811→
+  1812→                {createForm.questions.length === 0 ? (
+  1813→                  <div className="text-center py-8 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700">
+  1814→                    <HelpCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+  1815→                    <p className="text-sm text-gray-500 dark:text-gray-400">
+  1816→                      يمكنك إضافة الأسئلة لاحقاً من تعديل الامتحان
+  1817→                    </p>
+  1818→                  </div>
+  1819→                ) : (
+  1820→                  <div className="space-y-3">
+  1821→                    {createForm.questions.map((q, qIdx) => (
+  1822→                      <DraftQuestionCard
+  1823→                        key={q.id}
+  1824→                        question={q}
+  1825→                        index={qIdx}
+  1826→                        error={createErrors[`q-${q.id}`]}
+  1827→                        onChange={(patch) => updateQuestion(q.id, patch)}
+  1828→                        onRemove={() => removeQuestion(q.id)}
+  1829→                        onAddOption={() => addOption(q.id)}
+  1830→                        onUpdateOption={(oi, val) => updateOption(q.id, oi, val)}
+  1831→                        onRemoveOption={(oi) => removeOption(q.id, oi)}
+  1832→                      />
+  1833→                    ))}
+  1834→                  </div>
+  1835→                )}
+  1836→              </section>
+  1837→            </div>
+  1838→          </div>
+  1839→
+  1840→          {/* Footer */}
+  1841→          <div className="p-4 border-t border-gray-100 dark:border-gray-800 shrink-0 flex flex-wrap gap-2">
+  1842→            <Button
+  1843→              type="button"
+  1844→              onClick={() => submitCreate(true)}
+  1845→              disabled={createSubmitting}
+  1846→              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-lg"
+  1847→            >
+  1848→              {createSubmitting ? (
+  1849→                <Loader2 className="w-4 h-4 animate-spin" />
+  1850→              ) : (
+  1851→                <Send className="w-4 h-4" />
+  1852→              )}
+  1853→              نشر الامتحان
+  1854→            </Button>
+  1855→            <Button
+  1856→              type="button"
+  1857→              onClick={() => submitCreate(false)}
+  1858→              disabled={createSubmitting}
+  1859→              variant="outline"
+  1860→              className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+  1861→            >
+  1862→              {createSubmitting ? (
+  1863→                <Loader2 className="w-4 h-4 animate-spin" />
+  1864→              ) : (
+  1865→                <Save className="w-4 h-4" />
+  1866→              )}
+  1867→              حفظ المسودة
+  1868→            </Button>
+  1869→            <Button
+  1870→              type="button"
+  1871→              onClick={() => {
+  1872→                if (!createSubmitting) {
+  1873→                  setShowCreateDialog(false);
+  1874→                  resetCreateForm();
+  1875→                }
+  1876→              }}
+  1877→              variant="ghost"
+  1878→              disabled={createSubmitting}
+  1879→            >
+  1880→              إلغاء
+  1881→            </Button>
+  1882→          </div>
+  1883→        </DialogContent>
+  1884→      </Dialog>
+  1885→
+  1886→      {/* Custom scrollbar styles (scoped via Tailwind class + global tag) */}
+  1887→      <style jsx global>{`
+  1888→        .teacher-exams-scroll {
+  1889→          scrollbar-width: thin;
+  1890→          scrollbar-color: rgb(167 139 250) transparent;
+  1891→        }
+  1892→        .teacher-exams-scroll::-webkit-scrollbar {
+  1893→          width: 8px;
+  1894→          height: 8px;
+  1895→        }
+  1896→        .teacher-exams-scroll::-webkit-scrollbar-track {
+  1897→          background: transparent;
+  1898→        }
+  1899→        .teacher-exams-scroll::-webkit-scrollbar-thumb {
+  1900→          background-color: rgb(167 139 250);
+  1901→          border-radius: 9999px;
+  1902→        }
+  1903→        .teacher-exams-scroll::-webkit-scrollbar-thumb:hover {
+  1904→          background-color: rgb(139 92 246);
+  1905→        }
+  1906→      `}</style>
+  1907→    </div>
+  1908→  );
+  1909→}
+  1910→
+  1911→// ===== Sub-components =====
+  1912→
+  1913→function SettingChip({ label, enabled }: { label: string; enabled: boolean }) {
+  1914→  return (
+  1915→    <div
+  1916→      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${
+  1917→        enabled
+  1918→          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+  1919→          : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+  1920→      }`}
+  1921→    >
+  1922→      {enabled ? (
+  1923→        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+  1924→      ) : (
+  1925→        <XCircle className="w-3.5 h-3.5 shrink-0" />
+  1926→      )}
+  1927→      <span className="truncate">{label}</span>
+  1928→    </div>
+  1929→  );
+  1930→}
+  1931→
+  1932→function StatBox({
+  1933→  label,
+  1934→  value,
+  1935→  color,
+  1936→}: {
+  1937→  label: string;
+  1938→  value: string | number;
+  1939→  color: 'violet' | 'emerald' | 'amber' | 'rose' | 'fuchsia';
+  1940→}) {
+  1941→  const colorMap: Record<string, string> = {
+  1942→    violet: 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+  1943→    emerald: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+  1944→    amber: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+  1945→    rose: 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+  1946→    fuchsia: 'bg-fuchsia-50 dark:bg-fuchsia-900/20 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800',
+  1947→  };
+  1948→  return (
+  1949→    <div className={`rounded-lg border p-3 ${colorMap[color]}`}>
+  1950→      <div className="text-lg font-bold mb-0.5">{value}</div>
+  1951→      <div className="text-[10px] opacity-90">{label}</div>
+  1952→    </div>
+  1953→  );
+  1954→}
+  1955→
+  1956→function QuestionCard({ question, index }: { question: ExamQuestion; index: number }) {
+  1957→  return (
+  1958→    <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+  1959→      {/* Question header */}
+  1960→      <div className="flex items-start justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 flex-wrap">
+  1961→        <div className="flex items-center gap-2 flex-1 min-w-0">
+  1962→          <span className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+  1963→            {index + 1}
+  1964→          </span>
+  1965→          <Badge className={`text-[10px] border ${questionTypeBadgeClass(question.type)}`}>
+  1966→            {questionTypeLabel(question.type)}
+  1967→          </Badge>
+  1968→          <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+  1969→            {question.points} نقطة
+  1970→          </span>
+  1971→        </div>
+  1972→      </div>
+  1973→
+  1974→      {/* Question text */}
+  1975→      <div className="p-3">
+  1976→        <p className="text-sm text-[#2A374E] dark:text-white leading-relaxed mb-3 whitespace-pre-wrap">
+  1977→          {question.text}
+  1978→        </p>
+  1979→
+  1980→        {/* Options (MCQ / TRUE_FALSE) */}
+  1981→        {Array.isArray(question.options) && question.options.length > 0 && (
+  1982→          <div className="space-y-1.5 mb-3">
+  1983→            {question.options.map((opt, i) => {
+  1984→              const isCorrect = opt === question.correctAnswer;
+  1985→              return (
+  1986→                <div
+  1987→                  key={i}
+  1988→                  className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-md border ${
+  1989→                    isCorrect
+  1990→                      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+  1991→                      : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+  1992→                  }`}
+  1993→                >
+  1994→                  <span className="w-5 h-5 rounded-full bg-white dark:bg-gray-900 border border-current text-[10px] font-bold flex items-center justify-center shrink-0">
+  1995→                    {String.fromCharCode(1571 + i)}
+  1996→                  </span>
+  1997→                  <span className="flex-1 break-words">{opt}</span>
+  1998→                  {isCorrect && (
+  1999→                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+  2000→                  )}
+
+[showing lines 1-2000 of 2281; use offset=2001 with limit to continue reading]

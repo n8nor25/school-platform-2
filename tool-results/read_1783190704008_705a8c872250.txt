@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * ============================================================
+     5→ *  واجهة الطالب للامتحانات الإلكترونية
+     6→ *  Student Exams Page
+     7→ * ============================================================
+     8→ *  تدفّق الشاشات:
+     9→ *    login → list → intro → runner → result → appeals
+    10→ *
+    11→ *  المكوّنات:
+    12→ *    ① StudentLogin      — إدخال معرّف الطالب + اسمه
+    13→ *    ② ExamsList          — قائمة الامتحانات المتاحة
+    14→ *    ③ ExamIntro          — تعليمات + كلمة سر + بدء
+    15→ *    ④ ExamRunner         — المؤقّت + الأسئلة + الحفظ + الرفع + المراقبة
+    16→ *    ⑤ ExamResult         — النتيجة + مراجعة الإجابات + التظلّم
+    17→ *
+    18→ *  التكامل:
+    19→ *    • GET  /api/exams/available
+    20→ *    • GET  /api/exams/[id]
+    21→ *    • POST /api/exams/[id]/start
+    22→ *    • GET  /api/exams/[id]/answers
+    23→ *    • POST /api/exams/[id]/answers
+    24→ *    • POST /api/exams/[id]/answers/[qid]/upload
+    25→ *    • POST /api/exams/[id]/submit
+    26→ *    • POST /api/exams/[id]/proctor
+    27→ *    • GET  /api/exams/[id]/result
+    28→ *    • POST /api/exams/[id]/appeals
+    29→ *    • GET  /api/exams/[id]/appeals
+    30→ *    • useExamProctor (WebSocket للمراقبة الحيّة)
+    31→ * ============================================================
+    32→ */
+    33→
+    34→import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+    35→import {
+    36→  ArrowRight, ArrowLeft, Clock, FileText, AlertTriangle, CheckCircle2,
+    37→  XCircle, Eye, EyeOff, Upload, Send, Loader2, RefreshCw, ChevronRight,
+    38→  Award, Shield, Lock, LogOut, Info, Camera, FileCheck, AlertCircle,
+    39→  ListChecks, RotateCcw, MessageSquareWarning, Timer, Hash, User,
+    40→  BookOpen, Calendar, GraduationCap, Bookmark, BookmarkCheck,
+    41→  Wifi, WifiOff, Search, Filter, History, TrendingUp, Trophy,
+    42→  Target, Percent, Printer, ChevronLeft, Keyboard,
+    43→} from 'lucide-react';
+    44→import { Button } from '@/components/ui/button';
+    45→import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+    46→import { Input } from '@/components/ui/input';
+    47→import { Label } from '@/components/ui/label';
+    48→import { Textarea } from '@/components/ui/textarea';
+    49→import { Badge } from '@/components/ui/badge';
+    50→import { Progress } from '@/components/ui/progress';
+    51→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+    52→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+    53→import { Separator } from '@/components/ui/separator';
+    54→import { ScrollArea } from '@/components/ui/scroll-area';
+    55→import {
+    56→  Dialog, DialogContent, DialogDescription, DialogFooter,
+    57→  DialogHeader, DialogTitle, DialogTrigger,
+    58→} from '@/components/ui/dialog';
+    59→import { useExamProctor } from '@/hooks/use-exam-proctor';
+    60→import {
+    61→  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+    62→  ResponsiveContainer, Cell, LineChart, Line, Legend as RLegend,
+    63→} from 'recharts';
+    64→
+    65→// ===== Types =====
+    66→
+    67→interface StudentExamsPageProps {
+    68→  onBack: () => void;
+    69→  schoolId?: string;
+    70→}
+    71→
+    72→type Screen = 'login' | 'list' | 'intro' | 'runner' | 'result';
+    73→
+    74→interface StudentInfo {
+    75→  studentId: string;
+    76→  studentName: string;
+    77→  schoolId: string;
+    78→}
+    79→
+    80→interface AvailableExam {
+    81→  id: string;
+    82→  title: string;
+    83→  description: string;
+    84→  subject: string;
+    85→  teacherName: string;
+    86→  classroomName: string;
+    87→  startDate: string;
+    88→  endDate: string;
+    89→  durationMinutes: number;
+    90→  maxAttempts: number;
+    91→  attemptsUsed: number;
+    92→  attemptsLeft: number;
+    93→  hasActiveSubmission: boolean;
+    94→  activeSubmissionId: string | null;
+    95→  antiCheatEnabled: boolean;
+    96→  hasPassword: boolean;
+    97→  questionsCount: number;
+    98→  timeStatus: string;
+    99→  allowTextAnswers: boolean;
+   100→  allowImageAnswers: boolean;
+   101→  allowPdfAnswers: boolean;
+   102→}
+   103→
+   104→interface Question {
+   105→  id: string;
+   106→  type: 'MCQ' | 'TRUE_FALSE' | 'SHORT' | 'ESSAY' | 'IMAGE_ANSWER' | 'FILE_PDF';
+   107→  text: string;
+   108→  options: string[] | null;
+   109→  points: number;
+   110→  order: number;
+   111→  hasAttachment?: boolean;
+   112→  attachmentUrl?: string | null;
+   113→}
+   114→
+   115→interface SubmissionInfo {
+   116→  id: string;
+   117→  attemptNumber: number;
+   118→  startedAt: string;
+   119→  status: string;
+   120→  remainingSeconds: number;
+   121→}
+   122→
+   123→interface ExamStartResponse {
+   124→  submission: SubmissionInfo;
+   125→  exam: {
+   126→    id: string;
+   127→    title: string;
+   128→    durationMinutes: number;
+   129→    totalPoints: number;
+   130→    allowTextAnswers: boolean;
+   131→    allowImageAnswers: boolean;
+   132→    allowPdfAnswers: boolean;
+   133→    antiCheatEnabled: boolean;
+   134→    showResultImmediately: boolean;
+   135→  };
+   136→  questions: Question[];
+   137→  resumed?: boolean;
+   138→}
+   139→
+   140→interface SavedAnswer {
+   141→  id: string;
+   142→  questionId: string;
+   143→  textAnswer: string | null;
+   144→  imageAnswerUrl: string | null;
+   145→  fileAnswerUrl: string | null;
+   146→  textModeration: string | null;
+   147→  imageModeration: string | null;
+   148→  score: number | null;
+   149→  isCorrect: boolean | null;
+   150→  teacherNote: string | null;
+   151→}
+   152→
+   153→interface ModerationInfo {
+   154→  decision: string;
+   155→  reasons: string[];
+   156→  categories: string[];
+   157→  confidence: number;
+   158→}
+   159→
+   160→// ===== إحصائيات الطالب =====
+   161→interface StudentStats {
+   162→  isEmpty: boolean;
+   163→  kpis: {
+   164→    totalExams: number;
+   165→    avgScore: number;
+   166→    passRate: number;
+   167→    bestScore: number;
+   168→    totalAppeals: number;
+   169→  };
+   170→  timeline: Array<{
+   171→    examTitle: string;
+   172→    subject: string;
+   173→    score: number;
+   174→    passed: boolean | null;
+   175→    date: string;
+   176→  }>;
+   177→  subjectBreakdown: Array<{
+   178→    subject: string;
+   179→    avgScore: number;
+   180→    examCount: number;
+   181→    passRate: number;
+   182→  }>;
+   183→  recentResults: Array<{
+   184→    submissionId: string;
+   185→    examId: string;
+   186→    examTitle: string;
+   187→    subject: string;
+   188→    percentage: number;
+   189→    totalScore: number | null;
+   190→    maxScore: number | null;
+   191→    passed: boolean | null;
+   192→    status: string;
+   193→    submittedAt: string;
+   194→  }>;
+   195→  isTestMode?: boolean;
+   196→}
+   197→
+   198→// ===== Helpers =====
+   199→
+   200→function buildUrl(base: string, student: StudentInfo | null, extra?: Record<string, string>): string {
+   201→  const params = new URLSearchParams();
+   202→  if (student) {
+   203→    params.set('schoolId', student.schoolId);
+   204→    params.set('studentId', student.studentId);
+   205→  }
+   206→  if (extra) {
+   207→    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+   208→  }
+   209→  const qs = params.toString();
+   210→  return qs ? `${base}?${qs}` : base;
+   211→}
+   212→
+   213→function formatTime(seconds: number): string {
+   214→  if (seconds < 0) seconds = 0;
+   215→  const h = Math.floor(seconds / 3600);
+   216→  const m = Math.floor((seconds % 3600) / 60);
+   217→  const s = seconds % 60;
+   218→  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+   219→  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+   220→}
+   221→
+   222→function formatDate(iso: string): string {
+   223→  try {
+   224→    const d = new Date(iso);
+   225→    return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+   226→  } catch {
+   227→    return iso;
+   228→  }
+   229→}
+   230→
+   231→const QUESTION_TYPE_LABELS: Record<string, string> = {
+   232→  MCQ: 'اختيار من متعدد',
+   233→  TRUE_FALSE: 'صح / خطأ',
+   234→  SHORT: 'إجابة قصيرة',
+   235→  ESSAY: 'سؤال مقالي',
+   236→  IMAGE_ANSWER: 'إجابة بصورة',
+   237→  FILE_PDF: 'إجابة بملف PDF',
+   238→};
+   239→
+   240→// ===== Main Component =====
+   241→
+   242→export default function StudentExamsPage({ onBack, schoolId }: StudentExamsPageProps) {
+   243→  const [screen, setScreen] = useState<Screen>('login');
+   244→  const [student, setStudent] = useState<StudentInfo | null>(null);
+   245→  const [selectedExam, setSelectedExam] = useState<AvailableExam | null>(null);
+   246→  const [submissionId, setSubmissionId] = useState<string | null>(null);
+   247→  const [startData, setStartData] = useState<ExamStartResponse | null>(null);
+   248→  const [refreshKey, setRefreshKey] = useState(0);
+   249→
+   250→  // عند تسجيل الدخول
+   251→  const handleLogin = (info: StudentInfo) => {
+   252→    setStudent(info);
+   253→    setScreen('list');
+   254→    setRefreshKey(k => k + 1);
+   255→  };
+   256→
+   257→  // اختيار امتحان من القائمة
+   258→  const handleSelectExam = (exam: AvailableExam) => {
+   259→    setSelectedExam(exam);
+   260→    setScreen('intro');
+   261→  };
+   262→
+   263→  // بدء الامتحان بنجاح
+   264→  const handleStartSuccess = (data: ExamStartResponse) => {
+   265→    setStartData(data);
+   266→    setSubmissionId(data.submission.id);
+   267→    setScreen('runner');
+   268→  };
+   269→
+   270→  // تسليم الامتحان
+   271→  const handleSubmit = () => {
+   272→    setScreen('result');
+   273→  };
+   274→
+   275→  // العودة للقائمة
+   276→  const handleBackToList = () => {
+   277→    setSelectedExam(null);
+   278→    setStartData(null);
+   279→    setSubmissionId(null);
+   280→    setScreen('list');
+   281→    setRefreshKey(k => k + 1);
+   282→  };
+   283→
+   284→  // العودة للقائمة من شاشة النتيجة (لرؤية محاولات أخرى)
+   285→  const handleBackFromResult = () => {
+   286→    setSelectedExam(null);
+   287→    setStartData(null);
+   288→    setSubmissionId(null);
+   289→    setScreen('list');
+   290→    setRefreshKey(k => k + 1);
+   291→  };
+   292→
+   293→  return (
+   294→    <div className="min-h-screen flex flex-col" dir="rtl" style={{ backgroundColor: '#f5f5f5' }}>
+   295→      {/* Header */}
+   296→      <header className="sticky top-0 z-40 bg-white shadow-sm border-b">
+   297→        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+   298→          <div className="flex items-center gap-3 min-w-0">
+   299→            <Button
+   300→              variant="ghost"
+   301→              size="sm"
+   302→              onClick={() => {
+   303→                if (screen === 'runner') return; // لا يمكن الخروج أثناء الامتحان
+   304→                if (screen === 'login') onBack();
+   305→                else if (screen === 'list') onBack();
+   306→                else handleBackToList();
+   307→              }}
+   308→              disabled={screen === 'runner'}
+   309→              className="text-gray-600 hover:text-gray-900"
+   310→            >
+   311→              <ArrowRight className="w-4 h-4 ml-1" />
+   312→              {screen === 'login' || screen === 'list' ? 'الموقع' : 'القائمة'}
+   313→            </Button>
+   314→            <Separator orientation="vertical" className="h-6" />
+   315→            <div className="flex items-center gap-2 min-w-0">
+   316→              <div className="w-9 h-9 rounded-lg bg-[#610000] flex items-center justify-center flex-shrink-0">
+   317→                <GraduationCap className="w-5 h-5 text-white" />
+   318→              </div>
+   319→              <div className="min-w-0">
+   320→                <h1 className="text-sm font-bold text-gray-900 truncate">الامتحانات الإلكترونية</h1>
+   321→                {student && screen !== 'login' && (
+   322→                  <p className="text-xs text-gray-500 truncate">
+   323→                    {student.studentName} • {student.studentId}
+   324→                  </p>
+   325→                )}
+   326→              </div>
+   327→            </div>
+   328→          </div>
+   329→          {student && screen !== 'login' && screen !== 'runner' && (
+   330→            <Button
+   331→              variant="ghost"
+   332→              size="sm"
+   333→              onClick={() => {
+   334→                setStudent(null);
+   335→                setScreen('login');
+   336→              }}
+   337→              className="text-gray-500"
+   338→            >
+   339→              <LogOut className="w-4 h-4 ml-1" />
+   340→              تبديل الطالب
+   341→            </Button>
+   342→          )}
+   343→        </div>
+   344→      </header>
+   345→
+   346→      {/* Content */}
+   347→      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6">
+   348→        {screen === 'login' && (
+   349→          <StudentLogin onLogin={handleLogin} schoolId={schoolId} />
+   350→        )}
+   351→        {screen === 'list' && student && (
+   352→          <ExamsList
+   353→            key={refreshKey}
+   354→            student={student}
+   355→            onSelectExam={handleSelectExam}
+   356→          />
+   357→        )}
+   358→        {screen === 'intro' && student && selectedExam && (
+   359→          <ExamIntro
+   360→            student={student}
+   361→            exam={selectedExam}
+   362→            onBack={handleBackToList}
+   363→            onStartSuccess={handleStartSuccess}
+   364→          />
+   365→        )}
+   366→        {screen === 'runner' && student && selectedExam && startData && submissionId && (
+   367→          <ExamRunner
+   368→            student={student}
+   369→            exam={selectedExam}
+   370→            startData={startData}
+   371→            submissionId={submissionId}
+   372→            onSubmit={handleSubmit}
+   373→          />
+   374→        )}
+   375→        {screen === 'result' && student && selectedExam && submissionId && (
+   376→          <ExamResult
+   377→            student={student}
+   378→            exam={selectedExam}
+   379→            submissionId={submissionId}
+   380→            onBack={handleBackFromResult}
+   381→          />
+   382→        )}
+   383→      </main>
+   384→
+   385→      {/* Footer */}
+   386→      <footer className="mt-auto bg-white border-t py-3 px-4 text-center">
+   387→        <p className="text-xs text-gray-500">
+   388→          نظام الامتحانات الإلكترونية الآمن • جميع الإجابات تُراقب وتُراجع آلياً
+   389→        </p>
+   390→      </footer>
+   391→    </div>
+   392→  );
+   393→}
+   394→
+   395→// ============================================================
+   396→//  ① StudentLogin — شاشة الدخول
+   397→// ============================================================
+   398→
+   399→function StudentLogin({
+   400→  onLogin,
+   401→  schoolId,
+   402→}: {
+   403→  onLogin: (info: StudentInfo) => void;
+   404→  schoolId?: string;
+   405→}) {
+   406→  const [studentId, setStudentId] = useState('');
+   407→  const [studentName, setStudentName] = useState('');
+   408→  const [schoolIdInput, setSchoolIdInput] = useState(schoolId || '');
+   409→  const [loading, setLoading] = useState(false);
+   410→  const [error, setError] = useState<string | null>(null);
+   411→
+   412→  // مزامنة schoolIdInput مع الـ prop عندما يتوفر (selectedSchoolId يُحمّل من store
+   413→  // بعد أول render). نُلّف setState بـ setTimeout لتجنّب تحذير set-state-in-effect.
+   414→  useEffect(() => {
+   415→    if (schoolId && schoolId !== schoolIdInput) {
+   416→      const id = schoolId;
+   417→      const t = setTimeout(() => setSchoolIdInput(id), 0);
+   418→      return () => clearTimeout(t);
+   419→    }
+   420→  }, [schoolId, schoolIdInput]);
+   421→
+   422→  const handleSubmit = async (e: React.FormEvent) => {
+   423→    e.preventDefault();
+   424→    setError(null);
+   425→    if (!studentId.trim()) {
+   426→      setError('معرّف الطالب مطلوب');
+   427→      return;
+   428→    }
+   429→    if (!studentName.trim()) {
+   430→      setError('اسم الطالب مطلوب');
+   431→      return;
+   432→    }
+   433→    if (!schoolIdInput.trim()) {
+   434→      setError('معرّف المدرسة مطلوب');
+   435→      return;
+   436→    }
+   437→    setLoading(true);
+   438→    // تحقق سريع من توفر امتحانات (لا يلزم — فقط للتأكد من المدرسة)
+   439→    try {
+   440→      const res = await fetch(
+   441→        `/api/exams/available?schoolId=${encodeURIComponent(schoolIdInput)}&studentId=${encodeURIComponent(studentId)}`,
+   442→        { headers: { 'x-student-id': studentId } }
+   443→      );
+   444→      const data = await res.json();
+   445→      if (!res.ok) {
+   446→        setError(data.error || 'فشل التحقق من البيانات');
+   447→        setLoading(false);
+   448→        return;
+   449→      }
+   450→      onLogin({
+   451→        studentId: studentId.trim(),
+   452→        studentName: studentName.trim(),
+   453→        schoolId: schoolIdInput.trim(),
+   454→      });
+   455→    } catch (e) {
+   456→      // نسمح بالدخول حتى لو فشل الفحص (قد لا توجد امتحانات متاحة)
+   457→      onLogin({
+   458→        studentId: studentId.trim(),
+   459→        studentName: studentName.trim(),
+   460→        schoolId: schoolIdInput.trim(),
+   461→      });
+   462→    } finally {
+   463→      setLoading(false);
+   464→    }
+   465→  };
+   466→
+   467→  return (
+   468→    <div className="max-w-md mx-auto pt-8">
+   469→      <Card className="shadow-lg border-0">
+   470→        <CardHeader className="text-center pb-4">
+   471→          <div className="w-16 h-16 mx-auto rounded-2xl bg-[#610000]/10 flex items-center justify-center mb-3">
+   472→            <User className="w-8 h-8 text-[#610000]" />
+   473→          </div>
+   474→          <CardTitle className="text-xl text-gray-900">دخول الطالب</CardTitle>
+   475→          <CardDescription className="text-gray-500">
+   476→            أدخل بياناتك للوصول إلى الامتحانات المتاحة
+   477→          </CardDescription>
+   478→        </CardHeader>
+   479→        <CardContent>
+   480→          <form onSubmit={handleSubmit} className="space-y-4">
+   481→            <div className="space-y-2">
+   482→              <Label htmlFor="studentId" className="text-sm font-medium text-gray-700">
+   483→                معرّف الطالب <span className="text-red-500">*</span>
+   484→              </Label>
+   485→              <Input
+   486→                id="studentId"
+   487→                value={studentId}
+   488→                onChange={(e) => setStudentId(e.target.value)}
+   489→                placeholder="مثال: stu-2024-001"
+   490→                className="text-right"
+   491→                autoComplete="off"
+   492→              />
+   493→            </div>
+   494→            <div className="space-y-2">
+   495→              <Label htmlFor="studentName" className="text-sm font-medium text-gray-700">
+   496→                الاسم الكامل <span className="text-red-500">*</span>
+   497→              </Label>
+   498→              <Input
+   499→                id="studentName"
+   500→                value={studentName}
+   501→                onChange={(e) => setStudentName(e.target.value)}
+   502→                placeholder="الاسم كما هو مسجّل في المدرسة"
+   503→                className="text-right"
+   504→                autoComplete="off"
+   505→              />
+   506→            </div>
+   507→            <div className="space-y-2">
+   508→              <Label htmlFor="schoolId" className="text-sm font-medium text-gray-700">
+   509→                معرّف المدرسة <span className="text-red-500">*</span>
+   510→              </Label>
+   511→              <Input
+   512→                id="schoolId"
+   513→                value={schoolIdInput}
+   514→                onChange={(e) => setSchoolIdInput(e.target.value)}
+   515→                placeholder="معرّف المدرسة"
+   516→                className="text-right font-mono text-sm"
+   517→                autoComplete="off"
+   518→                disabled={!!schoolId}
+   519→              />
+   520→            </div>
+   521→
+   522→            {error && (
+   523→              <Alert variant="destructive">
+   524→                <AlertCircle className="w-4 h-4" />
+   525→                <AlertDescription>{error}</AlertDescription>
+   526→              </Alert>
+   527→            )}
+   528→
+   529→            <Button
+   530→              type="submit"
+   531→              className="w-full bg-[#610000] hover:bg-[#4a0000] text-white"
+   532→              disabled={loading}
+   533→            >
+   534→              {loading ? (
+   535→                <><Loader2 className="w-4 h-4 ml-2 animate-spin" /> جاري التحقق...</>
+   536→              ) : (
+   537→                <>دخول <ArrowLeft className="w-4 h-4 mr-1" /></>
+   538→              )}
+   539→            </Button>
+   540→          </form>
+   541→
+   542→          <div className="mt-6 p-3 bg-blue-50 rounded-lg border border-blue-100">
+   543→            <div className="flex gap-2">
+   544→              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+   545→              <div className="text-xs text-blue-800 space-y-1">
+   546→                <p className="font-medium">ملاحظات مهمة:</p>
+   547→                <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+   548→                  <li>ستُراقب إجاباتك أثناء الامتحان لضمان النزاهة.</li>
+   549→                  <li>لا تُغلق نافذة الامتحان أو تنتقل لتبويب آخر.</li>
+   550→                  <li>يُحفظ تقدّمك تلقائياً كل بضع ثوانٍ.</li>
+   551→                </ul>
+   552→              </div>
+   553→            </div>
+   554→          </div>
+   555→        </CardContent>
+   556→      </Card>
+   557→    </div>
+   558→  );
+   559→}
+   560→
+   561→// ============================================================
+   562→//  ② ExamsList — قائمة الامتحانات المتاحة
+   563→// ============================================================
+   564→
+   565→function ExamsList({
+   566→  student,
+   567→  onSelectExam,
+   568→}: {
+   569→  student: StudentInfo;
+   570→  onSelectExam: (exam: AvailableExam) => void;
+   571→}) {
+   572→  const [exams, setExams] = useState<AvailableExam[]>([]);
+   573→  const [loading, setLoading] = useState(true);
+   574→  const [error, setError] = useState<string | null>(null);
+   575→
+   576→  // ===== إحصائيات الطالب =====
+   577→  const [stats, setStats] = useState<StudentStats | null>(null);
+   578→  const [statsLoading, setStatsLoading] = useState(true);
+   579→
+   580→  // ===== الفلترة والتبويب =====
+   581→  const [activeTab, setActiveTab] = useState<'available' | 'history'>('available');
+   582→  const [searchTerm, setSearchTerm] = useState('');
+   583→  const [subjectFilter, setSubjectFilter] = useState('all');
+   584→  const [statusFilter, setStatusFilter] = useState('all');
+   585→
+   586→  const loadExams = useCallback(async () => {
+   587→    setLoading(true);
+   588→    setError(null);
+   589→    try {
+   590→      const res = await fetch(buildUrl('/api/exams/available', student), {
+   591→        headers: { 'x-student-id': student.studentId },
+   592→      });
+   593→      const data = await res.json();
+   594→      if (!res.ok) {
+   595→        setError(data.error || 'فشل جلب الامتحانات');
+   596→        setExams([]);
+   597→      } else {
+   598→        setExams(data.exams || []);
+   599→      }
+   600→    } catch (e) {
+   601→      setError('تعذّر الاتصال بالخادم');
+   602→      setExams([]);
+   603→    } finally {
+   604→      setLoading(false);
+   605→    }
+   606→  }, [student]);
+   607→
+   608→  const loadStats = useCallback(async () => {
+   609→    setStatsLoading(true);
+   610→    try {
+   611→      const res = await fetch(buildUrl('/api/exams/student-stats', student), {
+   612→        headers: { 'x-student-id': student.studentId },
+   613→      });
+   614→      const data = await res.json();
+   615→      if (res.ok && data.success) {
+   616→        setStats(data as StudentStats);
+   617→      } else {
+   618→        setStats(null);
+   619→      }
+   620→    } catch (e) {
+   621→      setStats(null);
+   622→    } finally {
+   623→      setStatsLoading(false);
+   624→    }
+   625→  }, [student]);
+   626→
+   627→  useEffect(() => {
+   628→    let cancelled = false;
+   629→    (async () => {
+   630→      await Promise.all([loadExams(), loadStats()]);
+   631→      if (cancelled) return;
+   632→    })();
+   633→    return () => { cancelled = true; };
+   634→  }, []);
+   635→
+   636→  // قائمة المواد المتاحة للفلترة
+   637→  const availableSubjects = useMemo(() => {
+   638→    const set = new Set<string>();
+   639→    exams.forEach((e) => { if (e.subject) set.add(e.subject); });
+   640→    stats?.subjectBreakdown.forEach((s) => set.add(s.subject));
+   641→    return Array.from(set).sort();
+   642→  }, [exams, stats]);
+   643→
+   644→  // تطبيق الفلترة على الامتحانات المتاحة
+   645→  const filteredExams = useMemo(() => {
+   646→    return exams.filter((exam) => {
+   647→      if (searchTerm.trim()) {
+   648→        const q = searchTerm.trim().toLowerCase();
+   649→        const matches =
+   650→          exam.title.toLowerCase().includes(q) ||
+   651→          exam.subject.toLowerCase().includes(q) ||
+   652→          (exam.teacherName || '').toLowerCase().includes(q);
+   653→        if (!matches) return false;
+   654→      }
+   655→      if (subjectFilter !== 'all' && exam.subject !== subjectFilter) return false;
+   656→      if (statusFilter !== 'all' && exam.timeStatus !== statusFilter) return false;
+   657→      return true;
+   658→    });
+   659→  }, [exams, searchTerm, subjectFilter, statusFilter]);
+   660→
+   661→  // ===== شاشة التحميل =====
+   662→  if (loading) {
+   663→    return (
+   664→      <div className="flex flex-col items-center justify-center py-20">
+   665→        <Loader2 className="w-10 h-10 text-[#610000] animate-spin mb-3" />
+   666→        <p className="text-gray-500 text-sm">جاري تحميل الامتحانات...</p>
+   667→      </div>
+   668→    );
+   669→  }
+   670→
+   671→  // ===== شاشة الخطأ =====
+   672→  if (error) {
+   673→    return (
+   674→      <div className="max-w-md mx-auto py-12">
+   675→        <Alert variant="destructive">
+   676→          <AlertCircle className="w-4 h-4" />
+   677→          <AlertTitle>خطأ</AlertTitle>
+   678→          <AlertDescription>{error}</AlertDescription>
+   679→        </Alert>
+   680→        <Button onClick={loadExams} variant="outline" className="w-full mt-4">
+   681→          <RefreshCw className="w-4 h-4 ml-2" /> إعادة المحاولة
+   682→        </Button>
+   683→      </div>
+   684→    );
+   685→  }
+   686→
+   687→  return (
+   688→    <div className="space-y-5">
+   689→      {/* ====== رأس إحصائيات الطالب ====== */}
+   690→      <StudentStatsHeader stats={stats} loading={statsLoading} studentName={student.studentName} />
+   691→
+   692→      {/* ====== تبويب: متاحة / منجزة ====== */}
+   693→      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+   694→        <button
+   695→          onClick={() => setActiveTab('available')}
+   696→          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+   697→            activeTab === 'available'
+   698→              ? 'bg-white text-[#610000] shadow-sm'
+   699→              : 'text-gray-600 hover:text-gray-900'
+   700→          }`}
+   701→        >
+   702→          <FileText className="w-4 h-4" />
+   703→          المتاحة
+   704→          {exams.length > 0 && (
+   705→            <Badge variant="secondary" className="text-xs px-1.5 py-0">{exams.length}</Badge>
+   706→          )}
+   707→        </button>
+   708→        <button
+   709→          onClick={() => setActiveTab('history')}
+   710→          className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+   711→            activeTab === 'history'
+   712→              ? 'bg-white text-[#610000] shadow-sm'
+   713→              : 'text-gray-600 hover:text-gray-900'
+   714→          }`}
+   715→        >
+   716→          <History className="w-4 h-4" />
+   717→          النتائج السابقة
+   718→          {stats && !stats.isEmpty && stats.kpis.totalExams > 0 && (
+   719→            <Badge variant="secondary" className="text-xs px-1.5 py-0">{stats.kpis.totalExams}</Badge>
+   720→          )}
+   721→        </button>
+   722→      </div>
+   723→
+   724→      {activeTab === 'available' ? (
+   725→        <>
+   726→          {/* ====== شريط الفلترة ====== */}
+   727→          {exams.length > 0 && (
+   728→            <div className="bg-white rounded-xl border p-3 flex flex-wrap items-center gap-2">
+   729→              <div className="relative flex-1 min-w-[200px]">
+   730→                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+   731→                <Input
+   732→                  placeholder="ابحث بالعنوان أو المادة أو المعلم..."
+   733→                  value={searchTerm}
+   734→                  onChange={(e) => setSearchTerm(e.target.value)}
+   735→                  className="pr-9 h-9"
+   736→                />
+   737→              </div>
+   738→              <select
+   739→                value={subjectFilter}
+   740→                onChange={(e) => setSubjectFilter(e.target.value)}
+   741→                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#610000]/30"
+   742→              >
+   743→                <option value="all">كل المواد</option>
+   744→                {availableSubjects.map((s) => (
+   745→                  <option key={s} value={s}>{s}</option>
+   746→                ))}
+   747→              </select>
+   748→              <select
+   749→                value={statusFilter}
+   750→                onChange={(e) => setStatusFilter(e.target.value)}
+   751→                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#610000]/30"
+   752→              >
+   753→                <option value="all">كل الحالات</option>
+   754→                <option value="OPEN">مفتوح الآن</option>
+   755→                <option value="UPCOMING">قادم</option>
+   756→                <option value="ENDED">منتهي</option>
+   757→              </select>
+   758→              {(searchTerm || subjectFilter !== 'all' || statusFilter !== 'all') && (
+   759→                <Button
+   760→                  variant="ghost"
+   761→                  size="sm"
+   762→                  onClick={() => { setSearchTerm(''); setSubjectFilter('all'); setStatusFilter('all'); }}
+   763→                  className="h-9 text-gray-500"
+   764→                >
+   765→                  <XCircle className="w-4 h-4 ml-1" /> مسح
+   766→                </Button>
+   767→              )}
+   768→              <Button variant="ghost" size="sm" onClick={loadExams} className="h-9 mr-auto">
+   769→                <RefreshCw className="w-4 h-4 ml-1" /> تحديث
+   770→              </Button>
+   771→            </div>
+   772→          )}
+   773→
+   774→          {/* ====== قائمة الامتحانات ====== */}
+   775→          {filteredExams.length === 0 ? (
+   776→            <div className="max-w-md mx-auto py-12 text-center">
+   777→              <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
+   778→                <FileText className="w-10 h-10 text-gray-400" />
+   779→              </div>
+   780→              <h3 className="text-lg font-bold text-gray-900 mb-2">
+   781→                {exams.length === 0 ? 'لا توجد امتحانات متاحة' : 'لا نتائج مطابقة'}
+   782→              </h3>
+   783→              <p className="text-gray-500 text-sm mb-4">
+   784→                {exams.length === 0
+   785→                  ? 'لا توجد امتحانات مفتوحة حالياً. تابع صفحتك للاطلاع على الامتحانات الجديدة.'
+   786→                  : 'جرّب تعديل معايير البحث أو الفلترة.'}
+   787→              </p>
+   788→              {exams.length === 0 ? (
+   789→                <Button onClick={loadExams} variant="outline">
+   790→                  <RefreshCw className="w-4 h-4 ml-2" /> تحديث
+   791→                </Button>
+   792→              ) : (
+   793→                <Button
+   794→                  variant="outline"
+   795→                  onClick={() => { setSearchTerm(''); setSubjectFilter('all'); setStatusFilter('all'); }}
+   796→                >
+   797→                  <Filter className="w-4 h-4 ml-2" /> إعادة ضبط الفلترة
+   798→                </Button>
+   799→              )}
+   800→            </div>
+   801→          ) : (
+   802→            <div className="grid gap-4 md:grid-cols-2">
+   803→              {filteredExams.map((exam) => (
+   804→                <ExamCard key={exam.id} exam={exam} onSelect={onSelectExam} />
+   805→              ))}
+   806→            </div>
+   807→          )}
+   808→        </>
+   809→      ) : (
+   810→        /* ====== تبويب النتائج السابقة ====== */
+   811→        <HistoryTab stats={stats} loading={statsLoading} onRetry={loadStats} />
+   812→      )}
+   813→    </div>
+   814→  );
+   815→}
+   816→
+   817→// ============================================================
+   818→//  StudentStatsHeader — رأس إحصائيات الطالب (KPIs + مخطط)
+   819→// ============================================================
+   820→function StudentStatsHeader({
+   821→  stats,
+   822→  loading,
+   823→  studentName,
+   824→}: {
+   825→  stats: StudentStats | null;
+   826→  loading: boolean;
+   827→  studentName: string;
+   828→}) {
+   829→  if (loading) {
+   830→    return (
+   831→      <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+   832→        <CardContent className="p-5">
+   833→          <div className="flex items-center gap-3 mb-4">
+   834→            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+   835→              <GraduationCap className="w-5 h-5" />
+   836→            </div>
+   837→            <div>
+   838→              <div className="h-4 w-32 bg-white/20 rounded mb-1 animate-pulse" />
+   839→              <div className="h-3 w-24 bg-white/10 rounded animate-pulse" />
+   840→            </div>
+   841→          </div>
+   842→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   843→            {[0, 1, 2, 3].map((i) => (
+   844→              <div key={i} className="bg-white/10 rounded-lg p-3">
+   845→                <div className="h-8 w-12 bg-white/20 rounded animate-pulse mb-2" />
+   846→                <div className="h-3 w-16 bg-white/10 rounded animate-pulse" />
+   847→              </div>
+   848→            ))}
+   849→          </div>
+   850→        </CardContent>
+   851→      </Card>
+   852→    );
+   853→  }
+   854→
+   855→  if (!stats || stats.isEmpty) {
+   856→    return (
+   857→      <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+   858→        <CardContent className="p-5">
+   859→          <div className="flex items-center gap-3">
+   860→            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+   861→              <GraduationCap className="w-5 h-5" />
+   862→            </div>
+   863→            <div>
+   864→              <h3 className="font-bold text-lg">أهلاً، {studentName}</h3>
+   865→              <p className="text-white/80 text-sm">لم تخض أي امتحان بعد — ابدأ أول امتحان متاح!</p>
+   866→            </div>
+   867→          </div>
+   868→        </CardContent>
+   869→      </Card>
+   870→    );
+   871→  }
+   872→
+   873→  const { kpis, timeline } = stats;
+   874→  const chartData = timeline.map((t, i) => ({
+   875→    name: `#${i + 1}`,
+   876→    score: t.score,
+   877→    title: t.examTitle,
+   878→  }));
+   879→
+   880→  return (
+   881→    <Card className="border-0 shadow-sm bg-gradient-to-l from-[#610000] to-[#7a1a1a] text-white overflow-hidden">
+   882→      <CardContent className="p-5">
+   883→        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+   884→          <div className="flex items-center gap-3">
+   885→            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+   886→              <GraduationCap className="w-5 h-5" />
+   887→            </div>
+   888→            <div>
+   889→              <h3 className="font-bold text-lg">أهلاً، {studentName}</h3>
+   890→              <p className="text-white/80 text-sm">ملخّص أدائك في الامتحانات الإلكترونية</p>
+   891→            </div>
+   892→          </div>
+   893→          {stats.isTestMode && (
+   894→            <Badge className="bg-white/20 text-white border-0 hover:bg-white/20">
+   895→              وضع تجريبي
+   896→            </Badge>
+   897→          )}
+   898→        </div>
+   899→
+   900→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+   901→          <StatPill icon={<FileCheck className="w-4 h-4" />} label="امتحانات منجزة" value={String(kpis.totalExams)} />
+   902→          <StatPill icon={<TrendingUp className="w-4 h-4" />} label="متوسط الدرجات" value={`${kpis.avgScore}%`} />
+   903→          <StatPill icon={<Percent className="w-4 h-4" />} label="نسبة النجاح" value={`${kpis.passRate}%`} />
+   904→          <StatPill icon={<Trophy className="w-4 h-4" />} label="أعلى نتيجة" value={`${kpis.bestScore}%`} />
+   905→        </div>
+   906→
+   907→        {/* مخطط الأداء الزمني */}
+   908→        {chartData.length > 1 && (
+   909→          <div className="bg-white/10 rounded-lg p-3">
+   910→            <div className="flex items-center justify-between mb-2">
+   911→              <span className="text-xs text-white/80 font-medium">اتجاه الأداء (آخر {chartData.length} امتحانات)</span>
+   912→              <span className="text-xs text-white/60">الدرجة %</span>
+   913→            </div>
+   914→            <div className="h-24">
+   915→              <ResponsiveContainer width="100%" height="100%">
+   916→                <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+   917→                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+   918→                  <XAxis dataKey="name" stroke="rgba(255,255,255,0.6)" fontSize={10} tickLine={false} axisLine={false} />
+   919→                  <YAxis domain={[0, 100]} stroke="rgba(255,255,255,0.6)" fontSize={10} tickLine={false} axisLine={false} />
+   920→                  <RTooltip
+   921→                    contentStyle={{ background: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
+   922→                    labelStyle={{ color: '#fff' }}
+   923→                    formatter={(v: number) => [`${v}%`, 'الدرجة']}
+   924→                    labelFormatter={(_l: number, payload) => {
+   925→                      const p = payload?.[0]?.payload;
+   926→                      return p?.title || '';
+   927→                    }}
+   928→                  />
+   929→                  <Line
+   930→                    type="monotone"
+   931→                    dataKey="score"
+   932→                    stroke="#fff"
+   933→                    strokeWidth={2.5}
+   934→                    dot={{ fill: '#fff', r: 3 }}
+   935→                    activeDot={{ r: 5 }}
+   936→                  />
+   937→                </LineChart>
+   938→              </ResponsiveContainer>
+   939→            </div>
+   940→          </div>
+   941→        )}
+   942→      </CardContent>
+   943→    </Card>
+   944→  );
+   945→}
+   946→
+   947→function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+   948→  return (
+   949→    <div className="bg-white/10 rounded-lg p-3">
+   950→      <div className="flex items-center gap-1.5 text-white/70 text-xs mb-1">
+   951→        {icon}
+   952→        <span>{label}</span>
+   953→      </div>
+   954→      <div className="text-2xl font-bold">{value}</div>
+   955→    </div>
+   956→  );
+   957→}
+   958→
+   959→// ============================================================
+   960→//  ExamCard — بطاقة امتحان (مستخرجة لإعادة الاستخدام)
+   961→// ============================================================
+   962→function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: AvailableExam) => void }) {
+   963→  const status = exam.timeStatus;
+   964→  const statusInfo =
+   965→    status === 'UPCOMING'
+   966→      ? { label: 'قادم', color: 'bg-amber-100 text-amber-800 border-amber-200' }
+   967→      : status === 'OPEN'
+   968→      ? { label: 'مفتوح', color: 'bg-green-100 text-green-800 border-green-200' }
+   969→      : { label: 'منتهي', color: 'bg-gray-100 text-gray-600 border-gray-200' };
+   970→
+   971→  return (
+   972→    <Card
+   973→      className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border ${
+   974→        exam.hasActiveSubmission ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'
+   975→      }`}
+   976→      onClick={() => onSelect(exam)}
+   977→    >
+   978→      <CardHeader className="pb-3">
+   979→        <div className="flex items-start justify-between gap-2">
+   980→          <div className="min-w-0 flex-1">
+   981→            <CardTitle className="text-base text-gray-900 leading-snug">
+   982→              {exam.title}
+   983→            </CardTitle>
+   984→            <CardDescription className="text-xs mt-1">
+   985→              {exam.subject}
+   986→              {exam.classroomName ? ` • ${exam.classroomName}` : ''}
+   987→              {exam.teacherName ? ` • أ/ ${exam.teacherName}` : ''}
+   988→            </CardDescription>
+   989→          </div>
+   990→          <Badge variant="outline" className={`flex-shrink-0 ${statusInfo.color}`}>
+   991→            {statusInfo.label}
+   992→          </Badge>
+   993→        </div>
+   994→      </CardHeader>
+   995→      <CardContent className="pt-0 pb-3">
+   996→        {exam.description && (
+   997→          <p className="text-sm text-gray-600 line-clamp-2 mb-3">{exam.description}</p>
+   998→        )}
+   999→        <div className="grid grid-cols-2 gap-2 text-xs">
+  1000→          <div className="flex items-center gap-1.5 text-gray-600">
+  1001→            <Clock className="w-3.5 h-3.5 text-gray-400" />
+  1002→            {exam.durationMinutes} دقيقة
+  1003→          </div>
+  1004→          <div className="flex items-center gap-1.5 text-gray-600">
+  1005→            <ListChecks className="w-3.5 h-3.5 text-gray-400" />
+  1006→            {exam.questionsCount} سؤال
+  1007→          </div>
+  1008→          <div className="flex items-center gap-1.5 text-gray-600">
+  1009→            <Hash className="w-3.5 h-3.5 text-gray-400" />
+  1010→            {exam.attemptsLeft} محاولة متبقية
+  1011→          </div>
+  1012→          <div className="flex items-center gap-1.5 text-gray-600">
+  1013→            {exam.hasPassword ? (
+  1014→              <><Lock className="w-3.5 h-3.5 text-gray-400" /> بكلمة سر</>
+  1015→            ) : (
+  1016→              <><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> بدون سر</>
+  1017→            )}
+  1018→          </div>
+  1019→        </div>
+  1020→        {exam.antiCheatEnabled && (
+  1021→          <div className="mt-3 flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+  1022→            <Shield className="w-3.5 h-3.5" />
+  1023→            مراقبة ذكية مفعّلة
+  1024→          </div>
+  1025→        )}
+  1026→      </CardContent>
+  1027→      <CardFooter className="pt-0 pb-3">
+  1028→        <Button
+  1029→          className="w-full bg-[#610000] hover:bg-[#4a0000] text-white"
+  1030→          size="sm"
+  1031→          variant="default"
+  1032→          onClick={(e) => {
+  1033→            e.stopPropagation();
+  1034→            onSelect(exam);
+  1035→          }}
+  1036→        >
+  1037→          {exam.hasActiveSubmission ? (
+  1038→            <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
+  1039→          ) : (
+  1040→            <>ابدأ الامتحان <ArrowLeft className="w-4 h-4 mr-1" /></>
+  1041→          )}
+  1042→        </Button>
+  1043→      </CardFooter>
+  1044→    </Card>
+  1045→  );
+  1046→}
+  1047→
+  1048→// ============================================================
+  1049→//  HistoryTab — تبويب النتائج السابقة
+  1050→// ============================================================
+  1051→function HistoryTab({
+  1052→  stats,
+  1053→  loading,
+  1054→  onRetry,
+  1055→}: {
+  1056→  stats: StudentStats | null;
+  1057→  loading: boolean;
+  1058→  onRetry: () => void;
+  1059→}) {
+  1060→  if (loading) {
+  1061→    return (
+  1062→      <div className="flex flex-col items-center justify-center py-20">
+  1063→        <Loader2 className="w-10 h-10 text-[#610000] animate-spin mb-3" />
+  1064→        <p className="text-gray-500 text-sm">جاري تحميل النتائج السابقة...</p>
+  1065→      </div>
+  1066→    );
+  1067→  }
+  1068→
+  1069→  if (!stats || stats.isEmpty) {
+  1070→    return (
+  1071→      <div className="max-w-md mx-auto py-12 text-center">
+  1072→        <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
+  1073→          <History className="w-10 h-10 text-gray-400" />
+  1074→        </div>
+  1075→        <h3 className="text-lg font-bold text-gray-900 mb-2">لا توجد نتائج سابقة</h3>
+  1076→        <p className="text-gray-500 text-sm mb-4">لم تُكمل أي امتحان بعد.</p>
+  1077→        <Button onClick={onRetry} variant="outline">
+  1078→          <RefreshCw className="w-4 h-4 ml-2" /> تحديث
+  1079→        </Button>
+  1080→      </div>
+  1081→    );
+  1082→  }
+  1083→
+  1084→  return (
+  1085→    <div className="space-y-4">
+  1086→      {/* تفصيل حسب المادة */}
+  1087→      {stats.subjectBreakdown.length > 0 && (
+  1088→        <Card className="shadow-sm border">
+  1089→          <CardHeader className="pb-3">
+  1090→            <CardTitle className="text-sm flex items-center gap-2">
+  1091→              <BookOpen className="w-4 h-4 text-[#610000]" />
+  1092→              الأداء حسب المادة
+  1093→            </CardTitle>
+  1094→          </CardHeader>
+  1095→          <CardContent className="pt-0">
+  1096→            <div className="space-y-2">
+  1097→              {stats.subjectBreakdown.map((s) => (
+  1098→                <div key={s.subject} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+  1099→                  <div className="flex-1 min-w-0">
+  1100→                    <div className="flex items-center gap-2 mb-1">
+  1101→                      <span className="font-medium text-sm text-gray-900 truncate">{s.subject}</span>
+  1102→                      <Badge variant="outline" className="text-xs">{s.examCount} امتحان</Badge>
+  1103→                    </div>
+  1104→                    <div className="flex items-center gap-2">
+  1105→                      <Progress value={s.avgScore} className="h-1.5 flex-1" />
+  1106→                      <span className="text-xs text-gray-500 w-12 text-left">{s.avgScore}%</span>
+  1107→                    </div>
+  1108→                  </div>
+  1109→                  <div className="text-left">
+  1110→                    <div className="text-xs text-gray-400">نجاح</div>
+  1111→                    <div className={`text-sm font-bold ${s.passRate >= 50 ? 'text-green-600' : 'text-amber-600'}`}>
+  1112→                      {s.passRate}%
+  1113→                    </div>
+  1114→                  </div>
+  1115→                </div>
+  1116→              ))}
+  1117→            </div>
+  1118→          </CardContent>
+  1119→        </Card>
+  1120→      )}
+  1121→
+  1122→      {/* آخر النتائج */}
+  1123→      <Card className="shadow-sm border">
+  1124→        <CardHeader className="pb-3">
+  1125→          <CardTitle className="text-sm flex items-center gap-2">
+  1126→            <Award className="w-4 h-4 text-[#610000]" />
+  1127→            آخر النتائج
+  1128→          </CardTitle>
+  1129→        </CardHeader>
+  1130→        <CardContent className="pt-0">
+  1131→          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+  1132→            {stats.recentResults.map((r) => {
+  1133→              const passed = r.passed === true;
+  1134→              const failed = r.passed === false;
+  1135→              return (
+  1136→                <div key={r.submissionId} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+  1137→                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+  1138→                    passed ? 'bg-green-100 text-green-700' :
+  1139→                    failed ? 'bg-red-100 text-red-700' :
+  1140→                    'bg-amber-100 text-amber-700'
+  1141→                  }`}>
+  1142→                    {passed ? <CheckCircle2 className="w-5 h-5" /> : failed ? <XCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
+  1143→                  </div>
+  1144→                  <div className="flex-1 min-w-0">
+  1145→                    <div className="font-medium text-sm text-gray-900 truncate">{r.examTitle}</div>
+  1146→                    <div className="text-xs text-gray-500 flex items-center gap-1.5 flex-wrap">
+  1147→                      <span>{r.subject}</span>
+  1148→                      <span>•</span>
+  1149→                      <span>{formatDate(r.submittedAt)}</span>
+  1150→                    </div>
+  1151→                  </div>
+  1152→                  <div className="text-left flex-shrink-0">
+  1153→                    <div className={`text-lg font-bold ${
+  1154→                      passed ? 'text-green-600' : failed ? 'text-red-600' : 'text-amber-600'
+  1155→                    }`}>
+  1156→                      {r.percentage}%
+  1157→                    </div>
+  1158→                    {r.totalScore !== null && r.maxScore !== null && (
+  1159→                      <div className="text-xs text-gray-400">{r.totalScore}/{r.maxScore}</div>
+  1160→                    )}
+  1161→                  </div>
+  1162→                </div>
+  1163→              );
+  1164→            })}
+  1165→          </div>
+  1166→        </CardContent>
+  1167→      </Card>
+  1168→    </div>
+  1169→  );
+  1170→}
+  1171→
+  1172→// ============================================================
+  1173→//  ③ ExamIntro — تعليمات + كلمة سر + بدء
+  1174→// ============================================================
+  1175→
+  1176→function ExamIntro({
+  1177→  student,
+  1178→  exam,
+  1179→  onBack,
+  1180→  onStartSuccess,
+  1181→}: {
+  1182→  student: StudentInfo;
+  1183→  exam: AvailableExam;
+  1184→  onBack: () => void;
+  1185→  onStartSuccess: (data: ExamStartResponse) => void;
+  1186→}) {
+  1187→  const [password, setPassword] = useState('');
+  1188→  const [loading, setLoading] = useState(false);
+  1189→  const [error, setError] = useState<string | null>(null);
+  1190→  const [agreed, setAgreed] = useState(false);
+  1191→
+  1192→  const handleStart = async () => {
+  1193→    setError(null);
+  1194→    if (exam.hasPassword && !password.trim()) {
+  1195→      setError('كلمة السر مطلوبة لهذا الامتحان');
+  1196→      return;
+  1197→    }
+  1198→    if (!agreed) {
+  1199→      setError('يجب الموافقة على التعليمات قبل البدء');
+  1200→      return;
+  1201→    }
+  1202→    setLoading(true);
+  1203→    try {
+  1204→      const res = await fetch(
+  1205→        buildUrl(`/api/exams/${exam.id}/start`, student),
+  1206→        {
+  1207→          method: 'POST',
+  1208→          headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
+  1209→          body: JSON.stringify({ password: exam.hasPassword ? password : undefined }),
+  1210→        }
+  1211→      );
+  1212→      const data = await res.json();
+  1213→      if (!res.ok) {
+  1214→        setError(data.error || 'فشل بدء الامتحان');
+  1215→        setLoading(false);
+  1216→        return;
+  1217→      }
+  1218→      onStartSuccess(data as ExamStartResponse);
+  1219→    } catch (e) {
+  1220→      setError('تعذّر الاتصال بالخادم');
+  1221→      setLoading(false);
+  1222→    }
+  1223→  };
+  1224→
+  1225→  return (
+  1226→    <div className="max-w-2xl mx-auto">
+  1227→      <Card className="shadow-lg border-0">
+  1228→        <CardHeader>
+  1229→          <div className="flex items-start justify-between gap-3">
+  1230→            <div>
+  1231→              <CardTitle className="text-xl text-gray-900">{exam.title}</CardTitle>
+  1232→              <CardDescription className="mt-1">
+  1233→                {exam.subject} • أ/ {exam.teacherName || '—'}
+  1234→              </CardDescription>
+  1235→            </div>
+  1236→            <Badge variant="outline" className="bg-[#610000]/5 text-[#610000] border-[#610000]/20">
+  1237→              محاولة {exam.attemptsUsed + 1} من {exam.maxAttempts}
+  1238→            </Badge>
+  1239→          </div>
+  1240→        </CardHeader>
+  1241→        <CardContent className="space-y-5">
+  1242→          {exam.description && (
+  1243→            <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
+  1244→              {exam.description}
+  1245→            </div>
+  1246→          )}
+  1247→
+  1248→          {/* معلومات الامتحان */}
+  1249→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  1250→            <InfoCard icon={<Clock className="w-4 h-4" />} label="المدة" value={`${exam.durationMinutes} دقيقة`} />
+  1251→            <InfoCard icon={<ListChecks className="w-4 h-4" />} label="عدد الأسئلة" value={`${exam.questionsCount}`} />
+  1252→            <InfoCard icon={<Calendar className="w-4 h-4" />} label="ينتهي في" value={formatDate(exam.endDate).split(' ')[0]} />
+  1253→            <InfoCard icon={<Hash className="w-4 h-4" />} label="المحاولات المتبقية" value={`${exam.attemptsLeft}`} />
+  1254→          </div>
+  1255→
+  1256→          {/* التعليمات */}
+  1257→          <div className="border rounded-lg overflow-hidden">
+  1258→            <div className="bg-amber-50 px-4 py-2 border-b flex items-center gap-2">
+  1259→              <AlertTriangle className="w-4 h-4 text-amber-600" />
+  1260→              <h4 className="text-sm font-bold text-amber-900">تعليمات هامة قبل البدء</h4>
+  1261→            </div>
+  1262→            <ul className="px-4 py-3 space-y-2 text-sm text-gray-700">
+  1263→              <li className="flex gap-2">
+  1264→                <span className="text-[#610000] font-bold">•</span>
+  1265→                بمجرد بدء الامتحان، يبدأ المؤقّت ولا يمكن إيقافه.
+  1266→              </li>
+  1267→              <li className="flex gap-2">
+  1268→                <span className="text-[#610000] font-bold">•</span>
+  1269→                يُحفظ تقدّمك تلقائياً، لكن تأكّد من الضغط على «تسليم» قبل انتهاء الوقت.
+  1270→              </li>
+  1271→              {exam.antiCheatEnabled && (
+  1272→                <>
+  1273→                  <li className="flex gap-2">
+  1274→                    <span className="text-[#610000] font-bold">•</span>
+  1275→                    <span>
+  1276→                      <strong>المراقبة مفعّلة:</strong> لا تنتقل لتبويب آخر أو تُغلق النافذة — سيُسجَّل كانتهاك.
+  1277→                    </span>
+  1278→                  </li>
+  1279→                  <li className="flex gap-2">
+  1280→                    <span className="text-[#610000] font-bold">•</span>
+  1281→                    يُمنع النسخ واللصق واستخدام اختصارات لوحة المفاتيح.
+  1282→                  </li>
+  1283→                </>
+  1284→              )}
+  1285→              <li className="flex gap-2">
+  1286→                <span className="text-[#610000] font-bold">•</span>
+  1287→                تُراجع إجاباتك المقالية بالذكاء الاصطناعي للتأكد من خلوها من محتوى مخالف.
+  1288→              </li>
+  1289→              {exam.hasActiveSubmission && (
+  1290→                <li className="flex gap-2 text-blue-700">
+  1291→                  <span className="font-bold">•</span>
+  1292→                  لديك محاولة جارية — سيتم استئنافها بدلاً من بدء محاولة جديدة.
+  1293→                </li>
+  1294→              )}
+  1295→            </ul>
+  1296→          </div>
+  1297→
+  1298→          {/* الموافقة */}
+  1299→          <label className="flex items-start gap-2 cursor-pointer">
+  1300→            <input
+  1301→              type="checkbox"
+  1302→              checked={agreed}
+  1303→              onChange={(e) => setAgreed(e.target.checked)}
+  1304→              className="mt-1 w-4 h-4 accent-[#610000]"
+  1305→            />
+  1306→            <span className="text-sm text-gray-700">
+  1307→              قرأت التعليمات وأوافق عليها. أتحمّل مسؤولية التزامهنّ.
+  1308→            </span>
+  1309→          </label>
+  1310→
+  1311→          {/* كلمة السر */}
+  1312→          {exam.hasPassword && (
+  1313→            <div className="space-y-2">
+  1314→              <Label htmlFor="password" className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+  1315→                <Lock className="w-3.5 h-3.5" />
+  1316→                كلمة سر الامتحان
+  1317→              </Label>
+  1318→              <Input
+  1319→                id="password"
+  1320→                type="password"
+  1321→                value={password}
+  1322→                onChange={(e) => setPassword(e.target.value)}
+  1323→                placeholder="أدخل كلمة السر التي أعطاك إياها المعلم"
+  1324→                className="text-right"
+  1325→                autoComplete="off"
+  1326→              />
+  1327→            </div>
+  1328→          )}
+  1329→
+  1330→          {error && (
+  1331→            <Alert variant="destructive">
+  1332→              <AlertCircle className="w-4 h-4" />
+  1333→              <AlertDescription>{error}</AlertDescription>
+  1334→            </Alert>
+  1335→          )}
+  1336→
+  1337→          <div className="flex gap-2 pt-2">
+  1338→            <Button variant="outline" onClick={onBack} className="flex-1">
+  1339→              <ArrowRight className="w-4 h-4 ml-1" /> رجوع
+  1340→            </Button>
+  1341→            <Button
+  1342→              onClick={handleStart}
+  1343→              disabled={loading || !agreed}
+  1344→              className="flex-1 bg-[#610000] hover:bg-[#4a0000] text-white"
+  1345→            >
+  1346→              {loading ? (
+  1347→                <><Loader2 className="w-4 h-4 ml-2 animate-spin" /> جاري البدء...</>
+  1348→              ) : exam.hasActiveSubmission ? (
+  1349→                <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
+  1350→              ) : (
+  1351→                <><Timer className="w-4 h-4 ml-1" /> ابدأ الآن</>
+  1352→              )}
+  1353→            </Button>
+  1354→          </div>
+  1355→        </CardContent>
+  1356→      </Card>
+  1357→    </div>
+  1358→  );
+  1359→}
+  1360→
+  1361→function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  1362→  return (
+  1363→    <div className="bg-gray-50 rounded-lg p-3 text-center">
+  1364→      <div className="w-8 h-8 mx-auto rounded-full bg-white flex items-center justify-center text-gray-500 mb-1.5">
+  1365→        {icon}
+  1366→      </div>
+  1367→      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+  1368→      <p className="text-sm font-bold text-gray-900">{value}</p>
+  1369→    </div>
+  1370→  );
+  1371→}
+  1372→
+  1373→// ============================================================
+  1374→//  ④ ExamRunner — المؤقّت + الأسئلة + الحفظ + المراقبة
+  1375→// ============================================================
+  1376→
+  1377→interface ExamRunnerProps {
+  1378→  student: StudentInfo;
+  1379→  exam: AvailableExam;
+  1380→  startData: ExamStartResponse;
+  1381→  submissionId: string;
+  1382→  onSubmit: () => void;
+  1383→}
+  1384→
+  1385→function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRunnerProps) {
+  1386→  const questions = startData.questions;
+  1387→  const [currentIdx, setCurrentIdx] = useState(0);
+  1388→  const [answers, setAnswers] = useState<Record<string, { text?: string; imageUrl?: string; fileUrl?: string }>>({});
+  1389→  const [remainingSeconds, setRemainingSeconds] = useState(startData.submission.remainingSeconds);
+  1390→  const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({});
+  1391→  const [moderationWarnings, setModerationWarnings] = useState<Record<string, ModerationInfo | null>>({});
+  1392→  const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'done' | 'error'>>({});
+  1393→  const [violationCount, setViolationCount] = useState(0);
+  1394→  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  1395→  const [submitting, setSubmitting] = useState(false);
+  1396→  const [submitError, setSubmitError] = useState<string | null>(null);
+  1397→  const [autoCloseWarning, setAutoCloseWarning] = useState(false);
+  1398→
+  1399→  // ===== تحسينات جديدة =====
+  1400→  // تعليم الأسئلة للمراجعة لاحقاً
+  1401→  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
+  1402→  // فلترة المستكشف (الكل / للمراجعة / غير مُجاب)
+  1403→  const [navFilter, setNavFilter] = useState<'all' | 'flagged' | 'unanswered'>('all');
+  1404→  // حالة الاتصال بالخادم
+  1405→  const [isOnline, setIsOnline] = useState(true);
+  1406→  // إظهار تلميح اختصارات لوحة المفاتيح
+  1407→  const [showShortcutsHint, setShowShortcutsHint] = useState(false);
+  1408→  // عرض/إخفاء لوحة اختصارات لوحة المفاتيح
+  1409→  const [showShortcutsPanel, setShowShortcutsPanel] = useState(false);
+  1410→
+  1411→  const currentQuestion = questions[currentIdx];
+  1412→  const totalAnswered = Object.values(answers).filter(a => a.text?.trim() || a.imageUrl || a.fileUrl).length;
+  1413→  const progress = questions.length > 0 ? (totalAnswered / questions.length) * 100 : 0;
+  1414→  const flaggedCount = flaggedQuestions.size;
+  1415→
+  1416→  // ===== المراقبة (WebSocket) =====
+  1417→  const proctor = useExamProctor({ role: 'student' });
+  1418→
+  1419→  useEffect(() => {
+  1420→    if (exam.antiCheatEnabled) {
+  1421→      proctor.connect();
+  1422→      proctor.joinExam({
+  1423→        examId: exam.id,
+  1424→        submissionId,
+  1425→        studentId: student.studentId,
+  1426→        studentName: student.studentName,
+  1427→      });
+  1428→    }
+  1429→    return () => {
+  1430→      proctor.disconnect();
+  1431→    };
+  1432→  }, []);
+  1433→
+  1434→  // ===== اعتراض الأحداث المشبوهة =====
+  1435→  useEffect(() => {
+  1436→    if (!exam.antiCheatEnabled) return;
+  1437→
+  1438→    const sendProctorEvent = (type: string, severity: number, details: string) => {
+  1439→      // إرسال للـ WebSocket
+  1440→      proctor.sendViolation({ type, severity, details });
+  1441→      // إرسال للسيرفر للتسجيل الدائم
+  1442→      fetch(buildUrl(`/api/exams/${exam.id}/proctor`, student), {
+  1443→        method: 'POST',
+  1444→        headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
+  1445→        body: JSON.stringify({
+  1446→          submissionId,
+  1447→          events: [{ type, severity, details, timestamp: new Date().toISOString() }],
+  1448→        }),
+  1449→      }).catch(() => {});
+  1450→      setViolationCount(c => c + 1);
+  1451→    };
+  1452→
+  1453→    const onCopy = (e: ClipboardEvent) => {
+  1454→      e.preventDefault();
+  1455→      sendProctorEvent('COPY_ATTEMPT', 2, 'محاولة نسخ');
+  1456→    };
+  1457→    const onPaste = (e: ClipboardEvent) => {
+  1458→      e.preventDefault();
+  1459→      sendProctorEvent('PASTE_ATTEMPT', 2, 'محاولة لصق');
+  1460→    };
+  1461→    const onContextMenu = (e: MouseEvent) => {
+  1462→      e.preventDefault();
+  1463→      sendProctorEvent('RIGHT_CLICK', 1, 'زر الفأرة الأيمن');
+  1464→    };
+  1465→    const onShortcut = (e: KeyboardEvent) => {
+  1466→      // منع Ctrl+C/V/X/U/S/P/A و F12 و dev tools shortcuts
+  1467→      const blocked =
+  1468→        (e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'u', 's', 'p', 'a'].includes(e.key.toLowerCase()) ||
+  1469→        e.key === 'F12' ||
+  1470→        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()));
+  1471→      if (blocked) {
+  1472→        e.preventDefault();
+  1473→        sendProctorEvent('SHORTCUT_KEY', 2, `اختصار: ${e.ctrlKey ? 'Ctrl+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.key}`);
+  1474→      }
+  1475→    };
+  1476→
+  1477→    document.addEventListener('copy', onCopy);
+  1478→    document.addEventListener('paste', onPaste);
+  1479→    document.addEventListener('contextmenu', onContextMenu);
+  1480→    document.addEventListener('keydown', onShortcut);
+  1481→    return () => {
+  1482→      document.removeEventListener('copy', onCopy);
+  1483→      document.removeEventListener('paste', onPaste);
+  1484→      document.removeEventListener('contextmenu', onContextMenu);
+  1485→      document.removeEventListener('keydown', onShortcut);
+  1486→    };
+  1487→  }, [exam.antiCheatEnabled, exam.id, submissionId]);
+  1488→
+  1489→  // ===== التسليم التلقائي عند انتهاء الوقت =====
+  1490→  const handleAutoSubmit = useCallback(async () => {
+  1491→    setSubmitting(true);
+  1492→    try {
+  1493→      await fetch(buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }), {
+  1494→        method: 'POST',
+  1495→        headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
+  1496→        body: JSON.stringify({ force: true }),
+  1497→      });
+  1498→    } catch {}
+  1499→    setSubmitting(false);
+  1500→    onSubmit();
+  1501→  }, [exam.id, student, submissionId, onSubmit]);
+  1502→
+  1503→  // ===== المؤقّت =====
+  1504→  useEffect(() => {
+  1505→    const interval = setInterval(() => {
+  1506→      setRemainingSeconds(s => {
+  1507→        const next = s - 1;
+  1508→        if (next <= 0) {
+  1509→          // انتهى الوقت — تسليم تلقائي
+  1510→          clearInterval(interval);
+  1511→          setAutoCloseWarning(true);
+  1512→          handleAutoSubmit();
+  1513→          return 0;
+  1514→        }
+  1515→        return next;
+  1516→      });
+  1517→    }, 1000);
+  1518→    return () => clearInterval(interval);
+  1519→  }, [handleAutoSubmit]);
+  1520→
+  1521→  // ===== جلب الإجابات المحفوظة سابقاً (للاستئناف) =====
+  1522→  useEffect(() => {
+  1523→    if (!startData.resumed) return;
+  1524→    (async () => {
+  1525→      try {
+  1526→        const res = await fetch(
+  1527→          buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
+  1528→          { headers: { 'x-student-id': student.studentId } }
+  1529→        );
+  1530→        const data = await res.json();
+  1531→        if (res.ok && data.answers) {
+  1532→          const restored: Record<string, { text?: string; imageUrl?: string; fileUrl?: string }> = {};
+  1533→          for (const a of data.answers) {
+  1534→            restored[a.questionId] = {
+  1535→              text: a.textAnswer || undefined,
+  1536→              imageUrl: a.imageAnswerUrl || undefined,
+  1537→              fileUrl: a.fileAnswerUrl || undefined,
+  1538→            };
+  1539→          }
+  1540→          setAnswers(restored);
+  1541→        }
+  1542→      } catch {}
+  1543→    })();
+  1544→  }, [startData.resumed]);
+  1545→
+  1546→  // ===== حفظ إجابة نصية =====
+  1547→  const saveAnswer = useCallback(async (questionId: string, text: string, immediate = false) => {
+  1548→    // للأهداف الموضوعية نُرسل فوراً، وللمقالية نُأخّر قليلاً (debounce)
+  1549→    setSaveStatus(s => ({ ...s, [questionId]: 'saving' }));
+  1550→    try {
+  1551→      const res = await fetch(
+  1552→        buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
+  1553→        {
+  1554→          method: 'POST',
+  1555→          headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
+  1556→          body: JSON.stringify({ questionId, text }),
+  1557→        }
+  1558→      );
+  1559→      const data = await res.json();
+  1560→      if (res.ok && data.success) {
+  1561→        setSaveStatus(s => ({ ...s, [questionId]: 'saved' }));
+  1562→        if (data.moderation) {
+  1563→          setModerationWarnings(w => ({
+  1564→            ...w,
+  1565→            [questionId]: data.moderation as ModerationInfo,
+  1566→          }));
+  1567→        }
+  1568→        if (data.warning) {
+  1569→          // تحذير مراجعة المحتوى
+  1570→        }
+  1571→      } else {
+  1572→        setSaveStatus(s => ({ ...s, [questionId]: 'error' }));
+  1573→      }
+  1574→    } catch {
+  1575→      setSaveStatus(s => ({ ...s, [questionId]: 'error' }));
+  1576→    }
+  1577→  }, [exam.id, student, submissionId]);
+  1578→
+  1579→  // debounce للحفظ التلقائي
+  1580→  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  1581→  const debouncedSave = useCallback((questionId: string, text: string) => {
+  1582→    if (saveTimers.current[questionId]) clearTimeout(saveTimers.current[questionId]);
+  1583→    saveTimers.current[questionId] = setTimeout(() => {
+  1584→      saveAnswer(questionId, text);
+  1585→    }, 1200);
+  1586→  }, [saveAnswer]);
+  1587→
+  1588→  // ===== رفع صورة/PDF =====
+  1589→  const handleUpload = useCallback(async (questionId: string, file: File) => {
+  1590→    setUploadStatus(s => ({ ...s, [questionId]: 'uploading' }));
+  1591→    try {
+  1592→      const formData = new FormData();
+  1593→      formData.append('file', file);
+  1594→      const res = await fetch(
+  1595→        buildUrl(`/api/exams/${exam.id}/answers/${questionId}/upload`, student, { submissionId }),
+  1596→        {
+  1597→          method: 'POST',
+  1598→          headers: { 'x-student-id': student.studentId },
+  1599→          body: formData,
+  1600→        }
+  1601→      );
+  1602→      const data = await res.json();
+  1603→      if (res.ok && data.success) {
+  1604→        setAnswers(a => ({
+  1605→          ...a,
+  1606→          [questionId]: {
+  1607→            ...a[questionId],
+  1608→            imageUrl: data.url || data.publicUrl,
+  1609→            fileUrl: data.url || data.publicUrl,
+  1610→          },
+  1611→        }));
+  1612→        setUploadStatus(s => ({ ...s, [questionId]: 'done' }));
+  1613→        if (data.moderation && data.moderation.decision !== 'SAFE') {
+  1614→          setModerationWarnings(w => ({
+  1615→            ...w,
+  1616→            [questionId]: {
+  1617→              decision: data.moderation.decision,
+  1618→              reasons: data.moderation.reasons || [],
+  1619→              categories: data.moderation.categories || [],
+  1620→              confidence: data.moderation.confidence || 0,
+  1621→            },
+  1622→          }));
+  1623→        }
+  1624→      } else {
+  1625→        setUploadStatus(s => ({ ...s, [questionId]: 'error' }));
+  1626→      }
+  1627→    } catch {
+  1628→      setUploadStatus(s => ({ ...s, [questionId]: 'error' }));
+  1629→    }
+  1630→  }, [exam.id, student, submissionId]);
+  1631→
+  1632→  // ===== التسليم النهائي =====
+  1633→  const handleSubmit = async () => {
+  1634→    setSubmitting(true);
+  1635→    setSubmitError(null);
+  1636→    try {
+  1637→      const res = await fetch(
+  1638→        buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }),
+  1639→        {
+  1640→          method: 'POST',
+  1641→          headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
+  1642→          body: JSON.stringify({}),
+  1643→        }
+  1644→      );
+  1645→      const data = await res.json();
+  1646→      if (!res.ok) {
+  1647→        setSubmitError(data.error || 'فشل التسليم');
+  1648→        setSubmitting(false);
+  1649→        return;
+  1650→      }
+  1651→      setSubmitting(false);
+  1652→      setShowSubmitDialog(false);
+  1653→      onSubmit();
+  1654→    } catch (e) {
+  1655→      setSubmitError('تعذّر الاتصال بالخادم');
+  1656→      setSubmitting(false);
+  1657→    }
+  1658→  };
+  1659→
+  1660→  const handleTextChange = (questionId: string, value: string) => {
+  1661→    setAnswers(a => ({ ...a, [questionId]: { ...a[questionId], text: value } }));
+  1662→    // للحظي (MCQ/TRUE_FALSE) نحفظ فوراً، ولغيره debounced
+  1663→    const q = questions.find(qq => qq.id === questionId);
+  1664→    if (q && (q.type === 'MCQ' || q.type === 'TRUE_FALSE')) {
+  1665→      saveAnswer(questionId, value, true);
+  1666→    } else {
+  1667→      debouncedSave(questionId, value);
+  1668→    }
+  1669→  };
+  1670→
+  1671→  const goToQuestion = (idx: number) => {
+  1672→    if (idx >= 0 && idx < questions.length) setCurrentIdx(idx);
+  1673→  };
+  1674→
+  1675→  // ===== تعليم سؤال للمراجعة =====
+  1676→  const toggleFlag = useCallback((questionId: string) => {
+  1677→    setFlaggedQuestions(prev => {
+  1678→      const next = new Set(prev);
+  1679→      if (next.has(questionId)) next.delete(questionId);
+  1680→      else next.add(questionId);
+  1681→      return next;
+  1682→    });
+  1683→  }, []);
+  1684→
+  1685→  const isFlagged = (questionId: string) => flaggedQuestions.has(questionId);
+  1686→
+  1687→  // ===== الانتقال للسؤال التالي غير المُجاب =====
+  1688→  const goToNextUnanswered = useCallback(() => {
+  1689→    for (let i = currentIdx + 1; i < questions.length; i++) {
+  1690→      const q = questions[i];
+  1691→      const a = answers[q.id];
+  1692→      if (!a?.text?.trim() && !a?.imageUrl && !a?.fileUrl) {
+  1693→        setCurrentIdx(i);
+  1694→        return;
+  1695→      }
+  1696→    }
+  1697→    // لو لم نجد بعد الحالي، نبحث قبله
+  1698→    for (let i = 0; i < currentIdx; i++) {
+  1699→      const q = questions[i];
+  1700→      const a = answers[q.id];
+  1701→      if (!a?.text?.trim() && !a?.imageUrl && !a?.fileUrl) {
+  1702→        setCurrentIdx(i);
+  1703→        return;
+  1704→      }
+  1705→    }
+  1706→  }, [currentIdx, questions, answers]);
+  1707→
+  1708→  // ===== beforeunload: تحذير قبل مغادرة الصفحة أثناء الامتحان =====
+  1709→  useEffect(() => {
+  1710→    const handler = (e: BeforeUnloadEvent) => {
+  1711→      e.preventDefault();
+  1712→      e.returnValue = 'سيتم فقدان تقدّمك في الامتحان إذا غادرت الصفحة.';
+  1713→      return e.returnValue;
+  1714→    };
+  1715→    window.addEventListener('beforeunload', handler);
+  1716→    return () => window.removeEventListener('beforeunload', handler);
+  1717→  }, []);
+  1718→
+  1719→  // ===== مؤشر حالة الاتصال (online/offline) =====
+  1720→  useEffect(() => {
+  1721→    const onOnline = () => setIsOnline(true);
+  1722→    const onOffline = () => setIsOnline(false);
+  1723→    // نُلّف setState بـ setTimeout لتجنّب تحذير set-state-in-effect
+  1724→    const t = setTimeout(() => setIsOnline(navigator.onLine), 0);
+  1725→    window.addEventListener('online', onOnline);
+  1726→    window.addEventListener('offline', onOffline);
+  1727→    return () => {
+  1728→      clearTimeout(t);
+  1729→      window.removeEventListener('online', onOnline);
+  1730→      window.removeEventListener('offline', onOffline);
+  1731→    };
+  1732→  }, []);
+  1733→
+  1734→  // ===== اختصارات لوحة المفاتيح أثناء الامتحان =====
+  1735→  useEffect(() => {
+  1736→    const handler = (e: KeyboardEvent) => {
+  1737→      // تجاهل إذا كان المستخدم يكتب في حقل نصي (إلا لمفاتيح التنقل الخاصة)
+  1738→      const target = e.target as HTMLElement;
+  1739→      const isTyping =
+  1740→        target.tagName === 'INPUT' ||
+  1741→        target.tagName === 'TEXTAREA' ||
+  1742→        target.isContentEditable;
+  1743→
+  1744→      // ArrowLeft / ArrowRight للتنقل بين الأسئلة (حتى أثناء الكتابة في textareas)
+  1745→      // في RTL: السهم الأيسر = التالي، السهم الأيمن = السابق
+  1746→      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  1747→        e.preventDefault();
+  1748→        goToQuestion(currentIdx + 1 < questions.length ? currentIdx + 1 : currentIdx);
+  1749→        return;
+  1750→      }
+  1751→      if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  1752→        e.preventDefault();
+  1753→        goToQuestion(currentIdx > 0 ? currentIdx - 1 : currentIdx);
+  1754→        return;
+  1755→      }
+  1756→
+  1757→      // اختصارات أخرى فقط إن لم يكن يكتب
+  1758→      if (isTyping) return;
+  1759→
+  1760→      // F: تعليم السؤال للمراجعة
+  1761→      if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) {
+  1762→        e.preventDefault();
+  1763→        toggleFlag(currentQuestion.id);
+  1764→        return;
+  1765→      }
+  1766→      // N: السؤال التالي غير المُجاب
+  1767→      if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey) {
+  1768→        e.preventDefault();
+  1769→        goToNextUnanswered();
+  1770→        return;
+  1771→      }
+  1772→      // ? : إظهار لوحة الاختصارات
+  1773→      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+  1774→        e.preventDefault();
+  1775→        setShowShortcutsPanel(s => !s);
+  1776→        return;
+  1777→      }
+  1778→      // Esc: إغلاق لوحة الاختصارات
+  1779→      if (e.key === 'Escape') {
+  1780→        setShowShortcutsPanel(false);
+  1781→        return;
+  1782→      }
+  1783→      // أرقام 1-9 للقفز للأسئلة
+  1784→      const num = parseInt(e.key, 10);
+  1785→      if (!isNaN(num) && num >= 1 && num <= 9 && !e.ctrlKey && !e.metaKey) {
+  1786→        const idx = num - 1;
+  1787→        if (idx < questions.length) {
+  1788→          e.preventDefault();
+  1789→          setCurrentIdx(idx);
+  1790→        }
+  1791→      }
+  1792→    };
+  1793→    window.addEventListener('keydown', handler);
+  1794→    return () => window.removeEventListener('keydown', handler);
+  1795→  }, [currentIdx, questions.length, currentQuestion.id, toggleFlag, goToNextUnanswered]);
+  1796→
+  1797→  // تلميح الاختصارات عند أول دخول (يظهر مرة واحدة)
+  1798→  useEffect(() => {
+  1799→    const seen = sessionStorage.getItem('exam-shortcuts-hint-seen');
+  1800→    if (!seen) {
+  1801→      const t = setTimeout(() => setShowShortcutsHint(true), 2000);
+  1802→      return () => clearTimeout(t);
+  1803→    }
+  1804→  }, []);
+  1805→  const dismissShortcutsHint = useCallback(() => {
+  1806→    setShowShortcutsHint(false);
+  1807→    sessionStorage.setItem('exam-shortcuts-hint-seen', '1');
+  1808→  }, []);
+  1809→
+  1810→  const timeWarning = remainingSeconds <= 60;
+  1811→  const timeCritical = remainingSeconds <= 30;
+  1812→
+  1813→  return (
+  1814→    <div className="space-y-4">
+  1815→      {/* ====== تنبيه عدم الاتصال ====== */}
+  1816→      {!isOnline && (
+  1817→        <Alert variant="destructive" className="border-amber-300 bg-amber-50 text-amber-900">
+  1818→          <WifiOff className="w-4 h-4" />
+  1819→          <AlertTitle>لا يوجد اتصال بالإنترنت</AlertTitle>
+  1820→          <AlertDescription>
+  1821→            تقدّمك يُحفظ محلياً وسيُزامَن تلقائياً عند عودة الاتصال. لا تغلق الصفحة.
+  1822→          </AlertDescription>
+  1823→        </Alert>
+  1824→      )}
+  1825→
+  1826→      {/* شريط المعلومات العلوي */}
+  1827→      <div className="sticky top-[57px] z-30 bg-white rounded-xl shadow-sm border p-3">
+  1828→        <div className="flex items-center justify-between gap-3 flex-wrap">
+  1829→          <div className="flex items-center gap-3 min-w-0">
+  1830→            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono font-bold text-lg ${
+  1831→              timeCritical ? 'bg-red-100 text-red-700 animate-pulse' :
+  1832→              timeWarning ? 'bg-amber-100 text-amber-700' :
+  1833→              'bg-gray-100 text-gray-700'
+  1834→            }`}>
+  1835→              <Clock className="w-4 h-4" />
+  1836→              {formatTime(remainingSeconds)}
+  1837→            </div>
+  1838→            <div className="text-xs text-gray-500 hidden sm:block">
+  1839→              <span className="font-medium text-gray-700">{totalAnswered}</span> / {questions.length} سؤال
+  1840→              {flaggedCount > 0 && (
+  1841→                <span className="mr-2 text-amber-600 flex items-center gap-0.5">
+  1842→                  <Bookmark className="w-3 h-3 inline" /> {flaggedCount} للمراجعة
+  1843→                </span>
+  1844→              )}
+  1845→            </div>
+  1846→            {/* مؤشر الاتصال */}
+  1847→            <div className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${
+  1848→              isOnline ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50'
+  1849→            }`} title={isOnline ? 'متصل' : 'غير متصل'}>
+  1850→              {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+  1851→              <span className="hidden md:inline">{isOnline ? 'متصل' : 'غير متصل'}</span>
+  1852→            </div>
+  1853→          </div>
+  1854→          <div className="flex items-center gap-2">
+  1855→            <Button
+  1856→              size="sm"
+  1857→              variant="ghost"
+  1858→              onClick={() => setShowShortcutsPanel(s => !s)}
+  1859→              title="اختصارات لوحة المفاتيح (?)"
+  1860→              className="text-gray-500 hover:text-gray-700"
+  1861→            >
+  1862→              <Keyboard className="w-4 h-4" />
+  1863→            </Button>
+  1864→            {violationCount > 0 && (
+  1865→              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+  1866→                <AlertTriangle className="w-3 h-3 ml-1" /> {violationCount} انتهاك
+  1867→              </Badge>
+  1868→            )}
+  1869→            <Button
+  1870→              size="sm"
+  1871→              onClick={() => setShowSubmitDialog(true)}
+  1872→              className="bg-green-700 hover:bg-green-800 text-white"
+  1873→            >
+  1874→              <Send className="w-4 h-4 ml-1" /> تسليم
+  1875→            </Button>
+  1876→          </div>
+  1877→        </div>
+  1878→        <Progress value={progress} className="h-1.5 mt-2" />
+  1879→      </div>
+  1880→
+  1881→      {/* ====== تلميح اختصارات لوحة المفاتيح ====== */}
+  1882→      {showShortcutsHint && !showShortcutsPanel && (
+  1883→        <div className="bg-[#610000] text-white rounded-xl p-3 flex items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-top-2">
+  1884→          <div className="flex items-center gap-2 text-sm">
+  1885→            <Keyboard className="w-4 h-4 flex-shrink-0" />
+  1886→            <span>تعلّم اختصارات لوحة المفاتيح لتسريع الامتحان! اضغط <kbd className="bg-white/20 px-1.5 py-0.5 rounded text-xs">؟</kbd></span>
+  1887→          </div>
+  1888→          <div className="flex items-center gap-2">
+  1889→            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 h-7" onClick={() => { setShowShortcutsPanel(true); dismissShortcutsHint(); }}>
+  1890→              عرض
+  1891→            </Button>
+  1892→            <Button size="sm" variant="ghost" className="text-white/70 hover:bg-white/20 hover:text-white h-7 px-2" onClick={dismissShortcutsHint}>
+  1893→              <XCircle className="w-4 h-4" />
+  1894→            </Button>
+  1895→          </div>
+  1896→        </div>
+  1897→      )}
+  1898→
+  1899→      {/* ====== لوحة اختصارات لوحة المفاتيح ====== */}
+  1900→      {showShortcutsPanel && (
+  1901→        <Card className="border-[#610000]/20 shadow-sm">
+  1902→          <CardHeader className="pb-2">
+  1903→            <div className="flex items-center justify-between">
+  1904→              <CardTitle className="text-sm flex items-center gap-2">
+  1905→                <Keyboard className="w-4 h-4 text-[#610000]" />
+  1906→                اختصارات لوحة المفاتيح
+  1907→              </CardTitle>
+  1908→              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowShortcutsPanel(false)}>
+  1909→                <XCircle className="w-4 h-4" />
+  1910→              </Button>
+  1911→            </div>
+  1912→          </CardHeader>
+  1913→          <CardContent className="pt-0">
+  1914→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+  1915→              <ShortcutRow keys={['→']} label="السؤال التالي" />
+  1916→              <ShortcutRow keys={['←']} label="السؤال السابق" />
+  1917→              <ShortcutRow keys={['F']} label="تعليم للمراجعة" />
+  1918→              <ShortcutRow keys={['N']} label="التالي غير المُجاب" />
+  1919→              <ShortcutRow keys={['1-9']} label="قفز لسؤال" />
+  1920→              <ShortcutRow keys={['؟']} label="إظهار/إخفاء اللوحة" />
+  1921→            </div>
+  1922→          </CardContent>
+  1923→        </Card>
+  1924→      )}
+  1925→
+  1926→      {/* تنبيه الإغلاق التلقائي */}
+  1927→      {autoCloseWarning && (
+  1928→        <Alert variant="destructive">
+  1929→          <Timer className="w-4 h-4" />
+  1930→          <AlertTitle>انتهى الوقت!</AlertTitle>
+  1931→          <AlertDescription>يتم تسليم محاولتك تلقائياً...</AlertDescription>
+  1932→        </Alert>
+  1933→      )}
+  1934→
+  1935→      <div className="grid lg:grid-cols-[1fr_240px] gap-4">
+  1936→        {/* منطقة السؤال */}
+  1937→        <Card className="shadow-sm border-0">
+  1938→          <CardHeader className="pb-3 border-b">
+  1939→            <div className="flex items-center justify-between gap-2">
+  1940→              <div className="flex items-center gap-2 flex-wrap">
+  1941→                <Badge variant="outline" className="bg-[#610000]/5 text-[#610000]">
+  1942→                  سؤال {currentIdx + 1} / {questions.length}
+  1943→                </Badge>
+  1944→                <Badge variant="secondary" className="text-xs">
+  1945→                  {QUESTION_TYPE_LABELS[currentQuestion.type] || currentQuestion.type}
+  1946→                </Badge>
+  1947→                <Badge variant="outline" className="text-xs">
+  1948→                  {currentQuestion.points} درجة
+  1949→                </Badge>
+  1950→                {isFlagged(currentQuestion.id) && (
+  1951→                  <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">
+  1952→                    <BookmarkCheck className="w-3 h-3 ml-1" /> للمراجعة
+  1953→                  </Badge>
+  1954→                )}
+  1955→              </div>
+  1956→              <div className="flex items-center gap-2">
+  1957→                {saveStatus[currentQuestion.id] === 'saving' && (
+  1958→                  <span className="text-xs text-gray-500 flex items-center gap-1">
+  1959→                    <Loader2 className="w-3 h-3 animate-spin" /> يحفظ...
+  1960→                  </span>
+  1961→                )}
+  1962→                {saveStatus[currentQuestion.id] === 'saved' && (
+  1963→                  <span className="text-xs text-green-600 flex items-center gap-1">
+  1964→                    <CheckCircle2 className="w-3 h-3" /> حُفظ
+  1965→                  </span>
+  1966→                )}
+  1967→                {saveStatus[currentQuestion.id] === 'error' && (
+  1968→                  <span className="text-xs text-red-600 flex items-center gap-1">
+  1969→                    <XCircle className="w-3 h-3" /> فشل الحفظ
+  1970→                  </span>
+  1971→                )}
+  1972→                <Button
+  1973→                  size="sm"
+  1974→                  variant="ghost"
+  1975→                  onClick={() => toggleFlag(currentQuestion.id)}
+  1976→                  title="تعليم للمراجعة (F)"
+  1977→                  className={`h-7 px-2 ${isFlagged(currentQuestion.id) ? 'text-amber-600' : 'text-gray-400 hover:text-amber-600'}`}
+  1978→                >
+  1979→                  {isFlagged(currentQuestion.id) ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+  1980→                </Button>
+  1981→              </div>
+  1982→            </div>
+  1983→          </CardHeader>
+  1984→          <CardContent className="pt-5">
+  1985→            <div className="prose prose-sm max-w-none mb-5">
+  1986→              <p className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
+  1987→                {currentQuestion.text}
+  1988→              </p>
+  1989→            </div>
+  1990→
+  1991→            {/* عرض المرفق إن وُجد */}
+  1992→            {currentQuestion.hasAttachment && currentQuestion.attachmentUrl && (
+  1993→              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+  1994→                <a
+  1995→                  href={currentQuestion.attachmentUrl}
+  1996→                  target="_blank"
+  1997→                  rel="noopener noreferrer"
+  1998→                  className="flex items-center gap-2 text-sm text-blue-700 hover:underline"
+  1999→                >
+  2000→                  <FileText className="w-4 h-4" />
+
+[showing lines 1-2000 of 3036; use offset=2001 with limit to continue reading]

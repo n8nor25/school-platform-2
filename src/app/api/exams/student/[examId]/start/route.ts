@@ -58,14 +58,53 @@ export async function POST(
   // Existing submissions
   const existing = await db.submission.findMany({
     where: { examId, studentId: student.studentId },
-    select: { id: true, status: true, attemptNumber: true },
+    select: { id: true, status: true, attemptNumber: true, startedAt: true },
     orderBy: { attemptNumber: 'desc' },
   });
+
+  // ===== بناء كائن الأسئلة الآمن (بدون كشف الإجابات الصحيحة) =====
+  const buildSafeQuestions = (ordered: typeof exam.questions) => ordered.map((q, idx) => ({
+    id: q.id,
+    type: q.type,
+    text: q.text,
+    options: q.options ? JSON.parse(q.options) : null,
+    points: q.points,
+    order: idx + 1,
+    attachmentUrl: q.attachmentUrl || null,
+  }));
+
+  // ===== بناء كائن بيانات الامتحان للواجهة =====
+  const examInfo = {
+    id: exam.id,
+    title: exam.title,
+    durationMinutes: exam.durationMinutes,
+    totalPoints: exam.totalPoints,
+    allowTextAnswers: exam.allowTextAnswers,
+    allowImageAnswers: exam.allowImageAnswers,
+    allowPdfAnswers: exam.allowPdfAnswers,
+    antiCheatEnabled: exam.antiCheatEnabled,
+    showResultImmediately: exam.showResultImmediately,
+  };
 
   const inProgress = existing.find(s => s.status === 'IN_PROGRESS');
   if (inProgress) {
     // Resume: return existing submission with questions
-    return successResponse({ submissionId: inProgress.id, resumed: true, attemptNumber: inProgress.attemptNumber });
+    return successResponse({
+      submissionId: inProgress.id,
+      resumed: true,
+      attemptNumber: inProgress.attemptNumber,
+      durationMinutes: exam.durationMinutes,
+      questionsCount: exam.questions.length,
+      shuffled: exam.shuffleQuestions,
+      questions: buildSafeQuestions(
+        exam.shuffleQuestions ? shuffleArray(exam.questions) : exam.questions
+      ),
+      exam: examInfo,
+      submission: {
+        id: inProgress.id,
+        remainingSeconds: Math.max(0, Math.floor((inProgress.startedAt.getTime() + exam.durationMinutes * 60000 - Date.now()) / 1000)),
+      },
+    });
   }
 
   const completedAttempts = existing.length;
@@ -95,16 +134,11 @@ export async function POST(
 
   // Create answer rows
   await db.answer.createMany({
-    data: orderedQuestions.map((q, idx) => ({
+    data: orderedQuestions.map((q) => ({
       schoolId: student.schoolId,
       submissionId: submission.id,
       questionId: q.id,
       maxScore: q.points,
-      // store shuffled order in a stable way: we can't add a column,
-      // so we use the existing `question.order` (original) and rely on
-      // the answers being returned in submission view ordered by question.order.
-      // To preserve shuffle per-attempt, we rely on client-side reorder using
-      // the order returned by this API (idx below).
     })),
   });
 
@@ -115,5 +149,11 @@ export async function POST(
     durationMinutes: exam.durationMinutes,
     questionsCount: orderedQuestions.length,
     shuffled: exam.shuffleQuestions,
+    questions: buildSafeQuestions(orderedQuestions),
+    exam: examInfo,
+    submission: {
+      id: submission.id,
+      remainingSeconds: exam.durationMinutes * 60,
+    },
   });
 }

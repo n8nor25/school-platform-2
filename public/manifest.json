@@ -1,29 +1,79 @@
 {
-  "name": "منصة المدرسة",
-  "short_name": "المدرسة",
-  "description": "منصة تعليمية شاملة لإدارة المدارس - أخبار، نتائج، خدمات إلكترونية",
+  "name": "منصة المدرسة الإلكترونية",
+  "short_name": "منصة المدرسة",
+  "description": "منصة تعليمية شاملة لإدارة المدارس — أخبار، نتائج، امتحانات إلكترونية، وخدمات تفاعلية لأولياء الأمور والمعلمين والطلاب",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#ffffff",
   "theme_color": "#610000",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "dir": "rtl",
   "lang": "ar",
-  "categories": ["education", "productivity"],
+  "categories": ["education", "productivity", "school"],
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "امتحانات الطالب",
+      "short_name": "الامتحانات",
+      "description": "الامتحانات الإلكترونية للطلاب",
+      "url": "/?action=exams",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "بوابة أولياء الأمور",
+      "short_name": "أولياء الأمور",
+      "description": "متابعة أداء الأبناء والنتائج",
+      "url": "/?action=parents",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "نتائج الطلاب",
+      "short_name": "النتائج",
+      "description": "الاستعلام عن نتائج الطلاب",
+      "url": "/?action=results",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "واجهة المعلم",
+      "short_name": "المعلم",
+      "description": "إدارة الامتحانات الإلكترونية للمعلمين",
+      "url": "/?action=teacher",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "لوحة المنسّق",
+      "short_name": "المنسّق",
+      "description": "إدارة كل امتحانات المدرسة والإشراف عليها",
+      "url": "/?action=coordinator",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "prefer_related_applications": false
 }

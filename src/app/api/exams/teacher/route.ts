@@ -59,6 +59,10 @@ export async function GET(request: NextRequest) {
           passingScore: true,
           maxAttempts: true,
           passwordHash: true,
+          category: true,
+          examPeriod: true,
+          showAnswersAfter: true,
+          allowRetakes: true,
           _count: {
             select: { questions: true, submissions: true },
           },
@@ -81,6 +85,10 @@ export async function GET(request: NextRequest) {
       passingScore: e.passingScore,
       maxAttempts: e.maxAttempts,
       hasPassword: !!e.passwordHash,
+      category: e.category,
+      examPeriod: e.examPeriod,
+      showAnswersAfter: e.showAnswersAfter,
+      allowRetakes: e.allowRetakes,
       timeStatus:
         now < e.startDate ? 'UPCOMING' : now > e.endDate ? 'ENDED' : 'OPEN',
       submissionsCount: e._count.submissions,
@@ -147,6 +155,11 @@ export async function POST(request: NextRequest) {
       antiCheatEnabled?: boolean;
       ipRestriction?: string;
       passingScore?: number;
+      // ===== امتحانات تدريبية (Oracle Academy style) =====
+      category?: string;      // 'TRAINING' | 'OFFICIAL'
+      examPeriod?: string;    // 'NONE' | 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE'
+      showAnswersAfter?: boolean;
+      allowRetakes?: boolean;
       questions?: Array<{
         type: string;
         text: string;
@@ -214,6 +227,20 @@ export async function POST(request: NextRequest) {
     const titleClean = body.title.trim().slice(0, 200);
     const descClean = (body.description || '').trim().slice(0, 2000);
 
+    // ===== معالجة فئة الامتحان (تدريبي vs رسمي) =====
+    const category = (body.category === 'TRAINING') ? 'TRAINING' : 'OFFICIAL' as 'TRAINING' | 'OFFICIAL';
+    const validPeriods = ['NONE', 'WEEKLY', 'MIDMONTH', 'MONTHLY', 'CUMULATIVE'] as const;
+    const examPeriod = (body.examPeriod && validPeriods.includes(body.examPeriod as typeof validPeriods[number]))
+      ? body.examPeriod as typeof validPeriods[number]
+      : 'NONE';
+    const isTraining = category === 'TRAINING';
+    // للتدريبي: تصحيح فوري + يعرض الإجابات + يسمح بإعادة المحاولة (إذا فعّل المعلم)
+    const showResultImmediately = isTraining ? true : (body.showResultImmediately ?? false);
+    const showAnswersAfter = isTraining ? (body.showAnswersAfter ?? true) : false;
+    const allowRetakes = isTraining ? (body.allowRetakes ?? true) : false;
+    // للتدريبي مع إعادة المحاولة: maxAttempts = 99 (شبه غير محدود)
+    const maxAttempts = allowRetakes ? 99 : Math.min(10, Math.max(1, body.maxAttempts ?? 1));
+
     // إنشاء الامتحان (DRAFT)
     const exam = await db.exam.create({
       data: {
@@ -228,13 +255,13 @@ export async function POST(request: NextRequest) {
         startDate,
         endDate,
         durationMinutes: Math.min(600, body.durationMinutes),
-        passwordHash,
+        passwordHash: isTraining ? null : passwordHash, // التدريبي بدون كلمة سر
         shuffleQuestions: body.shuffleQuestions ?? false,
         shuffleOptions: body.shuffleOptions ?? false,
         allowReview: body.allowReview ?? true,
-        showResultImmediately: body.showResultImmediately ?? false,
+        showResultImmediately,
         parentVisible: body.parentVisible ?? false,
-        maxAttempts: Math.min(10, Math.max(1, body.maxAttempts ?? 1)),
+        maxAttempts,
         maxFileSizeMb: Math.min(20, Math.max(1, body.maxFileSizeMb ?? 5)),
         allowTextAnswers: body.allowTextAnswers ?? true,
         allowImageAnswers: body.allowImageAnswers ?? true,
@@ -244,6 +271,11 @@ export async function POST(request: NextRequest) {
         passingScore: body.passingScore ?? null,
         status: 'DRAFT',
         totalPoints: 0,
+        // ===== الحقول الجديدة =====
+        category,
+        examPeriod,
+        showAnswersAfter,
+        allowRetakes,
       },
     });
 

@@ -64,11 +64,22 @@ export async function extractStudentContext(
 
   // Accept test- prefix or any studentId that exists in Student table or has submissions
   let resolvedName = studentName;
+  let resolvedStudentId = studentId;
   if (!studentId.startsWith('test-')) {
-    const student = await db.student.findUnique({
+    // أولاً: ابحث بالـ id المباشر
+    let student = await db.student.findUnique({
       where: { id: studentId },
       select: { id: true, name: true, schoolId: true },
     }).catch(() => null);
+
+    // ثانياً: إذا لم يُوجد، ابحث بـ studentNumber (أكثر ملاءمة للطالب)
+    if (!student) {
+      student = await db.student.findFirst({
+        where: { studentNumber: studentId, schoolId },
+        select: { id: true, name: true, schoolId: true },
+      }).catch(() => null);
+      if (student) resolvedStudentId = student.id;
+    }
 
     if (!student) {
       // Check if there are existing submissions for this studentId (allow legacy)
@@ -101,7 +112,7 @@ export async function extractStudentContext(
   return {
     student: {
       schoolId,
-      studentId,
+      studentId: resolvedStudentId,
       studentName: resolvedName,
     },
   };
@@ -211,6 +222,7 @@ export async function buildStudentSubmissionView(submissionId: string, studentId
           id: true, title: true, subject: true, description: true,
           teacherName: true, durationMinutes: true, showResultImmediately: true,
           allowReview: true, totalPoints: true, passingScore: true, status: true,
+          category: true, showAnswersAfter: true, allowRetakes: true, examPeriod: true,
         },
       },
       answers: {
@@ -232,7 +244,8 @@ export async function buildStudentSubmissionView(submissionId: string, studentId
   if (submission.studentId !== studentId) return { forbidden: true } as const;
 
   const submitted = submission.status !== 'IN_PROGRESS';
-  const revealResults = submitted && submission.exam.showResultImmediately;
+  // اكشف النتائج/الإجابات إذا: showResultImmediately (رسمي) أو showAnswersAfter (تدريبي)
+  const revealResults = submitted && (submission.exam.showResultImmediately || submission.exam.showAnswersAfter);
 
   return {
     id: submission.id,
