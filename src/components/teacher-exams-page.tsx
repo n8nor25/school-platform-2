@@ -6,6 +6,7 @@ import {
   ClipboardCheck, Clock, Award, Eye, AlertTriangle, Sparkles,
   CalendarDays, GraduationCap, CheckCircle2, XCircle, HelpCircle,
   ShieldCheck, Lock, BookOpen, Trophy, BarChart3,
+  Plus, Trash2, Loader2, Save, Send, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -143,6 +146,81 @@ interface SubmissionsResponse {
   totalPages: number;
   stats: SubmissionsStats;
   submissions: unknown[];
+}
+
+// ===== Create Exam types =====
+type QuestionType = 'MCQ' | 'TRUE_FALSE' | 'SHORT' | 'ESSAY';
+
+interface DraftQuestion {
+  id: string;
+  type: QuestionType;
+  text: string;
+  options: string[];
+  correctAnswer: string;
+  correctText: string;
+  rubric: string;
+  points: number;
+  explanation: string;
+}
+
+interface CreateExamForm {
+  title: string;
+  subject: string;
+  description: string;
+  classroomName: string;
+  startDate: string;
+  endDate: string;
+  durationMinutes: number;
+  passingScore: number;
+  password: string;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  allowReview: boolean;
+  showResultImmediately: boolean;
+  parentVisible: boolean;
+  antiCheatEnabled: boolean;
+  questions: DraftQuestion[];
+}
+
+const ARABIC_OPTION_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح'];
+
+function optionLetter(i: number): string {
+  return ARABIC_OPTION_LETTERS[i] || String(i + 1);
+}
+
+function makeEmptyQuestion(index: number): DraftQuestion {
+  return {
+    id: `q-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+    type: 'MCQ',
+    text: '',
+    options: ['', '', '', ''],
+    correctAnswer: '',
+    correctText: '',
+    rubric: '',
+    points: 1,
+    explanation: '',
+  };
+}
+
+function makeEmptyCreateForm(): CreateExamForm {
+  return {
+    title: '',
+    subject: '',
+    description: '',
+    classroomName: '',
+    startDate: '',
+    endDate: '',
+    durationMinutes: 60,
+    passingScore: 50,
+    password: '',
+    shuffleQuestions: false,
+    shuffleOptions: false,
+    allowReview: true,
+    showResultImmediately: false,
+    parentVisible: false,
+    antiCheatEnabled: true,
+    questions: [],
+  };
 }
 
 // ===== Helpers =====
@@ -292,6 +370,12 @@ export default function TeacherExamsPage({
   const [detailExam, setDetailExam] = useState<ExamDetail | null>(null);
   const [submissionsStats, setSubmissionsStats] = useState<SubmissionsStats | null>(null);
 
+  // Create dialog state
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateExamForm>(makeEmptyCreateForm());
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
+
   // Mounted ref (prevent setState after unmount)
   const mountedRef = useRef(true);
 
@@ -426,6 +510,241 @@ export default function TeacherExamsPage({
     }
   }, [schoolId, teacherId]);
 
+  // ===== Create exam handlers =====
+  const updateCreateField = useCallback((patch: Partial<CreateExamForm>) => {
+    setCreateForm((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const addQuestion = useCallback(() => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: [...prev.questions, makeEmptyQuestion(prev.questions.length)],
+    }));
+  }, []);
+
+  const updateQuestion = useCallback((qid: string, patch: Partial<DraftQuestion>) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)),
+    }));
+  }, []);
+
+  const removeQuestion = useCallback((qid: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.filter((q) => q.id !== qid),
+    }));
+  }, []);
+
+  const addOption = useCallback((qid: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid || q.options.length >= 8) return q;
+        return { ...q, options: [...q.options, ''] };
+      }),
+    }));
+  }, []);
+
+  const updateOption = useCallback((qid: string, optIndex: number, value: string) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid) return q;
+        const newOptions = [...q.options];
+        newOptions[optIndex] = value;
+        let newCorrect = q.correctAnswer;
+        if (q.correctAnswer === q.options[optIndex]) {
+          newCorrect = value;
+        }
+        return { ...q, options: newOptions, correctAnswer: newCorrect };
+      }),
+    }));
+  }, []);
+
+  const removeOption = useCallback((qid: string, optIndex: number) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q) => {
+        if (q.id !== qid || q.options.length <= 2) return q;
+        const removedValue = q.options[optIndex];
+        const newOptions = q.options.filter((_, i) => i !== optIndex);
+        let newCorrect = q.correctAnswer;
+        if (q.correctAnswer === removedValue) newCorrect = '';
+        return { ...q, options: newOptions, correctAnswer: newCorrect };
+      }),
+    }));
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setCreateForm(makeEmptyCreateForm());
+    setCreateErrors({});
+  }, []);
+
+  const validateCreateForm = useCallback((): {
+    ok: boolean;
+    errors: Record<string, string>;
+    message?: string;
+  } => {
+    const errors: Record<string, string> = {};
+    const f = createForm;
+    let message: string | undefined;
+
+    if (!f.title.trim()) errors.title = 'عنوان الامتحان مطلوب';
+    if (!f.subject.trim()) errors.subject = 'المادة مطلوبة';
+
+    if (!f.startDate) errors.startDate = 'وقت الفتح مطلوب';
+    if (!f.endDate) errors.endDate = 'وقت الإغلاق مطلوب';
+    if (f.startDate && f.endDate) {
+      const s = new Date(f.startDate);
+      const e = new Date(f.endDate);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s >= e) {
+        errors.endDate = 'وقت الإغلاق يجب أن يكون بعد وقت الفتح';
+      }
+    }
+
+    if (!f.durationMinutes || f.durationMinutes < 1) {
+      errors.durationMinutes = 'المدة يجب أن تكون دقيقة على الأقل';
+    }
+
+    for (let i = 0; i < f.questions.length; i++) {
+      const q = f.questions[i];
+      const key = `q-${q.id}`;
+      if (!q.text.trim()) {
+        errors[key] = 'نص السؤال مطلوب';
+        if (!message) message = `السؤال ${i + 1}: نص السؤال مطلوب`;
+        continue;
+      }
+      if (q.type === 'MCQ') {
+        const nonEmpty = q.options.filter((o) => o.trim().length > 0);
+        if (nonEmpty.length < 2) {
+          errors[key] = 'يتطلب خيارين على الأقل';
+          if (!message) message = `السؤال ${i + 1}: يتطلب خيارين على الأقل`;
+        } else if (!q.correctAnswer) {
+          errors[key] = 'حدد الإجابة الصحيحة';
+          if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+        }
+      }
+      if (q.type === 'TRUE_FALSE' && !q.correctAnswer) {
+        errors[key] = 'حدد الإجابة الصحيحة';
+        if (!message) message = `السؤال ${i + 1}: حدد الإجابة الصحيحة`;
+      }
+      if (q.points < 0 || q.points > 100) {
+        errors[key] = 'الدرجة بين 0 و 100';
+        if (!message) message = `السؤال ${i + 1}: الدرجة يجب أن تكون بين 0 و 100`;
+      }
+    }
+
+    return { ok: Object.keys(errors).length === 0, errors, message };
+  }, [createForm]);
+
+  const submitCreate = useCallback(
+    async (publish: boolean) => {
+      const validation = validateCreateForm();
+      if (!validation.ok) {
+        setCreateErrors(validation.errors);
+        toast.error(validation.message || 'يرجى تصحيح الأخطاء في النموذج');
+        return;
+      }
+
+      setCreateErrors({});
+      setCreateSubmitting(true);
+
+      try {
+        const f = createForm;
+        const body: Record<string, unknown> = {
+          title: f.title.trim(),
+          subject: f.subject.trim(),
+          startDate: new Date(f.startDate).toISOString(),
+          endDate: new Date(f.endDate).toISOString(),
+          durationMinutes: f.durationMinutes,
+          shuffleQuestions: f.shuffleQuestions,
+          shuffleOptions: f.shuffleOptions,
+          allowReview: f.allowReview,
+          showResultImmediately: f.showResultImmediately,
+          parentVisible: f.parentVisible,
+          antiCheatEnabled: f.antiCheatEnabled,
+          passingScore: f.passingScore,
+        };
+        if (f.description.trim()) body.description = f.description.trim();
+        if (f.classroomName.trim()) body.classroomName = f.classroomName.trim();
+        if (f.password.trim()) body.password = f.password.trim();
+
+        const questions = f.questions.map((q, i) => {
+          const out: Record<string, unknown> = {
+            type: q.type,
+            text: q.text.trim(),
+            points: q.points,
+            order: i + 1,
+          };
+          if (q.type === 'MCQ') {
+            out.options = q.options.map((o) => o.trim()).filter((o) => o.length > 0);
+            out.correctAnswer = q.correctAnswer;
+          } else if (q.type === 'TRUE_FALSE') {
+            out.correctAnswer = q.correctAnswer;
+          } else if (q.type === 'SHORT') {
+            if (q.correctText.trim()) out.correctText = q.correctText.trim();
+          } else if (q.type === 'ESSAY') {
+            if (q.rubric.trim()) out.rubric = { text: q.rubric.trim() };
+          }
+          if (q.explanation.trim()) out.explanation = q.explanation.trim();
+          return out;
+        });
+        if (questions.length > 0) body.questions = questions;
+
+        const params = new URLSearchParams();
+        params.set('schoolId', schoolId);
+        params.set('teacherId', teacherId);
+
+        const res = await fetch(`/api/exams/teacher?${params.toString()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || 'فشل إنشاء الامتحان');
+        }
+
+        const newExamId: string | undefined = data?.examId;
+
+        if (publish && newExamId) {
+          try {
+            const pubRes = await fetch(
+              `/api/exams/teacher/${newExamId}/publish?${params.toString()}`,
+              { method: 'POST' }
+            );
+            const pubData = await pubRes.json();
+            if (!pubRes.ok) {
+              toast.warning(
+                `تم حفظ الامتحان كمسودة، لكن فشل النشر: ${pubData?.error || 'خطأ غير معروف'}`
+              );
+            } else {
+              toast.success('تم إنشاء الامتحان ونشره بنجاح');
+            }
+          } catch (pubErr) {
+            const msg = pubErr instanceof Error ? pubErr.message : 'فشل النشر';
+            toast.warning(`تم حفظ الامتحان كمسودة، لكن فشل النشر: ${msg}`);
+          }
+        } else {
+          toast.success('تم حفظ الامتحان كمسودة');
+        }
+
+        if (mountedRef.current) {
+          setShowCreateDialog(false);
+          resetCreateForm();
+        }
+        fetchExams(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'فشل إنشاء الامتحان';
+        toast.error(msg);
+      } finally {
+        if (mountedRef.current) setCreateSubmitting(false);
+      }
+    },
+    [createForm, validateCreateForm, schoolId, teacherId, fetchExams, resetCreateForm]
+  );
+
   // ===== Compute KPIs =====
   const kpis = {
     total: exams.length,
@@ -460,16 +779,26 @@ export default function TeacherExamsPage({
                 <p className="text-violet-200 text-xs truncate">{teacherName}</p>
               </div>
             </div>
-            <Button
-              onClick={() => fetchExams(false)}
-              variant="outline"
-              size="sm"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">تحديث</span>
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                size="sm"
+                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-lg"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">إنشاء امتحان جديد</span>
+              </Button>
+              <Button
+                onClick={() => fetchExams(false)}
+                variant="outline"
+                size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">تحديث</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -1005,6 +1334,333 @@ export default function TeacherExamsPage({
         </DialogContent>
       </Dialog>
 
+      {/* Create Exam Dialog */}
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(v) => {
+          if (!createSubmitting) {
+            setShowCreateDialog(v);
+            if (!v) resetCreateForm();
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0"
+          onPointerDownOutside={(e) => {
+            if (createSubmitting) e.preventDefault();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (createSubmitting) e.preventDefault();
+          }}
+        >
+          <DialogHeader className="p-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+            <DialogTitle className="text-xl font-bold text-[#2A374E] dark:text-white flex items-center gap-2">
+              <Plus className="w-5 h-5 text-violet-600" />
+              إنشاء امتحان جديد
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              املأ بيانات الامتحان الأساسية، ثم أضف الأسئلة. يمكنك الحفظ كمسودة أو النشر مباشرةً.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Scrollable form body */}
+          <div className="flex-1 overflow-y-auto p-6 teacher-exams-scroll">
+            <div className="space-y-6">
+              {/* Section 1: Basic exam data */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+                    بيانات الامتحان الأساسية
+                  </h3>
+                </div>
+
+                {/* Title */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-title" className="text-sm font-medium">
+                    عنوان الامتحان <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="ce-title"
+                    value={createForm.title}
+                    onChange={(e) => updateCreateField({ title: e.target.value })}
+                    placeholder="مثال: امتحان الفصل الأول - الرياضيات"
+                    className={createErrors.title ? 'border-rose-400' : ''}
+                  />
+                  {createErrors.title && (
+                    <p className="text-xs text-rose-500">{createErrors.title}</p>
+                  )}
+                </div>
+
+                {/* Subject + Classroom */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-subject" className="text-sm font-medium">
+                      المادة <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-subject"
+                      value={createForm.subject}
+                      onChange={(e) => updateCreateField({ subject: e.target.value })}
+                      placeholder="مثال: الرياضيات"
+                      className={createErrors.subject ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.subject && (
+                      <p className="text-xs text-rose-500">{createErrors.subject}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-classroom" className="text-sm font-medium">
+                      الفصل المستهدف
+                    </Label>
+                    <Input
+                      id="ce-classroom"
+                      value={createForm.classroomName}
+                      onChange={(e) => updateCreateField({ classroomName: e.target.value })}
+                      placeholder="مثال: الصف السادس - أ"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-desc" className="text-sm font-medium">
+                    الوصف
+                  </Label>
+                  <Textarea
+                    id="ce-desc"
+                    value={createForm.description}
+                    onChange={(e) => updateCreateField({ description: e.target.value })}
+                    placeholder="وصف مختصر للامتحان (اختياري)"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Start + End dates */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-start" className="text-sm font-medium">
+                      وقت الفتح <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-start"
+                      type="datetime-local"
+                      value={createForm.startDate}
+                      onChange={(e) => updateCreateField({ startDate: e.target.value })}
+                      className={createErrors.startDate ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.startDate && (
+                      <p className="text-xs text-rose-500">{createErrors.startDate}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-end" className="text-sm font-medium">
+                      وقت الإغلاق <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-end"
+                      type="datetime-local"
+                      value={createForm.endDate}
+                      onChange={(e) => updateCreateField({ endDate: e.target.value })}
+                      className={createErrors.endDate ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.endDate && (
+                      <p className="text-xs text-rose-500">{createErrors.endDate}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Duration + Passing score */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-duration" className="text-sm font-medium">
+                      المدة بالدقائق <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-duration"
+                      type="number"
+                      min={1}
+                      value={createForm.durationMinutes}
+                      onChange={(e) =>
+                        updateCreateField({ durationMinutes: parseInt(e.target.value) || 0 })
+                      }
+                      className={createErrors.durationMinutes ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.durationMinutes && (
+                      <p className="text-xs text-rose-500">{createErrors.durationMinutes}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ce-passing" className="text-sm font-medium">
+                      درجة النجاح (%)
+                    </Label>
+                    <Input
+                      id="ce-passing"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={createForm.passingScore}
+                      onChange={(e) =>
+                        updateCreateField({ passingScore: parseInt(e.target.value) || 0 })
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-password" className="text-sm font-medium">
+                    كلمة سر الدخول (اختياري)
+                  </Label>
+                  <Input
+                    id="ce-password"
+                    type="text"
+                    value={createForm.password}
+                    onChange={(e) => updateCreateField({ password: e.target.value })}
+                    placeholder="اتركها فارغة لعدم الحماية (4 أحرف على الأقل)"
+                  />
+                </div>
+
+                {/* Settings toggles */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">الإعدادات</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <ToggleRow
+                      label="خلط الأسئلة"
+                      checked={createForm.shuffleQuestions}
+                      onCheckedChange={(v) => updateCreateField({ shuffleQuestions: v })}
+                    />
+                    <ToggleRow
+                      label="خلط الخيارات"
+                      checked={createForm.shuffleOptions}
+                      onCheckedChange={(v) => updateCreateField({ shuffleOptions: v })}
+                    />
+                    <ToggleRow
+                      label="السماح بالمراجعة"
+                      checked={createForm.allowReview}
+                      onCheckedChange={(v) => updateCreateField({ allowReview: v })}
+                    />
+                    <ToggleRow
+                      label="إظهار النتيجة فوراً"
+                      checked={createForm.showResultImmediately}
+                      onCheckedChange={(v) => updateCreateField({ showResultImmediately: v })}
+                    />
+                    <ToggleRow
+                      label="ظاهر لأولياء الأمور"
+                      checked={createForm.parentVisible}
+                      onCheckedChange={(v) => updateCreateField({ parentVisible: v })}
+                    />
+                    <ToggleRow
+                      label="مكافحة الغش"
+                      checked={createForm.antiCheatEnabled}
+                      onCheckedChange={(v) => updateCreateField({ antiCheatEnabled: v })}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 dark:border-gray-700" />
+
+              {/* Section 2: Questions */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-rose-500 flex items-center justify-center shrink-0">
+                      <ListChecks className="w-4 h-4 text-white" />
+                    </div>
+                    <h3 className="text-sm font-bold text-[#2A374E] dark:text-white">
+                      الأسئلة ({createForm.questions.length})
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={addQuestion}
+                    size="sm"
+                    variant="outline"
+                    className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                  >
+                    <Plus className="w-4 h-4" />
+                    إضافة سؤال
+                  </Button>
+                </div>
+
+                {createForm.questions.length === 0 ? (
+                  <div className="text-center py-8 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700">
+                    <HelpCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      يمكنك إضافة الأسئلة لاحقاً من تعديل الامتحان
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {createForm.questions.map((q, qIdx) => (
+                      <DraftQuestionCard
+                        key={q.id}
+                        question={q}
+                        index={qIdx}
+                        error={createErrors[`q-${q.id}`]}
+                        onChange={(patch) => updateQuestion(q.id, patch)}
+                        onRemove={() => removeQuestion(q.id)}
+                        onAddOption={() => addOption(q.id)}
+                        onUpdateOption={(oi, val) => updateOption(q.id, oi, val)}
+                        onRemoveOption={(oi) => removeOption(q.id, oi)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-gray-100 dark:border-gray-800 shrink-0 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => submitCreate(true)}
+              disabled={createSubmitting}
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-lg"
+            >
+              {createSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              نشر الامتحان
+            </Button>
+            <Button
+              type="button"
+              onClick={() => submitCreate(false)}
+              disabled={createSubmitting}
+              variant="outline"
+              className="border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            >
+              {createSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              حفظ المسودة
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!createSubmitting) {
+                  setShowCreateDialog(false);
+                  resetCreateForm();
+                }
+              }}
+              variant="ghost"
+              disabled={createSubmitting}
+            >
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Custom scrollbar styles (scoped via Tailwind class + global tag) */}
       <style jsx global>{`
         .teacher-exams-scroll {
@@ -1153,6 +1809,249 @@ function QuestionCard({ question, index }: { question: ExamQuestion; index: numb
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ===== Create Exam sub-components =====
+
+function ToggleRow({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+      <span className="text-xs text-gray-700 dark:text-gray-300">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function DraftQuestionCard({
+  question: q,
+  index,
+  error,
+  onChange,
+  onRemove,
+  onAddOption,
+  onUpdateOption,
+  onRemoveOption,
+}: {
+  question: DraftQuestion;
+  index: number;
+  error?: string;
+  onChange: (patch: Partial<DraftQuestion>) => void;
+  onRemove: () => void;
+  onAddOption: () => void;
+  onUpdateOption: (optIndex: number, value: string) => void;
+  onRemoveOption: (optIndex: number) => void;
+}) {
+  return (
+    <div
+      className={`rounded-lg border overflow-hidden ${
+        error
+          ? 'border-rose-300 dark:border-rose-700'
+          : 'border-gray-200 dark:border-gray-700'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+          <span className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {index + 1}
+          </span>
+          <Select
+            value={q.type}
+            onValueChange={(v) => onChange({ type: v as QuestionType })}
+          >
+            <SelectTrigger className="w-40 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MCQ">اختيار من متعدد</SelectItem>
+              <SelectItem value="TRUE_FALSE">صح / خطأ</SelectItem>
+              <SelectItem value="SHORT">إجابة قصيرة</SelectItem>
+              <SelectItem value="ESSAY">سؤال مقالي</SelectItem>
+            </SelectContent>
+          </Select>
+          {error && (
+            <span className="text-xs text-rose-500 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              {error}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={q.points}
+              onChange={(e) => onChange({ points: parseInt(e.target.value) || 0 })}
+              className="w-16 h-8 text-xs"
+            />
+            <span className="text-xs text-amber-600 dark:text-amber-400">نقطة</span>
+          </div>
+          <Button
+            type="button"
+            onClick={onRemove}
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-3 space-y-3">
+        {/* Question text */}
+        <Textarea
+          value={q.text}
+          onChange={(e) => onChange({ text: e.target.value })}
+          placeholder="نص السؤال..."
+          rows={2}
+          className={error && !q.text.trim() ? 'border-rose-400' : ''}
+        />
+
+        {/* MCQ options */}
+        {q.type === 'MCQ' && (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              الخيارات (اضغط على الحرف لتحديد الإجابة الصحيحة):
+            </p>
+            {q.options.map((opt, oi) => {
+              const isCorrect = !!q.correctAnswer && q.correctAnswer === opt && opt.trim().length > 0;
+              return (
+                <div key={oi} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onChange({ correctAnswer: opt })}
+                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                      isCorrect
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-emerald-400'
+                    }`}
+                    aria-label={`تحديد كإجابة صحيحة: ${optionLetter(oi)}`}
+                  >
+                    {isCorrect ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      optionLetter(oi)
+                    )}
+                  </button>
+                  <Input
+                    value={opt}
+                    onChange={(e) => onUpdateOption(oi, e.target.value)}
+                    placeholder={`الخيار ${optionLetter(oi)}`}
+                    className="flex-1 h-8 text-sm"
+                  />
+                  {q.options.length > 2 && (
+                    <Button
+                      type="button"
+                      onClick={() => onRemoveOption(oi)}
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-gray-400 hover:text-rose-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+            {q.options.length < 8 && (
+              <Button
+                type="button"
+                onClick={onAddOption}
+                size="sm"
+                variant="ghost"
+                className="text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 h-8"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                إضافة خيار
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* TRUE_FALSE */}
+        {q.type === 'TRUE_FALSE' && (
+          <div className="space-y-1.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400">الإجابة الصحيحة:</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onChange({ correctAnswer: 'true' })}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  q.correctAnswer === 'true'
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-400'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                صحيح
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ correctAnswer: 'false' })}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  q.correctAnswer === 'false'
+                    ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-500 text-rose-700 dark:text-rose-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-rose-400'
+                }`}
+              >
+                <XCircle className="w-4 h-4" />
+                خطأ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SHORT */}
+        {q.type === 'SHORT' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-500 dark:text-gray-400">الإجابة النموذجية</Label>
+            <Input
+              value={q.correctText}
+              onChange={(e) => onChange({ correctText: e.target.value })}
+              placeholder="الإجابة الصحيحة (اختياري)"
+              className="h-9 text-sm"
+            />
+          </div>
+        )}
+
+        {/* ESSAY */}
+        {q.type === 'ESSAY' && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-500 dark:text-gray-400">معايير التصحيح</Label>
+            <Textarea
+              value={q.rubric}
+              onChange={(e) => onChange({ rubric: e.target.value })}
+              placeholder="معايير تصحيح السؤال المقالي (اختياري)..."
+              rows={2}
+            />
+          </div>
+        )}
+
+        {/* Explanation */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-gray-500 dark:text-gray-400">تفسير الإجابة (اختياري)</Label>
+          <Textarea
+            value={q.explanation}
+            onChange={(e) => onChange({ explanation: e.target.value })}
+            placeholder="شرح يظهر للطالب بعد التصحيح..."
+            rows={2}
+          />
+        </div>
       </div>
     </div>
   );

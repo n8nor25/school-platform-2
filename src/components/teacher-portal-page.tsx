@@ -40,6 +40,30 @@ const TeacherGradingPage = dynamic(() => import('./teacher-grading-page'), {
   ),
 });
 
+// Dynamic import of the attendance page (avoid blocking initial bundle)
+const TeacherAttendancePage = dynamic(() => import('./teacher-attendance-page'), {
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">جارٍ التحميل...</p>
+      </div>
+    </div>
+  ),
+});
+
+// Dynamic import of the schedules page (avoid blocking initial bundle)
+const TeacherSchedulesPage = dynamic(() => import('./teacher-schedules-page'), {
+  loading: () => (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">جارٍ التحميل...</p>
+      </div>
+    </div>
+  ),
+});
+
 interface TeacherPortalPageProps {
   onBack: () => void;
   schoolId: string;
@@ -262,6 +286,8 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
   // Sub-page navigation
   const [showExamsPage, setShowExamsPage] = useState(false);
   const [showGradingPage, setShowGradingPage] = useState(false);
+  const [showAttendancePage, setShowAttendancePage] = useState(false);
+  const [showSchedulesPage, setShowSchedulesPage] = useState(false);
 
   // ===== Restore session on mount =====
   useEffect(() => {
@@ -407,6 +433,16 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
     }
     if (title === 'تصحيح الدرجات') {
       const t = setTimeout(() => setShowGradingPage(true), 0);
+      void t;
+      return;
+    }
+    if (title === 'سجل الحضور') {
+      const t = setTimeout(() => setShowAttendancePage(true), 0);
+      void t;
+      return;
+    }
+    if (title === 'جداول الحصص') {
+      const t = setTimeout(() => setShowSchedulesPage(true), 0);
       void t;
       return;
     }
@@ -586,6 +622,48 @@ export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPag
         schoolId={schoolId}
         teacherId={session.teacherId}
         teacherName={session.name}
+      />
+    );
+  }
+
+  // ===== Render: Attendance Sub-page =====
+  if (showAttendancePage && session) {
+    return (
+      <TeacherAttendancePage
+        onBack={() => {
+          const t = setTimeout(() => setShowAttendancePage(false), 0);
+          void t;
+        }}
+        schoolId={schoolId}
+        teacherId={session.teacherId}
+        teacherName={session.name}
+        classrooms={session.classrooms.map((c) => ({
+          id: c.id,
+          name: c.name,
+          gradeLevel: c.gradeLevel,
+          section: c.section ?? '',
+        }))}
+      />
+    );
+  }
+
+  // ===== Render: Schedules Sub-page =====
+  if (showSchedulesPage && session) {
+    return (
+      <TeacherSchedulesPage
+        onBack={() => {
+          const t = setTimeout(() => setShowSchedulesPage(false), 0);
+          void t;
+        }}
+        schoolId={schoolId}
+        teacherId={session.teacherId}
+        teacherName={session.name}
+        classrooms={session.classrooms.map((c) => ({
+          id: c.id,
+          name: c.name,
+          gradeLevel: c.gradeLevel,
+          section: c.section ?? '',
+        }))}
       />
     );
   }
