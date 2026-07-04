@@ -184,6 +184,19 @@ export async function getStudentSubmissions(
   const submissions = await db.submission.findMany({
     where: { examId, studentId },
     orderBy: { attemptNumber: 'desc' },
+    // نستخدم select لتفادي حقل gradedByName الذي قد يحوي NULL في البيانات القديمة
+    select: {
+      id: true,
+      attemptNumber: true,
+      status: true,
+      startedAt: true,
+      submittedAt: true,
+      autoClosedAt: true,
+      percentage: true,
+      totalScore: true,
+      maxScore: true,
+      passed: true,
+    },
   });
 
   const activeSubmission = submissions.find(s => s.status === 'IN_PROGRESS') ?? null;

@@ -22,6 +22,8 @@ const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page
 const TeacherPortalPage = dynamic(() => import('@/components/teacher-portal-page'), { loading: PageLoader })
 const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
 const ParentExamsPage = dynamic(() => import('@/components/parent-exams-page'), { loading: PageLoader })
+const ParentAnalyticsPage = dynamic(() => import('@/components/parent-analytics-page'), { loading: PageLoader })
+const CoordinatorDashboardPage = dynamic(() => import('@/components/coordinator-dashboard-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -85,12 +87,13 @@ const navLinks = [
 ]
 
 const serviceItems = [
-  { label: 'الامتحانات الإلكترونية', icon: '📝', action: 'exams' },
   { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
   { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
   { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
   { label: 'بوابة المعلم', icon: '👨‍🏫', action: 'teacher' },
   { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
+  { label: 'امتحانات الطالب', icon: '📝', action: 'exams' },
+  { label: 'لوحة المنسّق', icon: '🎛️', action: 'coordinator' },
 ]
 
 // ===== Main Component =====
@@ -108,6 +111,7 @@ function HomePage() {
   const router = useRouter()
   const pathname = usePathname()
   const urlSubdomain = searchParams.get('school')
+  const urlAction = searchParams.get('action')
   const hasAppliedUrlSchool = useRef(false)
 
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null)
@@ -135,6 +139,8 @@ function HomePage() {
     classroomName?: string | null;
     gradeName?: string | null;
   } | null>(null)
+  const [showAnalyticsPage, setShowAnalyticsPage] = useState(false)
+  const [showCoordinatorPage, setShowCoordinatorPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -262,6 +268,25 @@ function HomePage() {
     if (logoClickCount.current >= 5) { logoClickCount.current = 0; setShowAdminLogin(true) }
   }, [])
 
+  // معالجة اختصارات PWA (?action=...) عند فتح التطبيق من الشاشة الرئيسية
+  const urlActionProcessed = useRef(false)
+  useEffect(() => {
+    if (!urlAction || !hydrated || urlActionProcessed.current) return
+    urlActionProcessed.current = true
+    // تنظيف الـ URL من معامل action بعد تفعيله
+    router.replace('/')
+    // استخدام microtask لتجنّب تحذير set-state-in-effect
+    queueMicrotask(() => {
+      if (urlAction === 'exams') { setShowExamsPage(true) }
+      else if (urlAction === 'results') setShowResultsPage(true)
+      else if (urlAction === 'schedules') setShowSchedulesPage(true)
+      else if (urlAction === 'library') setShowLibraryPage(true)
+      else if (urlAction === 'parents') setShowParentsPage(true)
+      else if (urlAction === 'teacher') setShowTeacherPage(true)
+      else if (urlAction === 'coordinator') setShowCoordinatorPage(true)
+    })
+  }, [urlAction, hydrated, router])
+
   const handleServiceAction = (action: string) => {
     setServicesOpen(false); setMobileMenuOpen(false)
     if (action === 'results') setShowResultsPage(true)
@@ -270,7 +295,21 @@ function HomePage() {
     if (action === 'parents') setShowParentsPage(true)
     if (action === 'teacher') setShowTeacherPage(true)
     if (action === 'exams') setShowExamsPage(true)
+    if (action === 'teacher') setShowTeacherPage(true)
+    if (action === 'coordinator') setShowCoordinatorPage(true)
   }
+
+  // الانتقال من بوابة أولياء الأمور إلى صفحة الامتحانات الإلكترونية
+  const handleOpenExamsFromParents = useCallback(() => {
+    setShowParentsPage(false)
+    setShowExamsPage(true)
+  }, [])
+
+  // الانتقال من بوابة أولياء الأمور إلى صفحة التحليلات المقارنة
+  const handleOpenAnalyticsFromParents = useCallback(() => {
+    setShowParentsPage(false)
+    setShowAnalyticsPage(true)
+  }, [])
 
   const school = schoolData?.school || defaultSchoolData.school
   const settings = schoolData?.settings || defaultSchoolData.settings
@@ -298,6 +337,8 @@ function HomePage() {
       />
     )
   }
+  if (showAnalyticsPage) return <ParentAnalyticsPage onBack={() => setShowAnalyticsPage(false)} schoolId={selectedSchoolId} />
+  if (showCoordinatorPage) return <CoordinatorDashboardPage onBack={() => setShowCoordinatorPage(false)} schoolId={selectedSchoolId} />
   if (showParentsPage) return (
     <ParentsPortalPage
       onBack={() => setShowParentsPage(false)}
@@ -306,6 +347,7 @@ function HomePage() {
         setParentExamsChild(child)
         setShowParentExamsPage(true)
       }}
+      onOpenAnalytics={() => setShowAnalyticsPage(true)}
     />
   )
   if (showTeacherPage) return <TeacherPortalPage onBack={() => setShowTeacherPage(false)} schoolId={selectedSchoolId} />
@@ -613,7 +655,8 @@ function HomePage() {
                   { icon: '👨‍🏫', title: 'بوابة المعلم', desc: 'لوحة تحكم المعلم لإدارة الفصول والامتحانات', action: 'teacher', color: '#7C3AED' },
                   { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم الأكاديمي والسلوكي', action: 'parents', color: '#4CAF50' },
                   { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
-                  { icon: '💻', title: 'التحول الرقمي', desc: 'خدمات التحول الرقمي المتقدمة', action: 'schedules', color: '#00BCD4' },
+                  { icon: '📝', title: 'امتحانات الطالب', desc: 'الامتحانات الإلكترونية للطلاب', action: 'exams', color: '#047857' },
+                  { icon: '🎛️', title: 'لوحة المنسّق', desc: 'إدارة كل امتحانات المدرسة والإشراف عليها', action: 'coordinator', color: '#0F766E' },
                   { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
                 ].map(service => (
                   <div key={service.title}
