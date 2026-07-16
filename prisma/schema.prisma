@@ -72,6 +72,7 @@ model School {
   examModeration ExamModerationLog[]
   questionBank   QuestionBank[]
   examTeacherProfile ExamTeacherProfile[]
+  downloads      DownloadableFile[]
 }
 
 // ===== الإعدادات =====
@@ -1374,4 +1375,29 @@ model ExamTeacherProfile {
   totalQuestionsInBank Int @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ===== مركز التحميل — ملفات قابلة للتحميل لشئون الطلاب/العاملين/الموارد المالية =====
+model DownloadableFile {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  // تصنيف الملف: شئون الطلاب / شئون العاملين / شئون مالية / إدارية / عام
+  category        String   @default("GENERAL")
+  title           String   // عنوان عربي واضح
+  description     String   @default("")
+  fileName        String   // الاسم الأصلي للملف (للعرض عند التحميل)
+  filePath        String   // المسار النسبي على القرص
+  fileType        String   @default("") // MIME type
+  fileSize        Int      @default(0)  // بالبايت
+  uploadedById    String?
+  uploadedByName  String   @default("")
+  isActive        Boolean  @default(true)  // إخفاء/إظهار بدون حذف
+  downloadsCount  Int      @default(0)  // عدّاد التحميلات
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId, category])
+  @@index([schoolId, isActive])
+  @@index([category, isActive])
 }

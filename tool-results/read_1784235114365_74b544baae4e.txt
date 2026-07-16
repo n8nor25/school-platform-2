@@ -1,0 +1,951 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+     4→     4→import dynamic from 'next/dynamic'
+     5→     5→import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+     6→     6→import { useAdminStore } from '@/lib/admin-store'
+     7→     7→
+     8→     8→// Lazy-loaded sub-pages - only compiled when visited
+     9→     9→const PageLoader = () => (
+    10→    10→  <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f5f5f5' }}>
+    11→    11→    <div className="w-10 h-10 border-4 border-[#610000] border-t-transparent rounded-full animate-spin" />
+    12→    12→  </div>
+    13→    13→)
+    14→    14→
+    15→    15→const AdminLayout = dynamic(() => import('@/components/admin/admin-layout').then(m => ({ default: m.AdminLayout })), { loading: PageLoader })
+    16→    16→const AdminLogin = dynamic(() => import('@/components/admin/admin-login').then(m => ({ default: m.AdminLogin })))
+    17→    17→const StudentLifePage = dynamic(() => import('@/components/student-life-page'), { loading: PageLoader })
+    18→    18→const ResultsPage = dynamic(() => import('@/components/results-page'), { loading: PageLoader })
+    19→    19→const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
+    20→    20→const DigitalLibraryPage = dynamic(() => import('@/components/digital-library-page'), { loading: PageLoader })
+    21→    21→const ParentsPortalPage = dynamic(() => import('@/components/parents-portal-page'), { loading: PageLoader })
+    22→    22→const TeacherPortalPage = dynamic(() => import('@/components/teacher-portal-page'), { loading: PageLoader })
+    23→    23→const StudentExamsPage = dynamic(() => import('@/components/student-exams-page'), { loading: PageLoader })
+    24→    24→const ParentExamsPage = dynamic(() => import('@/components/parent-exams-page'), { loading: PageLoader })
+    25→    25→const ParentAnalyticsPage = dynamic(() => import('@/components/parent-analytics-page'), { loading: PageLoader })
+    26→    26→const CoordinatorDashboardPage = dynamic(() => import('@/components/coordinator-dashboard-page'), { loading: PageLoader })
+    27→    27→const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
+    28→    28→
+    29→    29→// ===== Types =====
+    30→    30→interface SchoolData {
+    31→    31→  school: {
+    32→    32→    id: string; name: string; subdomain: string; description: string
+    33→    33→    logoUrl: string | null; primaryColor: string; secondaryColor: string
+    34→    34→    address: string; phone: string; email: string; facebookUrl: string | null; mapEmbedUrl: string | null; isActive: boolean
+    35→    35→  }
+    36→    36→  settings: {
+    37→    37→    heroTitle: string; heroSubtitle: string; bannerTitle: string | null; bannerImageUrl: string | null
+    38→    38→    vision: string | null; aboutImage: string | null; aboutVideoUrl: string | null
+    39→    39→    showNewsTicker: boolean; showHeroBanner: boolean; showLiveStream: boolean; liveStreamUrl: string | null
+    40→    40→    facebookUrl: string | null; youtubeUrl: string | null
+    41→    41→    showSlider: boolean; showAbout: boolean; showNews: boolean; showServices: boolean
+    42→    42→    showGallery: boolean; showTeachers: boolean; showStats: boolean; showContact: boolean
+    43→    43→    developerName: string; developerPhoto: string | null
+    44→    44→  } | null
+    45→    45→  stats: { students: number; teachers: number; classes: number; years: number } | null
+    46→    46→}
+    47→    47→
+    48→    48→interface NewsItem {
+    49→    49→  id: string; title: string; excerpt: string | null; image: string | null
+    50→    50→  category: string; active: boolean; createdAt: string
+    51→    51→}
+    52→    52→
+    53→    53→interface GalleryItem { id: string; title: string | null; imageUrl: string }
+    54→    54→interface Teacher { id: string; name: string; subject: string; email: string | null; imageUrl: string | null }
+    55→    55→interface SliderItem { id: string; imageUrl: string; title: string | null; subtitle: string | null; active: boolean }
+    56→    56→interface CustomSectionItem { id: string; title: string; content: string; imageUrl: string | null; layout: string; active: boolean; sortOrder: number }
+    57→    57→
+    58→    58→const defaultSchoolData: SchoolData = {
+    59→    59→  school: {
+    60→    60→    id: 'demo', name: 'المدرسة الإعدادية النموذجية', subdomain: 'demo',
+    61→    61→    description: 'مدرسة رائدة في التعليم الإعدادي', logoUrl: null,
+    62→    62→    primaryColor: '#610000', secondaryColor: '#009688',
+    63→    63→    address: 'الشارع الرئيسي، المدينة', phone: '0123456789',
+    64→    64→    email: 'info@school.edu', facebookUrl: null, mapEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d110502.76718827617!2d31.66512595!3d26.5593145!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x144f1f9b6c3e3fd5%3A0x8e5e3e0a1e0e2e0e!2sSohag%2C%20Egypt!5e0!3m2!1sar!2seg!4v1700000000000!5m2!1sar!2seg',
+    65→    65→    isActive: true,
+    66→    66→  },
+    67→    67→  settings: {
+    68→    68→    heroTitle: 'المدرسة الإعدادية النموذجية', heroSubtitle: 'نحو تعليم متميز ومستقبل مشرق',
+    69→    69→    bannerTitle: 'مرحباً بكم', bannerImageUrl: null, vision: null,
+    70→    70→    aboutImage: null, aboutVideoUrl: null, showNewsTicker: true,
+    71→    71→    showHeroBanner: true, showLiveStream: false, liveStreamUrl: null,
+    72→    72→    facebookUrl: null, youtubeUrl: null, showSlider: true, showAbout: true,
+    73→    73→    showNews: true, showServices: true, showGallery: true, showTeachers: true,
+    74→    74→    showStats: true, showContact: true, developerName: 'محروس شعبان', developerPhoto: null,
+    75→    75→  },
+    76→    76→  stats: { students: 0, teachers: 0, classes: 0, years: 0 },
+    77→    77→}
+    78→    78→
+    79→    79→const navLinks = [
+    80→    80→  { label: 'الرئيسية', href: '#' },
+    81→    81→  { label: 'من نحن', href: '#welcome' },
+    82→    82→  { label: 'أحدث الأخبار', href: '#news' },
+    83→    83→  { label: 'الخدمات الإلكترونية', href: '#services', isServices: true },
+    84→    84→  { label: 'الحياة الطلابية', href: '#student-life', isStudentLife: true },
+    85→    85→  { label: 'معرض الصور', href: '#gallery' },
+    86→    86→  { label: 'اتصل بنا', href: '#contact' },
+    87→    87→]
+    88→    88→
+    89→    89→const serviceItems = [
+    90→    90→  { label: 'نتائج الطلاب', icon: '📋', action: 'results' },
+    91→    91→  { label: 'جداول الحصص', icon: '📅', action: 'schedules' },
+    92→    92→  { label: 'المكتبة الرقمية', icon: '📚', action: 'library' },
+    93→    93→  { label: 'بوابة المعلم', icon: '👨‍🏫', action: 'teacher' },
+    94→    94→  { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
+    95→    95→  { label: 'امتحانات الطالب', icon: '📝', action: 'exams' },
+    96→    96→  { label: 'لوحة المنسّق', icon: '🎛️', action: 'coordinator' },
+    97→    97→]
+    98→    98→
+    99→    99→// ===== Main Component =====
+   100→   100→export default function HomePageWrapper() {
+   101→   101→  return (
+   102→   102→    <Suspense fallback={<PageLoader />}>
+   103→   103→      <HomePage />
+   104→   104→    </Suspense>
+   105→   105→  )
+   106→   106→}
+   107→   107→
+   108→   108→function HomePage() {
+   109→   109→  const { isAdminMode, selectedSchoolId, setSelectedSchoolId, setSchools, _hasHydrated, setHasHydrated } = useAdminStore()
+   110→   110→  const searchParams = useSearchParams()
+   111→   111→  const router = useRouter()
+   112→   112→  const pathname = usePathname()
+   113→   113→  const urlSubdomain = searchParams.get('school')
+   114→   114→  const urlAction = searchParams.get('action')
+   115→   115→  const hasAppliedUrlSchool = useRef(false)
+   116→   116→
+   117→   117→  const [schoolData, setSchoolData] = useState<SchoolData | null>(null)
+   118→   118→  const [news, setNews] = useState<NewsItem[]>([])
+   119→   119→  const [gallery, setGallery] = useState<GalleryItem[]>([])
+   120→   120→  const [teachers, setTeachers] = useState<Teacher[]>([])
+   121→   121→  const [sliders, setSliders] = useState<SliderItem[]>([])
+   122→   122→  const [customSections, setCustomSections] = useState<CustomSectionItem[]>([])
+   123→   123→  const [loading, setLoading] = useState(true)
+   124→   124→  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+   125→   125→  const [servicesOpen, setServicesOpen] = useState(false)
+   126→   126→  const [showAdminLogin, setShowAdminLogin] = useState(false)
+   127→   127→  const [showResultsPage, setShowResultsPage] = useState(false)
+   128→   128→  const [showStudentLife, setShowStudentLife] = useState(false)
+   129→   129→  const [showSchedulesPage, setShowSchedulesPage] = useState(false)
+   130→   130→  const [showLibraryPage, setShowLibraryPage] = useState(false)
+   131→   131→  const [showParentsPage, setShowParentsPage] = useState(false)
+   132→   132→  const [showTeacherPage, setShowTeacherPage] = useState(false)
+   133→   133→  const [showExamsPage, setShowExamsPage] = useState(false)
+   134→   134→  const [showParentExamsPage, setShowParentExamsPage] = useState(false)
+   135→   135→  const [parentExamsChild, setParentExamsChild] = useState<{
+   136→   136→    id: string;
+   137→   137→    name: string;
+   138→   138→    studentNumber: string;
+   139→   139→    classroomName?: string | null;
+   140→   140→    gradeName?: string | null;
+   141→   141→  } | null>(null)
+   142→   142→  const [showAnalyticsPage, setShowAnalyticsPage] = useState(false)
+   143→   143→  const [showCoordinatorPage, setShowCoordinatorPage] = useState(false)
+   144→   144→  const [showScrollTop, setShowScrollTop] = useState(false)
+   145→   145→  const [currentSlide, setCurrentSlide] = useState(0)
+   146→   146→  const logoClickCount = useRef(0)
+   147→   147→  const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+   148→   148→
+   149→   149→  const hydrated = _hasHydrated
+   150→   150→
+   151→   151→  // Fallback: ensure hydration flag is set on the client (Zustand v5
+   152→   152→  // onRehydrateStorage may not fire in all environments).
+   153→   153→  useEffect(() => {
+   154→   154→    if (!_hasHydrated) setHasHydrated(true)
+   155→   155→  }, [_hasHydrated, setHasHydrated])
+   156→   156→
+   157→   157→  // Resolve school from subdomain only (not from store's school list)
+   158→   158→  useEffect(() => {
+   159→   159→    if (!hydrated) return
+   160→   160→    let cancelled = false
+   161→   161→    async function resolveSchool() {
+   162→   162→      try {
+   163→   163→        if (urlSubdomain) {
+   164→   164→          // If subdomain is in URL, fetch by subdomain
+   165→   165→          const res = await fetch(`/api/school/by-subdomain?subdomain=${urlSubdomain}`)
+   166→   166→          if (res.ok && !cancelled) {
+   167→   167→            const data = await res.json()
+   168→   168→            if (data.school) {
+   169→   169→              setSchoolData(data)
+   170→   170→              setSelectedSchoolId(data.school.id)
+   171→   171→              return
+   172→   172→            }
+   173→   173→          }
+   174→   174→        }
+   175→   175→        // No subdomain in URL — fetch first available school
+   176→   176→        const schoolsRes = await fetch('/api/schools')
+   177→   177→        if (schoolsRes.ok && !cancelled) {
+   178→   178→          const schoolsList = await schoolsRes.json()
+   179→   179→          if (Array.isArray(schoolsList) && schoolsList.length > 0) {
+   180→   180→            setSchools(schoolsList)
+   181→   181→            const firstSchool = schoolsList[0]
+   182→   182→            // Fetch full data for the first school
+   183→   183→            const res = await fetch(`/api/school?schoolId=${firstSchool.id}`)
+   184→   184→            if (res.ok && !cancelled) {
+   185→   185→              const data = await res.json()
+   186→   186→              if (data.school) {
+   187→   187→                setSchoolData(data)
+   188→   188→                setSelectedSchoolId(data.school.id)
+   189→   189→              }
+   190→   190→            }
+   191→   191→          }
+   192→   192→        }
+   193→   193→      } catch {
+   194→   194→        // fallback to default data
+   195→   195→      }
+   196→   196→    }
+   197→   197→    resolveSchool()
+   198→   198→    return () => { cancelled = true }
+   199→   199→  }, [hydrated, urlSubdomain, setSelectedSchoolId, setSchools])
+   200→   200→
+   201→   201→  // Fetch content for selected school
+   202→   202→  useEffect(() => {
+   203→   203→    if (!hydrated || !selectedSchoolId) return
+   204→   204→    let cancelled = false
+   205→   205→    const sid = selectedSchoolId
+   206→   206→    async function loadData() {
+   207→   207→      setLoading(true)
+   208→   208→      try {
+   209→   209→        const [newsRes, galleryRes, teachersRes, slidersRes, csRes] = await Promise.allSettled([
+   210→   210→          fetch(`/api/news?limit=10&schoolId=${sid}`),
+   211→   211→          fetch(`/api/gallery?limit=8&schoolId=${sid}`),
+   212→   212→          fetch(`/api/teachers?schoolId=${sid}`),
+   213→   213→          fetch(`/api/sliders?schoolId=${sid}`),
+   214→   214→          fetch(`/api/custom-sections?schoolId=${sid}`),
+   215→   215→        ])
+   216→   216→        if (cancelled) return
+   217→   217→        if (newsRes.status === 'fulfilled' && newsRes.value.ok) {
+   218→   218→          const d = await newsRes.value.json()
+   219→   219→          if (Array.isArray(d) && !cancelled) setNews(d)
+   220→   220→        }
+   221→   221→        if (galleryRes.status === 'fulfilled' && galleryRes.value.ok) {
+   222→   222→          const d = await galleryRes.value.json()
+   223→   223→          if (Array.isArray(d) && !cancelled) setGallery(d)
+   224→   224→        }
+   225→   225→        if (teachersRes.status === 'fulfilled' && teachersRes.value.ok) {
+   226→   226→          const d = await teachersRes.value.json()
+   227→   227→          if (Array.isArray(d) && !cancelled) setTeachers(d)
+   228→   228→        }
+   229→   229→        if (slidersRes.status === 'fulfilled' && slidersRes.value.ok) {
+   230→   230→          const d = await slidersRes.value.json()
+   231→   231→          if (Array.isArray(d) && !cancelled) setSliders(d)
+   232→   232→        }
+   233→   233→        if (csRes.status === 'fulfilled' && csRes.value.ok) {
+   234→   234→          const d = await csRes.value.json()
+   235→   235→          if (Array.isArray(d) && !cancelled) setCustomSections(d)
+   236→   236→        }
+   237→   237→      } catch {
+   238→   238→        // silently fail
+   239→   239→      } finally {
+   240→   240→        if (!cancelled) setLoading(false)
+   241→   241→      }
+   242→   242→    }
+   243→   243→    loadData()
+   244→   244→    return () => { cancelled = true }
+   245→   245→  }, [selectedSchoolId, hydrated])
+   246→   246→
+   247→   247→  // Auto-rotate slider
+   248→   248→  const activeSliders = sliders.filter(s => s.active)
+   249→   249→  const newsWithImage = news.filter(n => n.image).slice(0, 5)
+   250→   250→  const slideItems = activeSliders.length > 0 ? activeSliders : newsWithImage
+   251→   251→  useEffect(() => {
+   252→   252→    if (slideItems.length <= 1) return
+   253→   253→    const timer = setInterval(() => setCurrentSlide(i => (i + 1) % slideItems.length), 5000)
+   254→   254→    return () => clearInterval(timer)
+   255→   255→  }, [slideItems.length])
+   256→   256→
+   257→   257→  // Scroll to top
+   258→   258→  useEffect(() => {
+   259→   259→    const h = () => setShowScrollTop(window.scrollY > 500)
+   260→   260→    window.addEventListener('scroll', h)
+   261→   261→    return () => window.removeEventListener('scroll', h)
+   262→   262→  }, [])
+   263→   263→
+   264→   264→  const handleLogoClick = useCallback(() => {
+   265→   265→    logoClickCount.current += 1
+   266→   266→    if (logoClickTimer.current) clearTimeout(logoClickTimer.current)
+   267→   267→    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0 }, 3000)
+   268→   268→    if (logoClickCount.current >= 5) { logoClickCount.current = 0; setShowAdminLogin(true) }
+   269→   269→  }, [])
+   270→   270→
+   271→   271→  // معالجة اختصارات PWA (?action=...) عند فتح التطبيق من الشاشة الرئيسية
+   272→   272→  const urlActionProcessed = useRef(false)
+   273→   273→  useEffect(() => {
+   274→   274→    if (!urlAction || !hydrated || urlActionProcessed.current) return
+   275→   275→    urlActionProcessed.current = true
+   276→   276→    // تنظيف الـ URL من معامل action بعد تفعيله
+   277→   277→    router.replace('/')
+   278→   278→    // استخدام microtask لتجنّب تحذير set-state-in-effect
+   279→   279→    queueMicrotask(() => {
+   280→   280→      if (urlAction === 'exams') { setShowExamsPage(true) }
+   281→   281→      else if (urlAction === 'results') setShowResultsPage(true)
+   282→   282→      else if (urlAction === 'schedules') setShowSchedulesPage(true)
+   283→   283→      else if (urlAction === 'library') setShowLibraryPage(true)
+   284→   284→      else if (urlAction === 'parents') setShowParentsPage(true)
+   285→   285→      else if (urlAction === 'teacher') setShowTeacherPage(true)
+   286→   286→      else if (urlAction === 'coordinator') setShowCoordinatorPage(true)
+   287→   287→    })
+   288→   288→  }, [urlAction, hydrated, router])
+   289→   289→
+   290→   290→  const handleServiceAction = (action: string) => {
+   291→   291→    setServicesOpen(false); setMobileMenuOpen(false)
+   292→   292→    if (action === 'results') setShowResultsPage(true)
+   293→   293→    if (action === 'schedules') setShowSchedulesPage(true)
+   294→   294→    if (action === 'library') setShowLibraryPage(true)
+   295→   295→    if (action === 'parents') setShowParentsPage(true)
+   296→   296→    if (action === 'teacher') setShowTeacherPage(true)
+   297→   297→    if (action === 'exams') setShowExamsPage(true)
+   298→   298→    if (action === 'teacher') setShowTeacherPage(true)
+   299→   299→    if (action === 'coordinator') setShowCoordinatorPage(true)
+   300→   300→  }
+   301→   301→
+   302→   302→  // الانتقال من بوابة أولياء الأمور إلى صفحة الامتحانات الإلكترونية
+   303→   303→  const handleOpenExamsFromParents = useCallback(() => {
+   304→   304→    setShowParentsPage(false)
+   305→   305→    setShowExamsPage(true)
+   306→   306→  }, [])
+   307→   307→
+   308→   308→  // الانتقال من بوابة أولياء الأمور إلى صفحة التحليلات المقارنة
+   309→   309→  const handleOpenAnalyticsFromParents = useCallback(() => {
+   310→   310→    setShowParentsPage(false)
+   311→   311→    setShowAnalyticsPage(true)
+   312→   312→  }, [])
+   313→   313→
+   314→   314→  const school = schoolData?.school || defaultSchoolData.school
+   315→   315→  const settings = schoolData?.settings || defaultSchoolData.settings
+   316→   316→  const stats = schoolData?.stats || defaultSchoolData.stats
+   317→   317→  const alertNews = news.filter(n => n.category === 'تنبيه')
+   318→   318→
+   319→   319→  // Build ticker text for seamless scrolling
+   320→   320→  const tickerText = news.map(item => item.title).join('     ◆     ')
+   321→   321→
+   322→   322→  // Sub-page rendering
+   323→   323→  if (isAdminMode) return <AdminLayout />
+   324→   324→  if (showStudentLife) return <StudentLifePage onBack={() => setShowStudentLife(false)} />
+   325→   325→  if (showResultsPage) return <ResultsPage onBack={() => setShowResultsPage(false)} schoolId={selectedSchoolId} />
+   326→   326→  if (showSchedulesPage) return <SchedulesPage onBack={() => setShowSchedulesPage(false)} schoolId={selectedSchoolId} />
+   327→   327→  if (showLibraryPage) return <DigitalLibraryPage onBack={() => setShowLibraryPage(false)} schoolId={selectedSchoolId} />
+   328→   328→  if (showParentExamsPage && parentExamsChild) {
+   329→   329→    return (
+   330→   330→      <ParentExamsPage
+   331→   331→        onBack={() => {
+   332→   332→          setShowParentExamsPage(false)
+   333→   333→          setParentExamsChild(null)
+   334→   334→        }}
+   335→   335→        schoolId={selectedSchoolId}
+   336→   336→        child={parentExamsChild}
+   337→   337→      />
+   338→   338→    )
+   339→   339→  }
+   340→   340→  if (showAnalyticsPage) return <ParentAnalyticsPage onBack={() => setShowAnalyticsPage(false)} schoolId={selectedSchoolId} />
+   341→   341→  if (showCoordinatorPage) return <CoordinatorDashboardPage onBack={() => setShowCoordinatorPage(false)} schoolId={selectedSchoolId} />
+   342→   342→  if (showParentsPage) return (
+   343→   343→    <ParentsPortalPage
+   344→   344→      onBack={() => setShowParentsPage(false)}
+   345→   345→      schoolId={selectedSchoolId}
+   346→   346→      onOpenExams={(child) => {
+   347→   347→        setParentExamsChild(child)
+   348→   348→        setShowParentExamsPage(true)
+   349→   349→      }}
+   350→   350→      onOpenAnalytics={() => setShowAnalyticsPage(true)}
+   351→   351→    />
+   352→   352→  )
+   353→   353→  if (showTeacherPage) return <TeacherPortalPage onBack={() => setShowTeacherPage(false)} schoolId={selectedSchoolId} />
+   354→   354→  if (showExamsPage) return <StudentExamsPage onBack={() => setShowExamsPage(false)} schoolId={selectedSchoolId} />
+   355→   355→
+   356→   356→  if (!hydrated) {
+   357→   357→    return (
+   358→   358→      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f5f5f5' }}>
+   359→   359→        <div className="text-center">
+   360→   360→          <div className="w-10 h-10 border-4 border-[#610000] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+   361→   361→          <p className="text-gray-500 text-sm">جاري التحميل...</p>
+   362→   362→        </div>
+   363→   363→      </div>
+   364→   364→    )
+   365→   365→  }
+   366→   366→
+   367→   367→  return (
+   368→   368→    <div className="min-h-screen flex flex-col" dir="rtl">
+   369→   369→
+   370→   370→      {/* ===== STICKY TOP ===== */}
+   371→   371→      <div className="sticky top-0 z-50 shadow-lg">
+   372→   372→        {/* Top Bar - Contact info only, NO school switcher for visitors */}
+   373→   373→        <div style={{ backgroundColor: school.primaryColor }} className="text-white text-xs">
+   374→   374→          <div className="max-w-[1280px] mx-auto px-4 py-1.5 flex items-center justify-between">
+   375→   375→            <div className="flex items-center gap-4">
+   376→   376→              {school.phone && <a href={`tel:${school.phone}`} className="hover:opacity-80 flex items-center gap-1">📞 {school.phone}</a>}
+   377→   377→              {school.email && <a href={`mailto:${school.email}`} className="hover:opacity-80 flex items-center gap-1">✉️ {school.email}</a>}
+   378→   378→            </div>
+   379→   379→            <div className="flex items-center gap-2">
+   380→   380→              {school.facebookUrl && (
+   381→   381→                <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">📘</a>
+   382→   382→              )}
+   383→   383→              {settings?.youtubeUrl && (
+   384→   384→                <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">📺</a>
+   385→   385→              )}
+   386→   386→            </div>
+   387→   387→          </div>
+   388→   388→        </div>
+   389→   389→
+   390→   390→        {/* Header */}
+   391→   391→        <header className="bg-white shadow-sm">
+   392→   392→          <div className="max-w-[1280px] mx-auto px-4 py-2 flex items-center gap-3">
+   393→   393→            <div onClick={handleLogoClick} className="cursor-pointer shrink-0" title="اضغط 5 مرات للإدارة">
+   394→   394→              {school.logoUrl ? (
+   395→   395→                <img src={school.logoUrl} alt={school.name} className="w-12 h-12 rounded-full object-cover border-2" style={{ borderColor: school.primaryColor }} />
+   396→   396→              ) : (
+   397→   397→                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl" style={{ backgroundColor: school.primaryColor }}>🏫</div>
+   398→   398→              )}
+   399→   399→            </div>
+   400→   400→            <div className="flex-1 min-w-0">
+   401→   401→              <h1 className="text-base md:text-xl font-bold truncate" style={{ color: school.primaryColor }}>{school.name}</h1>
+   402→   402→              {settings?.heroSubtitle && <p className="text-xs text-gray-500 truncate">{settings.heroSubtitle}</p>}
+   403→   403→            </div>
+   404→   404→            <button className="lg:hidden p-2 text-2xl text-gray-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+   405→   405→              {mobileMenuOpen ? '✕' : '☰'}
+   406→   406→            </button>
+   407→   407→          </div>
+   408→   408→        </header>
+   409→   409→
+   410→   410→        {/* Navigation */}
+   411→   411→        <nav style={{ backgroundColor: '#1a2332' }} className="text-white shadow-lg">
+   412→   412→          <div className="max-w-[1280px] mx-auto px-4">
+   413→   413→            {/* Desktop Nav */}
+   414→   414→            <div className="hidden lg:flex items-center h-11">
+   415→   415→              {navLinks.map((link) => (
+   416→   416→                link.isServices ? (
+   417→   417→                  <div key={link.href} className="relative" onMouseEnter={() => setServicesOpen(true)} onMouseLeave={() => setServicesOpen(false)}>
+   418→   418→                    <button className="px-5 h-full text-sm font-medium hover:bg-white/10 flex items-center gap-1 transition-colors">
+   419→   419→                      {link.label} ▾
+   420→   420→                    </button>
+   421→   421→                    {servicesOpen && (
+   422→   422→                      <div className="absolute top-full right-0 bg-white rounded-lg shadow-xl border min-w-[220px] z-50 overflow-hidden">
+   423→   423→                        {serviceItems.map(item => (
+   424→   424→                          <button key={item.action} onClick={() => handleServiceAction(item.action)}
+   425→   425→                            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+   426→   426→                            <span className="text-lg">{item.icon}</span> {item.label}
+   427→   427→                          </button>
+   428→   428→                        ))}
+   429→   429→                      </div>
+   430→   430→                    )}
+   431→   431→                  </div>
+   432→   432→                ) : (
+   433→   433→                  <a key={link.href} href={link.isStudentLife ? undefined : link.href}
+   434→   434→                    onClick={link.isStudentLife ? (e) => { e.preventDefault(); setShowStudentLife(true) } : undefined}
+   435→   435→                    className="px-5 h-full text-sm font-medium hover:bg-white/10 flex items-center transition-colors">
+   436→   436→                    {link.label}
+   437→   437→                  </a>
+   438→   438→                )
+   439→   439→              ))}
+   440→   440→            </div>
+   441→   441→            {/* Mobile Nav */}
+   442→   442→            {mobileMenuOpen && (
+   443→   443→              <div className="lg:hidden py-2 border-t border-white/10">
+   444→   444→                {navLinks.map((link) => (
+   445→   445→                  link.isServices ? (
+   446→   446→                    <div key={link.href}>
+   447→   447→                      <div className="px-4 py-2 text-sm font-medium text-white/70">{link.label}</div>
+   448→   448→                      {serviceItems.map(item => (
+   449→   449→                        <button key={item.action} onClick={() => handleServiceAction(item.action)}
+   450→   450→                          className="w-full flex items-center gap-2 px-8 py-2 text-sm text-white/80 hover:bg-white/10">
+   451→   451→                          <span>{item.icon}</span> {item.label}
+   452→   452→                        </button>
+   453→   453→                      ))}
+   454→   454→                    </div>
+   455→   455→                  ) : (
+   456→   456→                    <a key={link.href} href={link.isStudentLife ? undefined : link.href}
+   457→   457→                      onClick={link.isStudentLife ? (e) => { e.preventDefault(); setShowStudentLife(true); setMobileMenuOpen(false) } : () => setMobileMenuOpen(false)}
+   458→   458→                      className="block px-4 py-2 text-sm hover:bg-white/10">{link.label}</a>
+   459→   459→                  )
+   460→   460→                ))}
+   461→   461→              </div>
+   462→   462→            )}
+   463→   463→          </div>
+   464→   464→        </nav>
+   465→   465→
+   466→   466→        {/* News Ticker - Seamless scrolling */}
+   467→   467→        {settings?.showNewsTicker && news.length > 0 && (
+   468→   468→          <div className="bg-gray-100 border-b overflow-hidden">
+   469→   469→            <div className="flex items-center">
+   470→   470→              <span className="bg-red-600 text-white px-4 py-2 text-xs font-bold shrink-0 flex items-center gap-1 z-10">
+   471→   471→                🔴 عاجل
+   472→   472→              </span>
+   473→   473→              <div className="overflow-hidden flex-1 relative">
+   474→   474→                <div className="animate-news-ticker-scroll whitespace-nowrap py-2">
+   475→   475→                  {/* Duplicate content for seamless loop */}
+   476→   476→                  <span className="inline-block text-sm mx-4">
+   477→   477→                    {tickerText}
+   478→   478→                  </span>
+   479→   479→                  <span className="inline-block text-sm mx-4">
+   480→   480→                    {tickerText}
+   481→   481→                  </span>
+   482→   482→                </div>
+   483→   483→              </div>
+   484→   484→            </div>
+   485→   485→          </div>
+   486→   486→        )}
+   487→   487→      </div>
+   488→   488→
+   489→   489→      {/* ===== MAIN CONTENT ===== */}
+   490→   490→      <main className="flex-1">
+   491→   491→        {/* Hero Slider */}
+   492→   492→        {(settings?.showSlider ?? true) && (
+   493→   493→          <section className="max-w-[1280px] mx-auto px-4 py-6">
+   494→   494→            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+   495→   495→              <div className="md:col-span-7 rounded-lg overflow-hidden shadow-lg relative h-[300px] md:h-[400px] bg-gray-200">
+   496→   496→                {loading ? (
+   497→   497→                  <div className="w-full h-full flex items-center justify-center text-gray-400">جاري التحميل...</div>
+   498→   498→                ) : slideItems.length > 0 ? (
+   499→   499→                  <>
+   500→   500→                    <img
+   501→   501→                      src={'imageUrl' in slideItems[currentSlide] ? (slideItems[currentSlide] as SliderItem).imageUrl : (slideItems[currentSlide] as NewsItem).image || ''}
+   502→   502→                      alt={'title' in slideItems[currentSlide] ? slideItems[currentSlide].title || '' : ''}
+   503→   503→                      className="w-full h-full object-cover transition-opacity duration-500"
+   504→   504→                    />
+   505→   505→                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+   506→   506→                    <div className="absolute bottom-0 right-0 left-0 p-5">
+   507→   507→                      <h2 className="text-lg md:text-xl font-bold text-white mb-1">{slideItems[currentSlide].title}</h2>
+   508→   508→                      {'subtitle' in slideItems[currentSlide] && (slideItems[currentSlide] as SliderItem).subtitle && (
+   509→   509→                        <p className="text-white/70 text-sm">{(slideItems[currentSlide] as SliderItem).subtitle}</p>
+   510→   510→                      )}
+   511→   511→                    </div>
+   512→   512→                    {slideItems.length > 1 && (
+   513→   513→                      <div className="absolute bottom-4 left-4 flex gap-1.5">
+   514→   514→                        {slideItems.map((_, i) => (
+   515→   515→                          <button key={i} onClick={() => setCurrentSlide(i)}
+   516→   516→                            className={`w-2.5 h-2.5 rounded-full transition-colors ${i === currentSlide ? 'bg-white' : 'bg-white/50'}`} />
+   517→   517→                        ))}
+   518→   518→                      </div>
+   519→   519→                    )}
+   520→   520→                  </>
+   521→   521→                ) : (
+   522→   522→                  <div className="w-full h-full flex items-center justify-center text-white relative overflow-hidden" style={{ backgroundColor: school.primaryColor }}>
+   523→   523→                    <div className="absolute inset-0 opacity-10">
+   524→   524→                      <div className="absolute top-10 right-10 w-40 h-40 rounded-full bg-white/20" />
+   525→   525→                      <div className="absolute bottom-10 left-10 w-60 h-60 rounded-full bg-white/10" />
+   526→   526→                    </div>
+   527→   527→                    <div className="text-center px-4 relative z-10">
+   528→   528→                      <h2 className="text-2xl md:text-4xl font-bold mb-2">{settings?.heroTitle || school.name}</h2>
+   529→   529→                      <p className="text-white/80 text-lg">{settings?.heroSubtitle || 'نحو تعليم متميز'}</p>
+   530→   530→                      <button className="mt-4 px-6 py-2 bg-white/20 rounded-lg text-white hover:bg-white/30 transition-colors">
+   531→   531→                        اكتشف المزيد
+   532→   532→                      </button>
+   533→   533→                    </div>
+   534→   534→                  </div>
+   535→   535→                )}
+   536→   536→              </div>
+   537→   537→              {/* Headlines - side by side with Alerts */}
+   538→   538→              <div className="md:col-span-3 bg-white rounded-lg shadow-md overflow-hidden h-[300px] md:h-[400px] flex flex-col">
+   539→   539→                <div className="px-3 py-2.5 text-white font-bold text-sm flex items-center gap-1" style={{ backgroundColor: school.primaryColor }}>
+   540→   540→                  📰 العناوين
+   541→   541→                </div>
+   542→   542→                <div className="flex-1 overflow-y-auto p-2">
+   543→   543→                  {slideItems.length > 0 ? slideItems.map((item, i) => (
+   544→   544→                    <button key={item.id} onClick={() => setCurrentSlide(i)}
+   545→   545→                      className={`w-full text-right px-3 py-2 rounded-md mb-1 transition-colors text-xs ${
+   546→   546→                        i === currentSlide ? 'text-white shadow-sm' : 'hover:bg-gray-100'
+   547→   547→                      }`} style={i === currentSlide ? { backgroundColor: school.primaryColor } : {}}>
+   548→   548→                      <div className="font-bold line-clamp-2">{item.title}</div>
+   549→   549→                    </button>
+   550→   550→                  )) : <p className="text-gray-400 text-center py-8 text-sm">لا توجد عناوين</p>}
+   551→   551→                </div>
+   552→   552→              </div>
+   553→   553→              {/* Alerts - side by side with Headlines */}
+   554→   554→              {alertNews.length > 0 && (
+   555→   555→                <div className="md:col-span-2 bg-white rounded-lg shadow-md overflow-hidden h-[300px] md:h-[400px] flex flex-col">
+   556→   556→                  <div className="px-3 py-2.5 text-white font-bold text-sm flex items-center gap-1" style={{ backgroundColor: '#d32f2f' }}>
+   557→   557→                    ⚠️ تنبيهات
+   558→   558→                  </div>
+   559→   559→                  <div className="flex-1 overflow-y-auto">
+   560→   560→                    {alertNews.map(item => (
+   561→   561→                      <div key={item.id} className="p-2.5 border-b hover:bg-gray-50">
+   562→   562→                        <div className="text-[10px] text-gray-400 mb-0.5">{new Date(item.createdAt).toLocaleDateString('ar-EG')}</div>
+   563→   563→                        <div className="text-xs font-bold">{item.title}</div>
+   564→   564→                      </div>
+   565→   565→                    ))}
+   566→   566→                  </div>
+   567→   567→                </div>
+   568→   568→              )}
+   569→   569→            </div>
+   570→   570→          </section>
+   571→   571→        )}
+   572→   572→
+   573→   573→        {/* Welcome / About Section */}
+   574→   574→        {(settings?.showAbout ?? true) && (
+   575→   575→          <section id="welcome" className="py-12 bg-white">
+   576→   576→            <div className="max-w-[1280px] mx-auto px-4">
+   577→   577→              <div className="grid md:grid-cols-2 gap-8 items-center">
+   578→   578→                <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl bg-gray-200">
+   579→   579→                  {settings?.aboutVideoUrl ? (
+   580→   580→                    <iframe src={settings.aboutVideoUrl.replace('watch?v=', 'embed/')} className="w-full h-full" allowFullScreen />
+   581→   581→                  ) : (
+   582→   582→                    <img src={settings?.aboutImage || 'https://picsum.photos/seed/schoolwelcome/600/450'} alt="عن المدرسة" className="w-full h-full object-cover" />
+   583→   583→                  )}
+   584→   584→                </div>
+   585→   585→                <div>
+   586→   586→                  <h2 className="text-2xl md:text-3xl font-bold mb-4" style={{ color: school.primaryColor }}>
+   587→   587→                    مرحباً بكم في {school.name}
+   588→   588→                  </h2>
+   589→   589→                  {school.description && <p className="text-gray-600 leading-relaxed mb-4">{school.description}</p>}
+   590→   590→                  {settings?.vision && (
+   591→   591→                    <div className="rounded-xl p-5 border" style={{ borderColor: school.secondaryColor + '40', backgroundColor: school.secondaryColor + '10' }}>
+   592→   592→                      <h3 className="font-bold mb-2" style={{ color: school.secondaryColor }}>👁️ رؤيتنا</h3>
+   593→   593→                      <p className="text-gray-600 text-sm leading-relaxed">{settings.vision}</p>
+   594→   594→                    </div>
+   595→   595→                  )}
+   596→   596→                </div>
+   597→   597→              </div>
+   598→   598→            </div>
+   599→   599→          </section>
+   600→   600→        )}
+   601→   601→
+   602→   602→        {/* News Section - Card Grid */}
+   603→   603→        {(settings?.showNews ?? true) && (
+   604→   604→          <section id="news" className="py-12" style={{ backgroundColor: '#f0f0f0' }}>
+   605→   605→            <div className="max-w-[1280px] mx-auto px-4">
+   606→   606→              <div className="text-center mb-8">
+   607→   607→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>أحدث الأخبار</h2>
+   608→   608→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   609→   609→              </div>
+   610→   610→              {loading ? (
+   611→   611→                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   612→   612→                  {[1,2,3].map(i => <div key={i} className="bg-white rounded-lg shadow-md h-64 animate-pulse" />)}
+   613→   613→                </div>
+   614→   614→              ) : news.length > 0 ? (
+   615→   615→                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   616→   616→                  {news.slice(0, 6).map((item, index) => (
+   617→   617→                    <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow group">
+   618→   618→                      <div className="h-48 overflow-hidden relative">
+   619→   619→                        <img src={item.image || `https://picsum.photos/seed/news${index + 20}/400/250`} alt={item.title}
+   620→   620→                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+   621→   621→                        <span className="absolute top-3 right-3 px-2 py-1 rounded text-xs text-white font-medium" style={{ backgroundColor: school.primaryColor }}>
+   622→   622→                          {item.category}
+   623→   623→                        </span>
+   624→   624→                      </div>
+   625→   625→                      <div className="p-4">
+   626→   626→                        <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+   627→   627→                          <span>🕐</span> {new Date(item.createdAt).toLocaleDateString('ar-EG')}
+   628→   628→                        </div>
+   629→   629→                        <h3 className="font-bold text-gray-800 mb-1 line-clamp-2">{item.title}</h3>
+   630→   630→                        {item.excerpt && <p className="text-sm text-gray-500 line-clamp-2">{item.excerpt}</p>}
+   631→   631→                      </div>
+   632→   632→                    </div>
+   633→   633→                  ))}
+   634→   634→                </div>
+   635→   635→              ) : (
+   636→   636→                <p className="text-center text-gray-400 py-12">لا توجد أخبار حالياً</p>
+   637→   637→              )}
+   638→   638→            </div>
+   639→   639→          </section>
+   640→   640→        )}
+   641→   641→
+   642→   642→        {/* Services Section - Colored Cards matching screenshot */}
+   643→   643→        {(settings?.showServices ?? true) && (
+   644→   644→          <section id="services" className="py-12 bg-white">
+   645→   645→            <div className="max-w-[1280px] mx-auto px-4">
+   646→   646→              <div className="text-center mb-8">
+   647→   647→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>الخدمات الإلكترونية</h2>
+   648→   648→                <p className="text-gray-500 text-sm mt-2">استفد من خدماتنا الإلكترونية المتنوعة</p>
+   649→   649→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   650→   650→              </div>
+   651→   651→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+   652→   652→                {[
+   653→   653→                  { icon: '📋', title: 'الاستعلام عن النتائج', desc: 'استعلم عن نتائجك الأكاديمية بسهولة وسرعة', action: 'results', color: '#2196F3' },
+   654→   654→                  { icon: '📅', title: 'جداول الحصص', desc: 'عرض جداول الحصص والمواعيد الدراسية', action: 'schedules', color: '#FF9800' },
+   655→   655→                  { icon: '👨‍🏫', title: 'بوابة المعلم', desc: 'لوحة تحكم المعلم لإدارة الفصول والامتحانات', action: 'teacher', color: '#7C3AED' },
+   656→   656→                  { icon: '👨‍👩‍👧', title: 'بوابة أولياء الأمور', desc: 'متابعة أداء ابنكم الأكاديمي والسلوكي', action: 'parents', color: '#4CAF50' },
+   657→   657→                  { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
+   658→   658→                  { icon: '📝', title: 'امتحانات الطالب', desc: 'الامتحانات الإلكترونية للطلاب', action: 'exams', color: '#047857' },
+   659→   659→                  { icon: '🎛️', title: 'لوحة المنسّق', desc: 'إدارة كل امتحانات المدرسة والإشراف عليها', action: 'coordinator', color: '#0F766E' },
+   660→   660→                  { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
+   661→   661→                ].map(service => (
+   662→   662→                  <div key={service.title}
+   663→   663→                    onClick={() => service.action ? handleServiceAction(service.action) : document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+   664→   664→                    className="rounded-xl shadow-md hover:shadow-xl transition-all cursor-pointer p-6 group text-white relative overflow-hidden"
+   665→   665→                    style={{ backgroundColor: service.color }}>
+   666→   666→                    {/* Decorative circle */}
+   667→   667→                    <div className="absolute -top-4 -left-4 w-24 h-24 rounded-full bg-white/10" />
+   668→   668→                    <div className="relative z-10">
+   669→   669→                      <div className="text-3xl mb-3">{service.icon}</div>
+   670→   670→                      <h3 className="font-bold text-lg mb-2">{service.title}</h3>
+   671→   671→                      <p className="text-white/80 text-sm">{service.desc}</p>
+   672→   672→                      <div className="mt-3 text-sm font-medium text-white/90 hover:text-white flex items-center gap-1">
+   673→   673→                        أعرف أكثر ←
+   674→   674→                      </div>
+   675→   675→                    </div>
+   676→   676→                  </div>
+   677→   677→                ))}
+   678→   678→              </div>
+   679→   679→            </div>
+   680→   680→          </section>
+   681→   681→        )}
+   682→   682→
+   683→   683→        {/* Gallery Section */}
+   684→   684→        {(settings?.showGallery ?? true) && gallery.length > 0 && (
+   685→   685→          <section id="gallery" className="py-12" style={{ backgroundColor: '#f0f0f0' }}>
+   686→   686→            <div className="max-w-[1280px] mx-auto px-4">
+   687→   687→              <div className="text-center mb-8">
+   688→   688→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>📸 معرض الصور</h2>
+   689→   689→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   690→   690→              </div>
+   691→   691→              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+   692→   692→                {gallery.map(item => (
+   693→   693→                  <div key={item.id} className="aspect-square rounded-xl overflow-hidden shadow-md group cursor-pointer">
+   694→   694→                    <img src={item.imageUrl} alt={item.title || 'صورة'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+   695→   695→                  </div>
+   696→   696→                ))}
+   697→   697→              </div>
+   698→   698→            </div>
+   699→   699→          </section>
+   700→   700→        )}
+   701→   701→
+   702→   702→        {/* Teachers Section */}
+   703→   703→        {(settings?.showTeachers ?? true) && teachers.length > 0 && (
+   704→   704→          <section id="teachers" className="py-12 bg-white">
+   705→   705→            <div className="max-w-[1280px] mx-auto px-4">
+   706→   706→              <div className="text-center mb-8">
+   707→   707→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>👨‍🏫 فريق التدريس</h2>
+   708→   708→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   709→   709→              </div>
+   710→   710→              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+   711→   711→                {teachers.map(teacher => (
+   712→   712→                  <div key={teacher.id} className="bg-white rounded-xl shadow-md overflow-hidden group hover:shadow-lg transition-shadow">
+   713→   713→                    <div className="aspect-[3/4] overflow-hidden">
+   714→   714→                      {teacher.imageUrl ? (
+   715→   715→                        <img src={teacher.imageUrl} alt={teacher.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+   716→   716→                      ) : (
+   717→   717→                        <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-white/50" style={{ backgroundColor: school.primaryColor }}>
+   718→   718→                          {teacher.name.charAt(0)}
+   719→   719→                        </div>
+   720→   720→                      )}
+   721→   721→                    </div>
+   722→   722→                    <div className="p-3 text-center">
+   723→   723→                      <h3 className="font-bold">{teacher.name}</h3>
+   724→   724→                      <p className="text-sm text-gray-500">{teacher.subject}</p>
+   725→   725→                    </div>
+   726→   726→                  </div>
+   727→   727→                ))}
+   728→   728→              </div>
+   729→   729→            </div>
+   730→   730→          </section>
+   731→   731→        )}
+   732→   732→
+   733→   733→        {/* Stats Section - in school primary color */}
+   734→   734→        {(settings?.showStats ?? true) && stats && (stats.students > 0 || stats.teachers > 0) && (
+   735→   735→          <section style={{ backgroundColor: school.primaryColor }} className="py-10">
+   736→   736→            <div className="max-w-[1280px] mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-6">
+   737→   737→              {[
+   738→   738→                { icon: '👨‍🎓', label: 'طلاب', value: stats.students },
+   739→   739→                { icon: '👨‍🏫', label: 'معلمون', value: stats.teachers },
+   740→   740→                { icon: '📖', label: 'فصول', value: stats.classes },
+   741→   741→                { icon: '🏆', label: 'سنوات خبرة', value: stats.years },
+   742→   742→              ].map(stat => (
+   743→   743→                <div key={stat.label} className="text-center text-white p-4">
+   744→   744→                  <div className="text-4xl mb-2">{stat.icon}</div>
+   745→   745→                  <div className="text-4xl font-bold mb-1">{stat.value}</div>
+   746→   746→                  <div className="text-white/70 text-sm font-medium">{stat.label}</div>
+   747→   747→                </div>
+   748→   748→              ))}
+   749→   749→            </div>
+   750→   750→          </section>
+   751→   751→        )}
+   752→   752→
+   753→   753→        {/* Contact Section */}
+   754→   754→        {(settings?.showContact ?? true) && (
+   755→   755→          <section id="contact" className="py-12 bg-white">
+   756→   756→            <div className="max-w-[1280px] mx-auto px-4">
+   757→   757→              <div className="text-center mb-8">
+   758→   758→                <h2 className="text-2xl md:text-3xl font-bold" style={{ color: school.primaryColor }}>📞 تواصل معنا</h2>
+   759→   759→                <div className="w-20 h-1 mx-auto mt-3 rounded-full" style={{ backgroundColor: school.primaryColor }} />
+   760→   760→              </div>
+   761→   761→              <div className="grid md:grid-cols-2 gap-8">
+   762→   762→                {/* Contact Form */}
+   763→   763→                <div className="bg-white border rounded-xl shadow-md p-6">
+   764→   764→                  <h3 className="text-xl font-bold mb-4" style={{ color: school.primaryColor }}>اتصل بنا</h3>
+   765→   765→                  <form onSubmit={e => e.preventDefault()} className="space-y-3">
+   766→   766→                    <input placeholder="الاسم" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   767→   767→                    <input type="email" placeholder="البريد الإلكتروني" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   768→   768→                    <input type="tel" placeholder="الجوال" className="w-full border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   769→   769→                    <textarea placeholder="اكتب رسالتك هنا..." className="w-full border rounded-lg px-4 py-2.5 text-sm min-h-[100px] focus:ring-2 focus:ring-[#610000] focus:border-transparent outline-none" />
+   770→   770→                    <button type="submit" className="w-full py-2.5 rounded-lg text-white font-medium text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: school.primaryColor }}>
+   771→   771→                      إرسال الرسالة
+   772→   772→                    </button>
+   773→   773→                  </form>
+   774→   774→                </div>
+   775→   775→                {/* Contact Info + Map */}
+   776→   776→                <div className="flex flex-col gap-6">
+   777→   777→                  {/* Contact Info Card */}
+   778→   778→                  <div className="rounded-xl p-6 text-white" style={{ backgroundColor: school.primaryColor }}>
+   779→   779→                    <h3 className="text-xl font-bold mb-6">بيانات الاتصال</h3>
+   780→   780→                    <div className="space-y-4">
+   781→   781→                      {school.address && <div className="flex items-start gap-3"><span className="text-xl">📍</span><div><div className="text-white/70 text-sm">الموقع</div><div className="font-medium">{school.address}</div></div></div>}
+   782→   782→                      {school.phone && <div className="flex items-start gap-3"><span className="text-xl">📞</span><div><div className="text-white/70 text-sm">الهاتف</div><a href={`tel:${school.phone}`} className="font-medium hover:text-white/80" dir="ltr">{school.phone}</a></div></div>}
+   783→   783→                      {school.email && <div className="flex items-start gap-3"><span className="text-xl">✉️</span><div><div className="text-white/70 text-sm">البريد الإلكتروني</div><a href={`mailto:${school.email}`} className="font-medium hover:text-white/80" dir="ltr">{school.email}</a></div></div>}
+   784→   784→                    </div>
+   785→   785→                    {/* Social links */}
+   786→   786→                    <div className="mt-6 pt-4 border-t border-white/20">
+   787→   787→                      <div className="flex gap-3">
+   788→   788→                        {school.facebookUrl && <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">📘</a>}
+   789→   789→                        {settings?.youtubeUrl && <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">📺</a>}
+   790→   790→                      </div>
+   791→   791→                    </div>
+   792→   792→                  </div>
+   793→   793→                  {/* Google Map */}
+   794→   794→                  <div className="rounded-xl overflow-hidden shadow-md border">
+   795→   795→                    <div className="px-4 py-2.5 text-white font-bold text-sm flex items-center gap-2" style={{ backgroundColor: school.primaryColor }}>
+   796→   796→                      📍 خريطة الموقع
+   797→   797→                    </div>
+   798→   798→                    <div className="relative" style={{ height: '250px' }}>
+   799→   799→                      {school.mapEmbedUrl ? (
+   800→   800→                        <iframe
+   801→   801→                          src={school.mapEmbedUrl}
+   802→   802→                          width="100%"
+   803→   803→                          height="100%"
+   804→   804→                          style={{ border: 0 }}
+   805→   805→                          allowFullScreen
+   806→   806→                          loading="lazy"
+   807→   807→                          referrerPolicy="no-referrer-when-downgrade"
+   808→   808→                          title="خريطة الموقع"
+   809→   809→                        />
+   810→   810→                      ) : (
+   811→   811→                        <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-500">
+   812→   812→                          <div className="text-center">
+   813→   813→                            <span className="text-4xl block mb-2">🗺️</span>
+   814→   814→                            <p className="text-sm">لم يتم تحديد موقع على الخريطة</p>
+   815→   815→                          </div>
+   816→   816→                        </div>
+   817→   817→                      )}
+   818→   818→                    </div>
+   819→   819→                  </div>
+   820→   820→                </div>
+   821→   821→              </div>
+   822→   822→            </div>
+   823→   823→          </section>
+   824→   824→        )}
+   825→   825→
+   826→   826→        {/* Custom Sections */}
+   827→   827→        <CustomSectionRenderer sections={customSections} />
+   828→   828→      </main>
+   829→   829→
+   830→   830→      {/* Footer - Approved Design */}
+   831→   831→      <footer className="text-white mt-auto">
+   832→   832→        {/* Colored bar at top */}
+   833→   833→        <div className="flex h-1.5">
+   834→   834→          <div className="flex-1" style={{ backgroundColor: school.primaryColor }} />
+   835→   835→          <div className="flex-1 bg-white" />
+   836→   836→          <div className="flex-1 bg-gray-800" />
+   837→   837→        </div>
+   838→   838→        {/* Main footer content */}
+   839→   839→        <div style={{ backgroundColor: '#1a2332' }}>
+   840→   840→          <div className="max-w-[1280px] mx-auto px-4 py-10">
+   841→   841→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+   842→   842→              {/* Column 1: Contact Info */}
+   843→   843→              <div>
+   844→   844→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>تواصل معنا</h3>
+   845→   845→                <div className="space-y-3 text-sm">
+   846→   846→                  {school.address && (
+   847→   847→                    <div className="flex items-start gap-2">
+   848→   848→                      <span className="mt-0.5">📍</span>
+   849→   849→                      <span className="text-gray-300">{school.address}</span>
+   850→   850→                    </div>
+   851→   851→                  )}
+   852→   852→                  {school.phone && (
+   853→   853→                    <div className="flex items-start gap-2">
+   854→   854→                      <span className="mt-0.5">📞</span>
+   855→   855→                      <a href={`tel:${school.phone}`} className="text-gray-300 hover:text-white transition-colors" dir="ltr">{school.phone}</a>
+   856→   856→                    </div>
+   857→   857→                  )}
+   858→   858→                  {school.email && (
+   859→   859→                    <div className="flex items-start gap-2">
+   860→   860→                      <span className="mt-0.5">✉️</span>
+   861→   861→                      <a href={`mailto:${school.email}`} className="text-gray-300 hover:text-white transition-colors" dir="ltr">{school.email}</a>
+   862→   862→                    </div>
+   863→   863→                  )}
+   864→   864→                </div>
+   865→   865→              </div>
+   866→   866→              {/* Column 2: Academic Links */}
+   867→   867→              <div>
+   868→   868→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>الروابط الأكاديمية</h3>
+   869→   869→                <ul className="space-y-2">
+   870→   870→                  {serviceItems.map(item => (
+   871→   871→                    <li key={item.action}>
+   872→   872→                      <button onClick={() => handleServiceAction(item.action)} className="text-gray-300 hover:text-white text-sm transition-colors flex items-center gap-2">
+   873→   873→                        <span className="text-xs">◆</span> {item.label}
+   874→   874→                      </button>
+   875→   875→                    </li>
+   876→   876→                  ))}
+   877→   877→                </ul>
+   878→   878→              </div>
+   879→   879→              {/* Column 3: School Links */}
+   880→   880→              <div>
+   881→   881→                <h3 className="font-bold text-lg mb-4" style={{ color: school.primaryColor }}>روابط المدرسة</h3>
+   882→   882→                <ul className="space-y-2">
+   883→   883→                  {navLinks.filter(l => !l.isServices).map(link => (
+   884→   884→                    <li key={link.href}>
+   885→   885→                      <a href={link.href} className="text-gray-300 hover:text-white text-sm transition-colors flex items-center gap-2">
+   886→   886→                        <span className="text-xs">◆</span> {link.label}
+   887→   887→                      </a>
+   888→   888→                    </li>
+   889→   889→                  ))}
+   890→   890→                </ul>
+   891→   891→              </div>
+   892→   892→              {/* Column 4: School Logo & Name (changes with school) */}
+   893→   893→              <div className="flex flex-col items-center sm:items-start">
+   894→   894→                <div className="mb-3">
+   895→   895→                  {school.logoUrl ? (
+   896→   896→                    <img src={school.logoUrl} alt={school.name} className="w-16 h-16 rounded-full object-cover border-3" style={{ borderColor: school.primaryColor }} />
+   897→   897→                  ) : (
+   898→   898→                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: school.primaryColor }}>🏫</div>
+   899→   899→                  )}
+   900→   900→                </div>
+   901→   901→                <h3 className="font-bold text-lg mb-2 text-center sm:text-right">{school.name}</h3>
+   902→   902→                {school.description && <p className="text-gray-400 text-xs line-clamp-3 text-center sm:text-right">{school.description}</p>}
+   903→   903→                {/* Social icons */}
+   904→   904→                <div className="flex gap-2 mt-3">
+   905→   905→                  {school.facebookUrl && (
+   906→   906→                    <a href={school.facebookUrl} target="_blank" rel="noopener noreferrer"
+   907→   907→                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm transition-colors" style={{ backgroundColor: school.primaryColor }}>
+   908→   908→                      📘
+   909→   909→                    </a>
+   910→   910→                  )}
+   911→   911→                  {settings?.youtubeUrl && (
+   912→   912→                    <a href={settings.youtubeUrl} target="_blank" rel="noopener noreferrer"
+   913→   913→                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm transition-colors" style={{ backgroundColor: school.primaryColor }}>
+   914→   914→                      📺
+   915→   915→                    </a>
+   916→   916→                  )}
+   917→   917→                </div>
+   918→   918→              </div>
+   919→   919→            </div>
+   920→   920→          </div>
+   921→   921→          {/* Bottom bar - Developer credit */}
+   922→   922→          <div className="border-t border-white/10">
+   923→   923→            <div className="max-w-[1280px] mx-auto px-4 py-3 flex items-center justify-center gap-3 text-gray-400 text-xs">
+   924→   924→              <span>تصميم وتطوير</span>
+   925→   925→              {settings?.developerPhoto ? (
+   926→   926→                <img src={settings.developerPhoto} alt={settings?.developerName || 'المطور'} className="w-7 h-7 rounded-full object-cover border border-white/20" />
+   927→   927→              ) : (
+   928→   928→                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs text-white" style={{ backgroundColor: school.primaryColor }}>👨‍💻</div>
+   929→   929→              )}
+   930→   930→              <span className="font-bold text-white">{settings?.developerName || 'محروس شعبان'}</span>
+   931→   931→              <span>© {new Date().getFullYear()}</span>
+   932→   932→            </div>
+   933→   933→          </div>
+   934→   934→        </div>
+   935→   935→      </footer>
+   936→   936→
+   937→   937→      {/* Scroll to Top */}
+   938→   938→      {showScrollTop && (
+   939→   939→        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+   940→   940→          className="fixed bottom-6 left-6 w-12 h-12 rounded-full shadow-lg text-white hover:opacity-90 transition-opacity z-40 flex items-center justify-center text-xl"
+   941→   941→          style={{ backgroundColor: school.primaryColor }}>
+   942→   942→          ↑
+   943→   943→        </button>
+   944→   944→      )}
+   945→   945→
+   946→   946→      {/* Admin Login Modal */}
+   947→   947→      <AdminLogin open={showAdminLogin} onOpenChange={setShowAdminLogin} />
+   948→   948→    </div>
+   949→   949→  )
+   950→   950→}
+   951→   951→

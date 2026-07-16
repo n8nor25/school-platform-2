@@ -11,6 +11,7 @@ import {
   Store, Tags, TrendingUp, LineChart,
   Megaphone, Mail, MessageSquare,
   CalendarDays, Trophy, Users as UsersIcon,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ import { ResultsManagement } from './results-management'
 import { GradesManagement } from './grades-management'
 import { NewsManagement } from './news-management'
 import { GalleryManagement } from './gallery-management'
+import { DownloadsManagement } from './downloads-management'
 import { SettingsManagement } from './settings-management'
 import { TeachersManagement } from './teachers-management'
 import { SchedulesManagement } from './schedules-management'
@@ -158,6 +160,7 @@ const navEntries: NavEntry[] = [
   { key: 'grades', label: 'إدارة الصفوف', icon: GraduationCap },
   { key: 'news', label: 'إدارة الأخبار', icon: Newspaper },
   { key: 'gallery', label: 'معرض الصور', icon: Image },
+  { key: 'downloads', label: 'مركز التحميل', icon: Download },
   { key: 'teachers', label: 'إدارة المعلمين', icon: Users },
   { key: 'schedules', label: 'جداول الحصص', icon: Calendar },
   { key: 'settings', label: 'الإعدادات', icon: Settings },
@@ -214,6 +217,7 @@ function renderView(view: string) {
     case 'grades': return <GradesManagement />
     case 'news': return <NewsManagement />
     case 'gallery': return <GalleryManagement />
+    case 'downloads': return <DownloadsManagement />
     case 'teachers': return <TeachersManagement />
     case 'schedules': return <SchedulesManagement />
     case 'settings': return <SettingsManagement />
