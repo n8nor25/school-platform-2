@@ -1,23 +1,18 @@
 #!/bin/bash
 cd /home/z/my-project
 
-# Fix schema.prisma - force postgresql
-sed -i '/^datasource db {/,/^}/c\datasource db {\n  provider  = "postgresql"\n  url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")\n}' prisma/schema.prisma
+# Ensure SQLite .env exists (Supabase projects were deleted, fall back to local SQLite)
+if ! grep -q '^DATABASE_URL=' .env 2>/dev/null; then
+  echo 'DATABASE_URL="file:/home/z/my-project/db/custom.db"' > .env
+fi
 
-# Fix .env file - Updated for new Supabase project
-cat > .env << 'EOF'
-DATABASE_URL=postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4
-DIRECT_URL=postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
-EOF
+# Make sure db folder exists
+mkdir -p db
 
-# Remove any SQLite files
-rm -f db/*.db db/*.db-journal 2>/dev/null
+# Export env var from .env
+export DATABASE_URL=$(grep '^DATABASE_URL=' .env | cut -d'=' -f2- | tr -d '"')
 
-# Export env vars
-export DATABASE_URL='postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4'
-export DIRECT_URL='postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres'
-
-# Regenerate Prisma client for PostgreSQL
+# Regenerate Prisma client
 npx prisma generate 2>/dev/null
 
 # Check if server is already running
@@ -27,14 +22,13 @@ if pgrep -f "next-server" > /dev/null 2>&1; then
 fi
 
 # Start dev server using double-fork technique for persistence
-bash -c '
+bash -c "
   cd /home/z/my-project
-  export DATABASE_URL="postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=4"
-  export DIRECT_URL="postgresql://postgres.ivclktmhpkyxzlywewpl:qEk9OmC8XKRyTUQS@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
-  export NODE_OPTIONS="--max-old-space-size=2048"
+  export DATABASE_URL='$DATABASE_URL'
+  export NODE_OPTIONS='--max-old-space-size=2048'
   nohup npx next dev -p 3000 --turbopack > /home/z/my-project/dev.log 2>&1 &
-  echo $! > /tmp/next-server-pid
-'
+  echo \$! > /tmp/next-server-pid
+"
 
 # Wait for server to be ready
 echo "⏳ Waiting for server to start..."

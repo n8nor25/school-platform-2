@@ -1,54 +1,77 @@
-import { db } from '../src/lib/db';
+// Quick script to find a registered student + their classroom
+import { PrismaClient } from '@prisma/client'
+
+const db = new PrismaClient()
+
+const SCHOOL_ID = 'cmqu1mqhq0000mj5fuoui57sz'
 
 async function main() {
-  const exams = await db.exam.findMany({
-    where: { status: 'PUBLISHED' },
+  // Find an active student
+  const students = await db.student.findMany({
+    where: { schoolId: SCHOOL_ID, archived: false },
+    take: 10,
+    orderBy: { createdAt: 'desc' },
     select: {
-      id: true, title: true, schoolId: true, classroomId: true,
-      startDate: true, endDate: true, durationMinutes: true, status: true,
-      school: { select: { id: true, name: true, subdomain: true } },
-      _count: { select: { questions: true, submissions: true } },
-    },
-    take: 6, orderBy: { createdAt: 'desc' },
-  });
-
-  console.log('\n=== الامتحانات المنشورة ===');
-  for (const e of exams) {
-    const now = new Date();
-    const active = now >= e.startDate && now <= e.endDate;
-    console.log(`- [${active ? 'نشط' : 'غير نشط'}] ${e.title}`);
-    console.log(`    examId: ${e.id}`);
-    console.log(`    schoolId: ${e.schoolId} | ${e.school?.name} (${e.school?.subdomain})`);
-    console.log(`    classroomId: ${e.classroomId ?? 'كل الفصول'}`);
-    console.log(`    start: ${e.startDate.toISOString()}`);
-    console.log(`    end:   ${e.endDate.toISOString()}`);
-    console.log(`    duration: ${e.durationMinutes}min | Q: ${e._count.questions} | subs: ${e._count.submissions}`);
-  }
-
-  const schoolIds = Array.from(new Set(exams.map(e => e.schoolId)));
-  console.log('\n=== الطلاب في نفس المدارس ===');
-  for (const sid of schoolIds.slice(0, 4)) {
-    const school = exams.find(e => e.schoolId === sid)?.school;
-    console.log(`\nالمدرسة: ${school?.name} (${sid})`);
-    const students = await db.student.findMany({
-      where: { schoolId: sid, archived: false },
-      select: { id: true, name: true, studentNumber: true, status: true, classroom: { select: { name: true } } },
-      take: 6, orderBy: { createdAt: 'desc' },
-    });
-    if (students.length === 0) {
-      console.log('  لا طلاب نشطين — البحث عن أي طالب:');
-      const any = await db.student.findFirst({
-        where: { schoolId: sid },
-        select: { id: true, name: true, studentNumber: true, status: true, archived: true },
-      });
-      if (any) console.log(`  id: ${any.id} | name: ${any.name} | number: ${any.studentNumber} | status: ${any.status} | archived: ${any.archived}`);
-      else console.log('  لا يوجد أي طالب في هذه المدرسة');
-    } else {
-      for (const s of students) {
-        console.log(`  - id: ${s.id} | name: ${s.name} | number: ${s.studentNumber} | status: ${s.status} | class: ${s.classroom?.name ?? '—'}`);
-      }
+      id: true,
+      studentNumber: true,
+      name: true,
+      classroomId: true,
+      status: true,
+      parentPhone: true,
+      parentName: true,
     }
-  }
+  })
+
+  console.log('=== Active students in school ===')
+  console.log(JSON.stringify(students, null, 2))
+
+  // Also fetch classrooms so we can match names
+  const classrooms = await db.classroom.findMany({
+    where: { schoolId: SCHOOL_ID },
+    take: 30,
+    select: { id: true, name: true, gradeLevel: true }
+  })
+  console.log('\n=== Classrooms ===')
+  console.log(JSON.stringify(classrooms, null, 2))
+
+  // Existing training exams
+  const training = await db.exam.findMany({
+    where: { schoolId: SCHOOL_ID, category: 'TRAINING' },
+    select: {
+      id: true,
+      title: true,
+      subject: true,
+      examPeriod: true,
+      status: true,
+      classroomId: true,
+      classroomName: true,
+      startDate: true,
+      endDate: true,
+      _count: { select: { questions: true, submissions: true } }
+    }
+  })
+  console.log('\n=== Existing training exams ===')
+  console.log(JSON.stringify(training, null, 2))
+
+  // Existing submissions for training exams
+  const subs = await db.submission.findMany({
+    where: { exam: { schoolId: SCHOOL_ID, category: 'TRAINING' } },
+    select: {
+      id: true,
+      examId: true,
+      studentId: true,
+      studentName: true,
+      percentage: true,
+      status: true,
+      submittedAt: true,
+    },
+    take: 50,
+  })
+  console.log('\n=== Training exam submissions ===')
+  console.log(JSON.stringify(subs, null, 2))
 }
 
-main().catch(e => { console.error(e); process.exit(1); }).finally(() => db.$disconnect());
+main().catch(e => {
+  console.error(e)
+  process.exit(1)
+}).finally(() => db.$disconnect())
