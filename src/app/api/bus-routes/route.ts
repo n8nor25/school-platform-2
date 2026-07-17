@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     if (active === 'false') where.active = false
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { area: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { area: { contains: search } },
       ]
     }
 

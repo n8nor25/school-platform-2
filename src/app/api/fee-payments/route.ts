@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     const search = searchParams.get('search')
     if (search) {
-      where.receiptNumber = { contains: search, mode: 'insensitive' }
+      where.receiptNumber = { contains: search }
     }
 
     const payments = await db.feePayment.findMany({

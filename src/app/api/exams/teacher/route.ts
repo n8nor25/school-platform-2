@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
     if (subject) where.subject = subject;
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search } },
+        { description: { contains: search } },
       ];
     }
 

@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
     if (vendorId) where.vendorId = vendorId
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { recipient: { contains: search, mode: 'insensitive' } },
-        { reference: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search } },
+        { recipient: { contains: search } },
+        { reference: { contains: search } },
       ]
     }
 

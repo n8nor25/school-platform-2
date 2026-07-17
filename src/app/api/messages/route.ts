@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
     if (isArchived === 'false') where.isArchived = false
     if (search) {
       where.OR = [
-        { subject: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
+        { subject: { contains: search } },
+        { content: { contains: search } },
       ]
     }
 

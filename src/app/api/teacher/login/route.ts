@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
           where: {
             schoolId,
             archived: false,
-            email: { equals: String(teacherCode).trim(), mode: "insensitive" },
+            email: { equals: String(teacherCode).trim() },
           },
         });
       }
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       where: {
         schoolId,
         archived: false,
-        email: { equals: emailStr, mode: "insensitive" },
+        email: { equals: emailStr },
       },
     });
 

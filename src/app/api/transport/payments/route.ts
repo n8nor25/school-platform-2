@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     if (month) where.month = Number(month)
     if (year) where.year = Number(year)
     if (search) {
-      where.receiptNumber = { contains: search, mode: 'insensitive' }
+      where.receiptNumber = { contains: search }
     }
 
     const payments = await db.transportPayment.findMany({

@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
     if (isPinned === 'false') where.isPinned = false
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search } },
+        { content: { contains: search } },
       ]
     }
 

@@ -81,10 +81,10 @@ export function buildExamFilter(searchParams: URLSearchParams, schoolId: string)
   const where: {
     schoolId: string;
     status?: { in: string[] };
-    subject?: { contains: string; mode: 'insensitive' };
+    subject?: { contains: string;  };
     teacherId?: string;
     classroomId?: string;
-    title?: { contains: string; mode: 'insensitive' };
+    title?: { contains: string;  };
     AND?: Array<{ OR: Array<{ startDate: { gte?: Date; lte?: Date } }> }>;
   } = { schoolId };
 
@@ -100,7 +100,7 @@ export function buildExamFilter(searchParams: URLSearchParams, schoolId: string)
 
   const subject = searchParams.get('subject');
   if (subject && subject !== 'all') {
-    where.subject = { contains: subject, mode: 'insensitive' };
+    where.subject = { contains: subject };
   }
 
   const teacherId = searchParams.get('teacherId');
@@ -115,7 +115,7 @@ export function buildExamFilter(searchParams: URLSearchParams, schoolId: string)
 
   const search = searchParams.get('search')?.trim();
   if (search) {
-    where.title = { contains: search, mode: 'insensitive' };
+    where.title = { contains: search };
   }
 
   const dateFrom = searchParams.get('dateFrom');

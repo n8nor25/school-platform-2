@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
     if (active === 'false') where.active = false
     if (search) {
       where.OR = [
-        { plateNumber: { contains: search, mode: 'insensitive' } },
-        { driverName: { contains: search, mode: 'insensitive' } },
+        { plateNumber: { contains: search } },
+        { driverName: { contains: search } },
       ]
     }
 

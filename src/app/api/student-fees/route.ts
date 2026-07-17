@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     if (search) {
       studentWhere.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { studentNumber: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { studentNumber: { contains: search } },
       ]
     }
 

@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
     if (academicYearId) where.academicYearId = academicYearId
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { recipient: { contains: search, mode: 'insensitive' } },
-        { reference: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search } },
+        { recipient: { contains: search } },
+        { reference: { contains: search } },
       ]
     }
     if (fromDate || toDate) {

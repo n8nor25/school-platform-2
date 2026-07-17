@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     if (type) where.type = type;
     if (difficulty) where.difficulty = difficulty;
     if (search) {
-      where.text = { contains: search, mode: 'insensitive' };
+      where.text = { contains: search };
     }
 
     const [questions, total] = await Promise.all([

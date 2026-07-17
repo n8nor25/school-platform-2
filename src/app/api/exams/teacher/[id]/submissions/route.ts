@@ -39,8 +39,8 @@ export async function GET(
     if (statusFilter) where.status = statusFilter;
     if (search) {
       where.OR = [
-        { studentName: { contains: search, mode: 'insensitive' } },
-        { studentId: { contains: search, mode: 'insensitive' } },
+        { studentName: { contains: search } },
+        { studentId: { contains: search } },
       ];
     }
 

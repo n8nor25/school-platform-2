@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
         schoolId,
         archived: false,
         active: true,
-        teacherName: { equals: teacher.name, mode: "insensitive" },
+        teacherName: { equals: teacher.name },
       },
       orderBy: { createdAt: "desc" },
       take: 10,

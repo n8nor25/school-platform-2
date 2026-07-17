@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.student = {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { studentNumber: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search } },
+          { studentNumber: { contains: search } },
         ],
       }
     }
