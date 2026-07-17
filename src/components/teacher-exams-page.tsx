@@ -7,7 +7,6 @@ import {
   CalendarDays, GraduationCap, CheckCircle2, XCircle, HelpCircle,
   ShieldCheck, Lock, BookOpen, Trophy, BarChart3,
   Plus, Trash2, Loader2, Save, Send, X,
-  Dumbbell, Repeat2, EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,8 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 interface TeacherExamsPageProps {
@@ -45,8 +42,6 @@ interface TeacherExamsPageProps {
 // ===== Types =====
 type ExamStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
 type TimeStatus = 'UPCOMING' | 'OPEN' | 'ENDED';
-type ExamCategory = 'OFFICIAL' | 'TRAINING';
-type ExamPeriod = 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE' | 'NONE';
 
 interface ExamListItem {
   id: string;
@@ -64,10 +59,6 @@ interface ExamListItem {
   timeStatus: TimeStatus;
   submissionsCount: number;
   questionsCount: number;
-  category?: ExamCategory;
-  examPeriod?: ExamPeriod;
-  showAnswersAfter?: boolean;
-  allowRetakes?: boolean;
 }
 
 interface ExamQuestion {
@@ -188,14 +179,6 @@ interface CreateExamForm {
   showResultImmediately: boolean;
   parentVisible: boolean;
   antiCheatEnabled: boolean;
-  category: ExamCategory;
-  examPeriod: ExamPeriod;
-  showAnswersAfter: boolean;
-  allowRetakes: boolean;
-  // ===== سلسلة امتحانات (Oracle Academy style) — تدريبي فقط =====
-  isSeries: boolean;            // toggle on/off
-  seriesCount: number;          // 2..12 (default 4)
-  seriesIntervalDays: number;   // 7 | 14 | 30 (default 7)
   questions: DraftQuestion[];
 }
 
@@ -236,13 +219,6 @@ function makeEmptyCreateForm(): CreateExamForm {
     showResultImmediately: false,
     parentVisible: false,
     antiCheatEnabled: true,
-    category: 'OFFICIAL',
-    examPeriod: 'NONE',
-    showAnswersAfter: true,
-    allowRetakes: true,
-    isSeries: false,
-    seriesCount: 4,
-    seriesIntervalDays: 7,
     questions: [],
   };
 }
@@ -340,51 +316,6 @@ function questionTypeBadgeClass(t: string): string {
   }
 }
 
-function categoryLabel(c: ExamCategory | undefined | null): string {
-  switch (c) {
-    case 'TRAINING': return 'تدريبي';
-    case 'OFFICIAL':
-    default: return 'رسمي';
-  }
-}
-
-function categoryBadgeClass(c: ExamCategory | undefined | null): string {
-  switch (c) {
-    case 'TRAINING':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-    case 'OFFICIAL':
-    default:
-      return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
-  }
-}
-
-function examPeriodLabel(p: ExamPeriod | undefined | null): string {
-  switch (p) {
-    case 'WEEKLY': return 'أسبوعي';
-    case 'MIDMONTH': return 'نصف شهري';
-    case 'MONTHLY': return 'شهري';
-    case 'CUMULATIVE': return 'تراكمي';
-    case 'NONE':
-    default: return 'بدون فئة';
-  }
-}
-
-function examPeriodBadgeClass(p: ExamPeriod | undefined | null): string {
-  switch (p) {
-    case 'WEEKLY':
-      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200 dark:border-sky-800';
-    case 'MIDMONTH':
-      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
-    case 'MONTHLY':
-      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-    case 'CUMULATIVE':
-      return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
-    case 'NONE':
-    default:
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-  }
-}
-
 // ===== KPI Cards config =====
 const kpiConfig = [
   {
@@ -431,7 +362,6 @@ export default function TeacherExamsPage({
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ExamStatus>('all');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | ExamCategory>('all');
 
   // Detail modal state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -488,8 +418,6 @@ export default function TeacherExamsPage({
       params.set('teacherId', teacherId);
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (statusFilter !== 'all') params.set('status', statusFilter);
-      // Note: category filtering is done client-side because the GET endpoint
-      // returns the category field for each exam; we filter the array directly.
       params.set('limit', '100');
 
       const res = await fetch(`/api/exams/teacher?${params.toString()}`);
@@ -665,27 +593,13 @@ export default function TeacherExamsPage({
     if (!f.title.trim()) errors.title = 'عنوان الامتحان مطلوب';
     if (!f.subject.trim()) errors.subject = 'المادة مطلوبة';
 
-    // في وضع السلسلة، يُحسب endDate تلقائياً (نافذة أسبوع لكل امتحان)
-    // لذا لا نطلب من المستخدم إدخاله.
-    const isSeriesMode = f.category === 'TRAINING' && f.isSeries;
     if (!f.startDate) errors.startDate = 'وقت الفتح مطلوب';
-    if (!isSeriesMode && !f.endDate) errors.endDate = 'وقت الإغلاق مطلوب';
-    if (!isSeriesMode && f.startDate && f.endDate) {
+    if (!f.endDate) errors.endDate = 'وقت الإغلاق مطلوب';
+    if (f.startDate && f.endDate) {
       const s = new Date(f.startDate);
       const e = new Date(f.endDate);
       if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s >= e) {
         errors.endDate = 'وقت الإغلاق يجب أن يكون بعد وقت الفتح';
-      }
-    }
-
-    // التحقق من حقول السلسلة
-    if (isSeriesMode) {
-      if (!Number.isFinite(f.seriesCount) || f.seriesCount < 2 || f.seriesCount > 12) {
-        errors.seriesCount = 'عدد الامتحانات يجب أن يكون بين 2 و 12';
-        if (!message) message = 'عدد الامتحانات في السلسلة يجب أن يكون بين 2 و 12';
-      }
-      if (![7, 14, 30].includes(f.seriesIntervalDays)) {
-        errors.seriesIntervalDays = 'فترة التكرار غير صالحة';
       }
     }
 
@@ -738,13 +652,11 @@ export default function TeacherExamsPage({
 
       try {
         const f = createForm;
-        const isTraining = f.category === 'TRAINING';
-        const isSeriesMode = isTraining && f.isSeries;
-
         const body: Record<string, unknown> = {
           title: f.title.trim(),
           subject: f.subject.trim(),
           startDate: new Date(f.startDate).toISOString(),
+          endDate: new Date(f.endDate).toISOString(),
           durationMinutes: f.durationMinutes,
           shuffleQuestions: f.shuffleQuestions,
           shuffleOptions: f.shuffleOptions,
@@ -753,26 +665,10 @@ export default function TeacherExamsPage({
           parentVisible: f.parentVisible,
           antiCheatEnabled: f.antiCheatEnabled,
           passingScore: f.passingScore,
-          category: f.category,
-          examPeriod: isTraining ? f.examPeriod : 'NONE',
-          showAnswersAfter: f.showAnswersAfter,
-          allowRetakes: f.allowRetakes,
         };
-        // في وضع السلسلة: endDate يُحسب تلقائياً على الخادم (نافذة أسبوع لكل امتحان)
-        if (!isSeriesMode) {
-          body.endDate = new Date(f.endDate).toISOString();
-        }
         if (f.description.trim()) body.description = f.description.trim();
         if (f.classroomName.trim()) body.classroomName = f.classroomName.trim();
-        // Only send password for OFFICIAL exams; TRAINING exams are open
-        if (!isTraining && f.password.trim()) body.password = f.password.trim();
-
-        // حقول السلسلة (تُرسل فقط لـ endpoint السلسلة)
-        if (isSeriesMode) {
-          body.seriesCount = Math.min(12, Math.max(2, f.seriesCount));
-          body.seriesIntervalDays = f.seriesIntervalDays;
-          body.publish = publish;
-        }
+        if (f.password.trim()) body.password = f.password.trim();
 
         const questions = f.questions.map((q, i) => {
           const out: Record<string, unknown> = {
@@ -800,11 +696,7 @@ export default function TeacherExamsPage({
         params.set('schoolId', schoolId);
         params.set('teacherId', teacherId);
 
-        const endpoint = isSeriesMode
-          ? `/api/exams/teacher/series?${params.toString()}`
-          : `/api/exams/teacher?${params.toString()}`;
-
-        const res = await fetch(endpoint, {
+        const res = await fetch(`/api/exams/teacher?${params.toString()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -814,43 +706,28 @@ export default function TeacherExamsPage({
           throw new Error(data?.error || 'فشل إنشاء الامتحان');
         }
 
-        if (isSeriesMode) {
-          // استجابة السلسلة: { success, created, published, message, exams }
-          const createdCount: number = data?.created ?? 0;
-          const publishedCount: number = data?.published ?? 0;
-          if (publish && publishedCount < createdCount) {
-            toast.warning(
-              `تم إنشاء ${createdCount} امتحان في السلسلة (نُشر منها ${publishedCount})`
+        const newExamId: string | undefined = data?.examId;
+
+        if (publish && newExamId) {
+          try {
+            const pubRes = await fetch(
+              `/api/exams/teacher/${newExamId}/publish?${params.toString()}`,
+              { method: 'POST' }
             );
-          } else {
-            toast.success(
-              data?.message || `تم إنشاء ${createdCount} امتحانات بنجاح في السلسلة`
-            );
+            const pubData = await pubRes.json();
+            if (!pubRes.ok) {
+              toast.warning(
+                `تم حفظ الامتحان كمسودة، لكن فشل النشر: ${pubData?.error || 'خطأ غير معروف'}`
+              );
+            } else {
+              toast.success('تم إنشاء الامتحان ونشره بنجاح');
+            }
+          } catch (pubErr) {
+            const msg = pubErr instanceof Error ? pubErr.message : 'فشل النشر';
+            toast.warning(`تم حفظ الامتحان كمسودة، لكن فشل النشر: ${msg}`);
           }
         } else {
-          // استجابة الامتحان المفرد
-          const newExamId: string | undefined = data?.examId;
-          if (publish && newExamId) {
-            try {
-              const pubRes = await fetch(
-                `/api/exams/teacher/${newExamId}/publish?${params.toString()}`,
-                { method: 'POST' }
-              );
-              const pubData = await pubRes.json();
-              if (!pubRes.ok) {
-                toast.warning(
-                  `تم حفظ الامتحان كمسودة، لكن فشل النشر: ${pubData?.error || 'خطأ غير معروف'}`
-                );
-              } else {
-                toast.success('تم إنشاء الامتحان ونشره بنجاح');
-              }
-            } catch (pubErr) {
-              const msg = pubErr instanceof Error ? pubErr.message : 'فشل النشر';
-              toast.warning(`تم حفظ الامتحان كمسودة، لكن فشل النشر: ${msg}`);
-            }
-          } else {
-            toast.success('تم حفظ الامتحان كمسودة');
-          }
+          toast.success('تم حفظ الامتحان كمسودة');
         }
 
         if (mountedRef.current) {
@@ -868,18 +745,12 @@ export default function TeacherExamsPage({
     [createForm, validateCreateForm, schoolId, teacherId, fetchExams, resetCreateForm]
   );
 
-  // ===== Client-side category filter (server returns category field per exam) =====
-  const filteredExams =
-    categoryFilter === 'all'
-      ? exams
-      : exams.filter((e) => (e.category || 'OFFICIAL') === categoryFilter);
-
-  // ===== Compute KPIs (based on filtered list) =====
+  // ===== Compute KPIs =====
   const kpis = {
-    total: filteredExams.length,
-    published: filteredExams.filter((e) => e.status === 'PUBLISHED').length,
-    upcoming: filteredExams.filter((e) => e.timeStatus === 'UPCOMING').length,
-    submissions: filteredExams.reduce((sum, e) => sum + (e.submissionsCount || 0), 0),
+    total: exams.length,
+    published: exams.filter((e) => e.status === 'PUBLISHED').length,
+    upcoming: exams.filter((e) => e.timeStatus === 'UPCOMING').length,
+    submissions: exams.reduce((sum, e) => sum + (e.submissionsCount || 0), 0),
   };
 
   // ===== Render =====
@@ -992,31 +863,6 @@ export default function TeacherExamsPage({
         {/* Filters row */}
         <Card className="border-0 shadow-sm mb-6">
           <CardContent className="p-4">
-            {/* Category tabs (all / official / training) */}
-            <div className="mb-3">
-              <Tabs
-                value={categoryFilter}
-                onValueChange={(v) =>
-                  setCategoryFilter(v as 'all' | ExamCategory)
-                }
-              >
-                <TabsList className="h-9">
-                  <TabsTrigger value="all" className="gap-1.5">
-                    <FileText className="w-3.5 h-3.5" />
-                    الكل
-                  </TabsTrigger>
-                  <TabsTrigger value="OFFICIAL" className="gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    رسمي
-                  </TabsTrigger>
-                  <TabsTrigger value="TRAINING" className="gap-1.5">
-                    <Dumbbell className="w-3.5 h-3.5" />
-                    تدريبي
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-
             <div className="flex flex-col md:flex-row gap-3">
               {/* Search */}
               <div className="flex-1">
@@ -1122,7 +968,7 @@ export default function TeacherExamsPage({
         )}
 
         {/* Empty state */}
-        {!loading && !error && filteredExams.length === 0 && (
+        {!loading && !error && exams.length === 0 && (
           <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700 shadow-sm mb-6">
             <CardContent className="p-10 text-center">
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 dark:from-violet-900/30 dark:to-fuchsia-900/30 flex items-center justify-center">
@@ -1139,7 +985,7 @@ export default function TeacherExamsPage({
         )}
 
         {/* Exams list */}
-        {!error && filteredExams.length > 0 && (
+        {!error && exams.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3 px-1">
               <div className="flex items-center gap-2">
@@ -1148,12 +994,12 @@ export default function TeacherExamsPage({
                   قائمة الامتحانات
                 </h2>
                 <Badge variant="secondary" className="text-[10px]">
-                  {filteredExams.length}
+                  {exams.length}
                 </Badge>
               </div>
             </div>
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pl-1 teacher-exams-scroll">
-              {filteredExams.map((exam) => (
+              {exams.map((exam) => (
                 <Card
                   key={exam.id}
                   className="border-0 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
@@ -1169,10 +1015,6 @@ export default function TeacherExamsPage({
                           {exam.hasPassword && (
                             <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           )}
-                          {/* Training indicator icon next to title */}
-                          {exam.category === 'TRAINING' && (
-                            <Dumbbell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                          )}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge className={`text-[10px] border ${questionTypeBadgeClass('MCQ')}`}>
@@ -1185,25 +1027,9 @@ export default function TeacherExamsPage({
                               {exam.classroomName}
                             </Badge>
                           )}
-                          {/* Exam period badge (training only, when not NONE) */}
-                          {exam.category === 'TRAINING' && exam.examPeriod && exam.examPeriod !== 'NONE' && (
-                            <Badge className={`text-[10px] border ${examPeriodBadgeClass(exam.examPeriod)}`}>
-                              <CalendarDays className="w-3 h-3 ml-1" />
-                              {examPeriodLabel(exam.examPeriod)}
-                            </Badge>
-                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                        {/* Category badge (official vs training) */}
-                        <Badge className={`text-[10px] border ${categoryBadgeClass(exam.category)}`}>
-                          {exam.category === 'TRAINING' ? (
-                            <Dumbbell className="w-3 h-3 ml-1" />
-                          ) : (
-                            <ShieldCheck className="w-3 h-3 ml-1" />
-                          )}
-                          {categoryLabel(exam.category)}
-                        </Badge>
                         <Badge className={`text-[10px] border ${statusBadgeClass(exam.status)}`}>
                           {statusLabel(exam.status)}
                         </Badge>
@@ -1237,19 +1063,10 @@ export default function TeacherExamsPage({
                           <span>نجاح: {exam.passingScore}%</span>
                         </div>
                       )}
-                      {/* Retakes indicator for training */}
-                      {exam.category === 'TRAINING' && exam.allowRetakes && (
-                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                          <Repeat2 className="w-3.5 h-3.5" />
-                          <span>محاولات غير محدودة</span>
-                        </div>
-                      )}
-                      {!(exam.category === 'TRAINING' && exam.allowRetakes) && (
-                        <div className="flex items-center gap-1.5">
-                          <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{exam.maxAttempts} محاولة</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{exam.maxAttempts} محاولة</span>
+                      </div>
                     </div>
 
                     {/* Dates */}
@@ -1560,42 +1377,6 @@ export default function TeacherExamsPage({
                   </h3>
                 </div>
 
-                {/* Exam Category (OFFICIAL / TRAINING) */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">نوع الامتحان</Label>
-                  <ToggleGroup
-                    type="single"
-                    value={createForm.category}
-                    onValueChange={(v) => {
-                      if (v) updateCreateField({ category: v as ExamCategory });
-                    }}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <ToggleGroupItem
-                      value="OFFICIAL"
-                      aria-label="امتحان رسمي"
-                      className="flex-1 gap-1.5 data-[state=on]:bg-violet-50 data-[state=on]:text-violet-700 dark:data-[state=on]:bg-violet-900/30 dark:data-[state=on]:text-violet-300"
-                    >
-                      <ShieldCheck className="w-4 h-4" />
-                      <span className="text-xs font-medium">رسمي</span>
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="TRAINING"
-                      aria-label="امتحان تدريبي"
-                      className="flex-1 gap-1.5 data-[state=on]:bg-amber-50 data-[state=on]:text-amber-700 dark:data-[state=on]:bg-amber-900/30 dark:data-[state=on]:text-amber-300"
-                    >
-                      <Dumbbell className="w-4 h-4" />
-                      <span className="text-xs font-medium">تدريبي</span>
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    {createForm.category === 'TRAINING'
-                      ? 'امتحان تدريبي مع إعادة المحاولة (مثل Oracle Academy) — لا يؤثر على درجة الطالب الرسمية.'
-                      : 'امتحان رسمي حقيقي يؤثر على درجة الطالب.'}
-                  </p>
-                </div>
-
                 {/* Title */}
                 <div className="space-y-1.5">
                   <Label htmlFor="ce-title" className="text-sm font-medium">
@@ -1675,32 +1456,18 @@ export default function TeacherExamsPage({
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    {createForm.category === 'TRAINING' && createForm.isSeries ? (
-                      <>
-                        <Label className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                          نافذة كل امتحان (تلقائي)
-                        </Label>
-                        <div className="h-10 flex items-center gap-1.5 px-3 rounded-md border border-amber-200 bg-amber-50/70 dark:bg-amber-900/20 dark:border-amber-800/60 text-xs text-amber-700 dark:text-amber-300">
-                          <Repeat2 className="w-3.5 h-3.5 shrink-0" />
-                          <span>7 أيام من تاريخ بدء كل امتحان في السلسلة</span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Label htmlFor="ce-end" className="text-sm font-medium">
-                          وقت الإغلاق <span className="text-rose-500">*</span>
-                        </Label>
-                        <Input
-                          id="ce-end"
-                          type="datetime-local"
-                          value={createForm.endDate}
-                          onChange={(e) => updateCreateField({ endDate: e.target.value })}
-                          className={createErrors.endDate ? 'border-rose-400' : ''}
-                        />
-                        {createErrors.endDate && (
-                          <p className="text-xs text-rose-500">{createErrors.endDate}</p>
-                        )}
-                      </>
+                    <Label htmlFor="ce-end" className="text-sm font-medium">
+                      وقت الإغلاق <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="ce-end"
+                      type="datetime-local"
+                      value={createForm.endDate}
+                      onChange={(e) => updateCreateField({ endDate: e.target.value })}
+                      className={createErrors.endDate ? 'border-rose-400' : ''}
+                    />
+                    {createErrors.endDate && (
+                      <p className="text-xs text-rose-500">{createErrors.endDate}</p>
                     )}
                   </div>
                 </div>
@@ -1742,165 +1509,19 @@ export default function TeacherExamsPage({
                   </div>
                 </div>
 
-                {/* Password (OFFICIAL only) */}
-                {createForm.category === 'OFFICIAL' && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ce-password" className="text-sm font-medium">
-                      كلمة سر الدخول (اختياري)
-                    </Label>
-                    <Input
-                      id="ce-password"
-                      type="text"
-                      value={createForm.password}
-                      onChange={(e) => updateCreateField({ password: e.target.value })}
-                      placeholder="اتركها فارغة لعدم الحماية (4 أحرف على الأقل)"
-                    />
-                  </div>
-                )}
-
-                {/* Training-only settings */}
-                {createForm.category === 'TRAINING' && (
-                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-900/10 p-3">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                      <Dumbbell className="w-3.5 h-3.5" />
-                      إعدادات الامتحان التدريبي
-                    </div>
-
-                    {/* Exam Period */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ce-period" className="text-sm font-medium">
-                        الفئة الزمنية
-                      </Label>
-                      <Select
-                        value={createForm.examPeriod}
-                        onValueChange={(v) =>
-                          updateCreateField({ examPeriod: v as ExamPeriod })
-                        }
-                      >
-                        <SelectTrigger id="ce-period" className="w-full h-10">
-                          <SelectValue placeholder="اختر الفئة الزمنية" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="WEEKLY">أسبوعي</SelectItem>
-                          <SelectItem value="MIDMONTH">نصف شهري</SelectItem>
-                          <SelectItem value="MONTHLY">شهري</SelectItem>
-                          <SelectItem value="CUMULATIVE">تراكمي</SelectItem>
-                          <SelectItem value="NONE">بدون فئة</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Training toggles */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <ToggleRow
-                        label="إعادة المحاولة بدون حد"
-                        checked={createForm.allowRetakes}
-                        onCheckedChange={(v) => updateCreateField({ allowRetakes: v })}
-                      />
-                      <ToggleRow
-                        label="إظهار الإجابات الصحيحة بعد التسليم"
-                        checked={createForm.showAnswersAfter}
-                        onCheckedChange={(v) => updateCreateField({ showAnswersAfter: v })}
-                      />
-                    </div>
-
-                    <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed flex items-start gap-1">
-                      <EyeOff className="w-3 h-3 mt-0.5 shrink-0" />
-                      الامتحان التدريبي مفتوح بدون كلمة سر للطلاب.
-                    </p>
-                  </div>
-                )}
-
-                {/* Series creation (training only) — Oracle Academy style */}
-                {createForm.category === 'TRAINING' && (
-                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/30 dark:bg-amber-900/10 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
-                        <Repeat2 className="w-3.5 h-3.5" />
-                        سلسلة امتحانات (Oracle Academy)
-                      </div>
-                      <Switch
-                        checked={createForm.isSeries}
-                        onCheckedChange={(v) => updateCreateField({ isSeries: v })}
-                        aria-label="إنشاء كـ سلسلة امتحانات"
-                      />
-                    </div>
-
-                    {!createForm.isSeries ? (
-                      <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 leading-relaxed">
-                        فعّل لإنشاء عدة امتحانات تدريبية دفعة واحدة بتواريخ متتالية.
-                      </p>
-                    ) : (
-                      <div className="space-y-3 pt-2 border-t border-amber-200/60 dark:border-amber-800/40">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* Interval select */}
-                          <div className="space-y-1.5">
-                            <Label htmlFor="ce-series-interval" className="text-xs font-medium">
-                              تكرار السلسلة
-                            </Label>
-                            <Select
-                              value={String(createForm.seriesIntervalDays)}
-                              onValueChange={(v) =>
-                                updateCreateField({ seriesIntervalDays: Number(v) })
-                              }
-                            >
-                              <SelectTrigger id="ce-series-interval" className="w-full h-9 text-xs">
-                                <SelectValue placeholder="اختر فترة التكرار" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="7">أسبوعي — كل أسبوع</SelectItem>
-                                <SelectItem value="14">نصف شهري — كل أسبوعين</SelectItem>
-                                <SelectItem value="30">شهري — كل شهر</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {/* Count input */}
-                          <div className="space-y-1.5">
-                            <Label htmlFor="ce-series-count" className="text-xs font-medium">
-                              عدد الامتحانات في السلسلة
-                            </Label>
-                            <Input
-                              id="ce-series-count"
-                              type="number"
-                              min={2}
-                              max={12}
-                              value={createForm.seriesCount}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value) || 2;
-                                updateCreateField({
-                                  seriesCount: Math.min(12, Math.max(2, v)),
-                                });
-                              }}
-                              className={`h-9 text-xs ${
-                                createErrors.seriesCount ? 'border-rose-400' : ''
-                              }`}
-                            />
-                            {createErrors.seriesCount && (
-                              <p className="text-xs text-rose-500">
-                                {createErrors.seriesCount}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Hint */}
-                        <div className="rounded-md bg-amber-100/60 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60 px-3 py-2">
-                          <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed">
-                            سيتم إنشاء <strong>{createForm.seriesCount}</strong> امتحانات تلقائياً،
-                            يبدأ الأول في التاريخ المحدد، والباقي يتكرر حسب الفترة
-                            {createForm.seriesIntervalDays === 7
-                              ? ' (كل أسبوع)'
-                              : createForm.seriesIntervalDays === 14
-                              ? ' (كل أسبوعين)'
-                              : ' (كل شهر)'}
-                            . كل امتحان يبقى مفتوحاً لمدة أسبوع من تاريخ بدئه.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="ce-password" className="text-sm font-medium">
+                    كلمة سر الدخول (اختياري)
+                  </Label>
+                  <Input
+                    id="ce-password"
+                    type="text"
+                    value={createForm.password}
+                    onChange={(e) => updateCreateField({ password: e.target.value })}
+                    placeholder="اتركها فارغة لعدم الحماية (4 أحرف على الأقل)"
+                  />
+                </div>
 
                 {/* Settings toggles */}
                 <div className="space-y-2">
@@ -2423,19 +2044,11 @@ function DraftQuestionCard({
 
         {/* Explanation */}
         <div className="space-y-1.5">
-          <div>
-            <Label className="text-xs text-gray-500 dark:text-gray-400">
-              تفسير الإجابة (اختياري)
-            </Label>
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
-              <BookOpen className="w-3 h-3 shrink-0" />
-              يظهر للطالب بعد التسليم في الامتحانات التدريبية (للمراجعة)
-            </p>
-          </div>
+          <Label className="text-xs text-gray-500 dark:text-gray-400">تفسير الإجابة (اختياري)</Label>
           <Textarea
             value={q.explanation}
             onChange={(e) => onChange({ explanation: e.target.value })}
-            placeholder="اكتب شرحاً موجزاً يساعد الطالب على فهم الإجابة الصحيحة..."
+            placeholder="شرح يظهر للطالب بعد التصحيح..."
             rows={2}
           />
         </div>

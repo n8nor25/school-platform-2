@@ -40,7 +40,6 @@ import {
   BookOpen, Calendar, GraduationCap, Bookmark, BookmarkCheck,
   Wifi, WifiOff, Search, Filter, History, TrendingUp, Trophy,
   Target, Percent, Printer, ChevronLeft, Keyboard,
-  Dumbbell, Repeat2, Activity, Sparkles, ShieldCheck, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -53,9 +52,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
@@ -81,10 +77,6 @@ interface StudentInfo {
   schoolId: string;
 }
 
-// ===== أنواع الامتحانات التدريبية (جديدة) =====
-type ExamCategory = 'OFFICIAL' | 'TRAINING';
-type ExamPeriod = 'NONE' | 'WEEKLY' | 'MIDMONTH' | 'MONTHLY' | 'CUMULATIVE';
-
 interface AvailableExam {
   id: string;
   title: string;
@@ -107,50 +99,6 @@ interface AvailableExam {
   allowTextAnswers: boolean;
   allowImageAnswers: boolean;
   allowPdfAnswers: boolean;
-  // ===== حقول الامتحانات التدريبية (اختيارية للتوافق الخلفي) =====
-  category?: ExamCategory;
-  examPeriod?: ExamPeriod;
-  showAnswersAfter?: boolean;
-  allowRetakes?: boolean;
-  isTraining?: boolean;
-  attemptsRemaining?: number; // 99 إذا allowRetakes (غير محدودة)
-  bestScore?: number | null;
-  submissions?: unknown[];
-}
-
-// ===== استجابة /api/exams/student (مقسّمة) =====
-interface ExamsStudentResponse {
-  available?: AvailableExam[];
-  inProgress?: AvailableExam[];
-  upcoming?: AvailableExam[];
-  endedOrExhausted?: AvailableExam[];
-  // دعم الاستجابة القديمة
-  exams?: AvailableExam[];
-}
-
-// ===== منحنى الأداء (placeholder — الـ API يُبنى في Task ID 6) =====
-interface PerformancePoint {
-  label: string;
-  score: number;
-  classAverage?: number; // متوسط الفصل لنفس الامتحان — خط المقارنة
-  date?: string;
-  examTitle?: string;
-  subject?: string;
-}
-
-interface PerformanceData {
-  isEmpty?: boolean;
-  points?: PerformancePoint[];
-  avgScore?: number;
-  avgTraining?: number | null;
-  avgOfficial?: number | null;
-  bestScore?: number | null;
-  trend?: 'up' | 'down' | 'stable';
-  totalExams?: number;
-  // إحصائيات الفصل (Task 6b)
-  avgClassScore?: number | null; // متوسط الفصل العام
-  classRank?: number | null; // ترتيب الطالب (1 = الأفضل)
-  classSize?: number; // عدد طلاب الفصل
 }
 
 interface Question {
@@ -162,7 +110,6 @@ interface Question {
   order: number;
   hasAttachment?: boolean;
   attachmentUrl?: string | null;
-  explanation?: string | null;
 }
 
 interface SubmissionInfo {
@@ -174,14 +121,8 @@ interface SubmissionInfo {
 }
 
 interface ExamStartResponse {
-  submissionId: string;
-  resumed?: boolean;
-  attemptNumber?: number;
-  durationMinutes?: number;
-  questionsCount?: number;
-  shuffled?: boolean;
-  questions?: Question[];
-  exam?: {
+  submission: SubmissionInfo;
+  exam: {
     id: string;
     title: string;
     durationMinutes: number;
@@ -192,10 +133,8 @@ interface ExamStartResponse {
     antiCheatEnabled: boolean;
     showResultImmediately: boolean;
   };
-  submission?: {
-    id: string;
-    remainingSeconds: number;
-  };
+  questions: Question[];
+  resumed?: boolean;
 }
 
 interface SavedAnswer {
@@ -298,66 +237,6 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   FILE_PDF: 'إجابة بملف PDF',
 };
 
-// ===== Helpers للامتحانات التدريبية =====
-
-function isTrainingExam(exam: AvailableExam): boolean {
-  return exam.isTraining === true || exam.category === 'TRAINING';
-}
-
-function categoryLabel(c: ExamCategory | undefined | null): string {
-  switch (c) {
-    case 'TRAINING': return 'تدريبي';
-    case 'OFFICIAL':
-    default: return 'رسمي';
-  }
-}
-
-function categoryBadgeClass(c: ExamCategory | undefined | null): string {
-  switch (c) {
-    case 'TRAINING':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800';
-    case 'OFFICIAL':
-    default:
-      return 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200 dark:border-violet-800';
-  }
-}
-
-function examPeriodLabel(p: ExamPeriod | undefined | null): string {
-  switch (p) {
-    case 'WEEKLY': return 'أسبوعي';
-    case 'MIDMONTH': return 'نصف شهري';
-    case 'MONTHLY': return 'شهري';
-    case 'CUMULATIVE': return 'تراكمي';
-    case 'NONE':
-    default: return 'بدون فئة';
-  }
-}
-
-function examPeriodBadgeClass(p: ExamPeriod | undefined | null): string {
-  switch (p) {
-    case 'WEEKLY':
-      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200 dark:border-sky-800';
-    case 'MIDMONTH':
-      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
-    case 'MONTHLY':
-      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-    case 'CUMULATIVE':
-      return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 border-rose-200 dark:border-rose-800';
-    case 'NONE':
-    default:
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-  }
-}
-
-// هل الامتحان في حالة "منتهي/مُستنزف"؟
-function isEndedOrExhausted(exam: AvailableExam): boolean {
-  if (exam.timeStatus === 'ENDED') return true;
-  const remaining = typeof exam.attemptsRemaining === 'number'
-    ? exam.attemptsRemaining
-    : exam.attemptsLeft;
-  return remaining === 0;
-}
-
 // ===== Main Component =====
 
 export default function StudentExamsPage({ onBack, schoolId }: StudentExamsPageProps) {
@@ -384,7 +263,7 @@ export default function StudentExamsPage({ onBack, schoolId }: StudentExamsPageP
   // بدء الامتحان بنجاح
   const handleStartSuccess = (data: ExamStartResponse) => {
     setStartData(data);
-    setSubmissionId(data.submissionId);
+    setSubmissionId(data.submission.id);
     setScreen('runner');
   };
 
@@ -700,8 +579,6 @@ function ExamsList({
 
   // ===== الفلترة والتبويب =====
   const [activeTab, setActiveTab] = useState<'available' | 'history'>('available');
-  // التبويب الرئيسي: رسمي / تدريبي (يفتلر قائمة الامتحانات حسب category)
-  const [categoryTab, setCategoryTab] = useState<ExamCategory>('OFFICIAL');
   const [searchTerm, setSearchTerm] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -710,33 +587,16 @@ function ExamsList({
     setLoading(true);
     setError(null);
     try {
-      // الـ API المحدّث: /api/exams/student?schoolId&studentId&studentName
-      // يُرجع استجابة مقسّمة: available, inProgress, upcoming, endedOrExhausted
-      const res = await fetch(
-        buildUrl('/api/exams/student', student, { studentName: student.studentName }),
-        { headers: { 'x-student-id': student.studentId } },
-      );
-      const data: ExamsStudentResponse = await res.json();
-      if (!res.ok) {
-        setError((data as unknown as { error?: string }).error || 'فشل جلب الامتحانات');
-        setExams([]);
-        return;
-      }
-      // جمّع كل الأقسام في قائمة واحدة (مع دعم الاستجابة القديمة data.exams)
-      const list: AvailableExam[] = [];
-      if (Array.isArray(data.available)) list.push(...data.available);
-      if (Array.isArray(data.inProgress)) list.push(...data.inProgress);
-      if (Array.isArray(data.upcoming)) list.push(...data.upcoming);
-      if (Array.isArray(data.endedOrExhausted)) list.push(...data.endedOrExhausted);
-      if (list.length === 0 && Array.isArray(data.exams)) list.push(...data.exams);
-      // ابحث: إزالة التكرار بناءً على id
-      const seen = new Set<string>();
-      const deduped = list.filter((e) => {
-        if (seen.has(e.id)) return false;
-        seen.add(e.id);
-        return true;
+      const res = await fetch(buildUrl('/api/exams/available', student), {
+        headers: { 'x-student-id': student.studentId },
       });
-      setExams(deduped);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'فشل جلب الامتحانات');
+        setExams([]);
+      } else {
+        setExams(data.exams || []);
+      }
     } catch (e) {
       setError('تعذّر الاتصال بالخادم');
       setExams([]);
@@ -773,32 +633,17 @@ function ExamsList({
     return () => { cancelled = true; };
   }, []);
 
-  // قائمة المواد المتاحة للفلترة (ضمن التبويب الحالي)
-  const examsInCategory = useMemo(
-    () => exams.filter((e) => (isTrainingExam(e) ? 'TRAINING' : 'OFFICIAL') === categoryTab),
-    [exams, categoryTab],
-  );
-
+  // قائمة المواد المتاحة للفلترة
   const availableSubjects = useMemo(() => {
     const set = new Set<string>();
-    examsInCategory.forEach((e) => { if (e.subject) set.add(e.subject); });
+    exams.forEach((e) => { if (e.subject) set.add(e.subject); });
     stats?.subjectBreakdown.forEach((s) => set.add(s.subject));
     return Array.from(set).sort();
-  }, [examsInCategory, stats]);
+  }, [exams, stats]);
 
-  // أعداد كل تبويب رئيسي
-  const officialCount = useMemo(
-    () => exams.filter((e) => !isTrainingExam(e)).length,
-    [exams],
-  );
-  const trainingCount = useMemo(
-    () => exams.filter((e) => isTrainingExam(e)).length,
-    [exams],
-  );
-
-  // تطبيق الفلترة على امتحانات التبويب الحالي
+  // تطبيق الفلترة على الامتحانات المتاحة
   const filteredExams = useMemo(() => {
-    return examsInCategory.filter((exam) => {
+    return exams.filter((exam) => {
       if (searchTerm.trim()) {
         const q = searchTerm.trim().toLowerCase();
         const matches =
@@ -811,7 +656,7 @@ function ExamsList({
       if (statusFilter !== 'all' && exam.timeStatus !== statusFilter) return false;
       return true;
     });
-  }, [examsInCategory, searchTerm, subjectFilter, statusFilter]);
+  }, [exams, searchTerm, subjectFilter, statusFilter]);
 
   // ===== شاشة التحميل =====
   if (loading) {
@@ -843,9 +688,6 @@ function ExamsList({
     <div className="space-y-5">
       {/* ====== رأس إحصائيات الطالب ====== */}
       <StudentStatsHeader stats={stats} loading={statsLoading} studentName={student.studentName} />
-
-      {/* ====== منحنى أدائي (placeholder — الـ API يُبنى في Task ID 6) ====== */}
-      <PerformanceCurve student={student} />
 
       {/* ====== تبويب: متاحة / منجزة ====== */}
       <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
@@ -881,28 +723,8 @@ function ExamsList({
 
       {activeTab === 'available' ? (
         <>
-          {/* ====== التبويب الرئيسي: رسمي / تدريبي ====== */}
-          <Tabs value={categoryTab} onValueChange={(v) => setCategoryTab(v as ExamCategory)} className="w-full">
-            <TabsList className="h-10">
-              <TabsTrigger value="OFFICIAL" className="px-4 gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-violet-600" />
-                <span>الامتحانات الرسمية</span>
-                {officialCount > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1">{officialCount}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="TRAINING" className="px-4 gap-1.5">
-                <Dumbbell className="w-4 h-4 text-amber-600" />
-                <span>الامتحانات التدريبية</span>
-                {trainingCount > 0 && (
-                  <Badge variant="secondary" className="text-xs px-1.5 py-0 ml-1 bg-amber-100 text-amber-700">{trainingCount}</Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
           {/* ====== شريط الفلترة ====== */}
-          {examsInCategory.length > 0 && (
+          {exams.length > 0 && (
             <div className="bg-white rounded-xl border p-3 flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -952,26 +774,18 @@ function ExamsList({
           {/* ====== قائمة الامتحانات ====== */}
           {filteredExams.length === 0 ? (
             <div className="max-w-md mx-auto py-12 text-center">
-              <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${
-                categoryTab === 'TRAINING' ? 'bg-amber-100' : 'bg-gray-100'
-              }`}>
-                {categoryTab === 'TRAINING'
-                  ? <Dumbbell className="w-10 h-10 text-amber-400" />
-                  : <FileText className="w-10 h-10 text-gray-400" />}
+              <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <FileText className="w-10 h-10 text-gray-400" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">
-                {examsInCategory.length === 0
-                  ? (categoryTab === 'TRAINING' ? 'لا توجد امتحانات تدريبية' : 'لا توجد امتحانات رسمية متاحة')
-                  : 'لا نتائج مطابقة'}
+                {exams.length === 0 ? 'لا توجد امتحانات متاحة' : 'لا نتائج مطابقة'}
               </h3>
               <p className="text-gray-500 text-sm mb-4">
-                {examsInCategory.length === 0
-                  ? (categoryTab === 'TRAINING'
-                      ? 'لا توجد امتحانات تدريبية مفتوحة حالياً. تابع صفحتك للاطلاع على الجديد.'
-                      : 'لا توجد امتحانات رسمية مفتوحة حالياً. تابع صفحتك للاطلاع على الامتحانات الجديدة.')
+                {exams.length === 0
+                  ? 'لا توجد امتحانات مفتوحة حالياً. تابع صفحتك للاطلاع على الامتحانات الجديدة.'
                   : 'جرّب تعديل معايير البحث أو الفلترة.'}
               </p>
-              {examsInCategory.length === 0 ? (
+              {exams.length === 0 ? (
                 <Button onClick={loadExams} variant="outline">
                   <RefreshCw className="w-4 h-4 ml-2" /> تحديث
                 </Button>
@@ -1143,352 +957,9 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 // ============================================================
-//  PerformanceCurve — منحنى أداء الطالب مع خط متوسط الفصل
-//  الـ API: GET /api/exams/student/performance?schoolId&studentId
-//  الاستجابة المتوقعة (من Task ID 6 + 6b):
-//    { success: true, data: { studentName, timeline[], byPeriod[], bySubject[],
-//                              stats: { ..., avgClassScore, classRank, classSize } } }
-//  - كل عنصر في timeline يحوي percentage (درجة الطالب) + classAverage (متوسط الفصل).
-//  - نرسم خطين: amber/orange للطالب (متين) و slate/blue dashed لمتوسط الفصل.
-//  - 3 بطاقات إحصائية فوق الـ chart: معدلي / متوسط الفصل / ترتيبي.
-//  - fallback آمن إذا فشل الـ fetch (placeholder "قريباً").
-//  - ندعم أيضاً شكل مبسّط {points, avgScore} لأغراض الاختبار.
-// ============================================================
-function PerformanceCurve({ student }: { student: StudentInfo }) {
-  const [data, setData] = useState<PerformanceData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    // mountedRef pattern لتفادي setState بعد unmount
-    const mountedRef = { current: true };
-    (async () => {
-      try {
-        const res = await fetch(buildUrl('/api/exams/student/performance', student), {
-          headers: { 'x-student-id': student.studentId },
-        });
-        if (!mountedRef.current) return;
-        if (!res.ok) {
-          // fallback آمن: لا نُظهر خطأ للمستخدم، فقط placeholder
-          setFailed(true);
-          setData(null);
-          return;
-        }
-        const json = await res.json();
-        if (!mountedRef.current) return;
-        // الـ API يُرجع {success, data: {...}} — نأخذ data
-        const payload = (json && typeof json === 'object' && 'data' in json
-          ? (json as { data?: unknown }).data
-          : json) as PerformanceData | undefined;
-        // طبيعّي: لو الـ API يُرجع timeline (شكل Task 6/6b)،حوّله إلى points
-        const normalized = normalizePerformanceData(payload);
-        setData(normalized);
-        setFailed(false);
-      } catch {
-        if (!mountedRef.current) return;
-        // fallback آمن: تعامل مع فشل الشبكة بهدوء
-        setFailed(true);
-        setData(null);
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    })();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [student]);
-
-  // ===== Loading skeleton =====
-  if (loading) {
-    return (
-      <Card className="border-amber-200 shadow-sm overflow-hidden bg-amber-50/40">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Skeleton className="w-8 h-8 rounded-lg" />
-              <div className="space-y-1">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-3 w-40" />
-              </div>
-            </div>
-            <Skeleton className="h-5 w-16" />
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0 space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <Skeleton className="h-16 w-full rounded-lg" />
-            <Skeleton className="h-16 w-full rounded-lg" />
-            <Skeleton className="h-16 w-full rounded-lg" />
-          </div>
-          <Skeleton className="h-32 w-full rounded-lg" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const hasData =
-    !!data &&
-    !data.isEmpty &&
-    Array.isArray(data.points) &&
-    data.points.length > 0;
-
-  // هل يوجد بيانات متوسط الفصل على الأقل لنقطة واحدة؟
-  const hasClassLine =
-    hasData &&
-    Array.isArray(data!.points) &&
-    data!.points.some((p) => typeof p.classAverage === 'number');
-
-  // "معدلي": نُفضّل avgOfficial (الرسمي) فإن لم يوجد فـ avgTraining،
-  // وإلا avgScore (المتوسط العام). قد تكون null لو لا بيانات.
-  const myAvg =
-    data?.avgOfficial != null
-      ? data.avgOfficial
-      : data?.avgTraining != null
-      ? data.avgTraining
-      : data?.avgScore ?? null;
-
-  const classAvg = data?.avgClassScore ?? null;
-  const classRank = data?.classRank ?? null;
-  const classSize = data?.classSize ?? 0;
-
-  return (
-    <Card className="border-amber-200 shadow-sm overflow-hidden bg-gradient-to-l from-amber-50 to-orange-50">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-amber-700" />
-            </div>
-            <div>
-              <CardTitle className="text-sm text-gray-900">منحنى أدائي</CardTitle>
-              <p className="text-xs text-gray-500">تتبّع تطوّر درجاتك مقابل متوسط الفصل</p>
-            </div>
-          </div>
-          {hasData && myAvg != null && (
-            <Badge className="bg-amber-100 text-amber-700 border-amber-200">
-              متوسطي {myAvg}%
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0 space-y-3">
-        {hasData ? (
-          <>
-            {/* ===== 3 بطاقات إحصائية: معدلي / متوسط الفصل / ترتيبي ===== */}
-            <div className="grid grid-cols-3 gap-2">
-              <PerfStatCard
-                icon={<Target className="w-3.5 h-3.5" />}
-                label="معدلي"
-                value={myAvg != null ? `${myAvg}%` : '—'}
-                tone="amber"
-              />
-              <PerfStatCard
-                icon={<Users className="w-3.5 h-3.5" />}
-                label="متوسط الفصل"
-                value={classAvg != null ? `${classAvg}%` : '—'}
-                tone="slate"
-              />
-              <PerfStatCard
-                icon={<Trophy className="w-3.5 h-3.5" />}
-                label="ترتيبي"
-                value={classRank != null ? `${classRank} / ${classSize || '?'}` : '—'}
-                tone="slate"
-              />
-            </div>
-
-            {/* ===== LineChart بخطين: الطالب + متوسط الفصل ===== */}
-            <div className="h-36">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data!.points} margin={{ top: 4, right: 8, bottom: 0, left: -28 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#fde68a" />
-                  <XAxis dataKey="label" stroke="#a16207" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} stroke="#a16207" fontSize={10} tickLine={false} axisLine={false} />
-                  <RTooltip
-                    contentStyle={{
-                      background: '#fff',
-                      border: '1px solid #fde68a',
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                    // نوع الإرجاع الصريح [string, string] يمنع TS من
-                    // تضييق TName إلى union من الـ literals، مما يكسر
-                    // overload الـ labelFormatter.
-                    formatter={(value: number, name: string): [string, string] => {
-                      if (name === 'classAverage') {
-                        return [`${value}%`, 'متوسط الفصل'];
-                      }
-                      return [`${value}%`, 'درجتي'];
-                    }}
-                    labelFormatter={(_l: number, payload) => {
-                      const p = payload?.[0]?.payload as PerformancePoint | undefined;
-                      return p?.examTitle || p?.label || '';
-                    }}
-                  />
-                  <RLegend
-                    wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
-                    formatter={(value: string) =>
-                      value === 'classAverage' ? 'متوسط الفصل' : 'أدائي'
-                    }
-                  />
-                  {/* خط الطالب: amber/orange متين */}
-                  <Line
-                    type="monotone"
-                    dataKey="score"
-                    name="score"
-                    stroke="#d97706"
-                    strokeWidth={2.5}
-                    dot={{ fill: '#d97706', r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                  {/* خط متوسط الفصل: slate/blue dashed (يظهر فقط إذا توفّرت البيانات) */}
-                  {hasClassLine && (
-                    <Line
-                      type="monotone"
-                      dataKey="classAverage"
-                      name="classAverage"
-                      stroke="#64748b"
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={{ fill: '#64748b', r: 2.5 }}
-                      activeDot={{ r: 4 }}
-                      connectNulls
-                    />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </>
-        ) : (
-          <div className="h-32 flex flex-col items-center justify-center text-center px-4">
-            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-2">
-              <Sparkles className="w-5 h-5 text-amber-600" />
-            </div>
-            <p className="text-sm font-medium text-amber-800 mb-0.5">منحنى الأداء قريباً</p>
-            <p className="text-xs text-amber-700/80 max-w-sm">
-              {failed
-                ? 'تعذّر تحميل بيانات الأداء حالياً. ستظهر هنا بمجرد توفّرها.'
-                : 'سيظهر منحنى أدائك عبر الامتحانات هنا بمجرد توفّر بيانات كافية.'}
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// بطاقة إحصائية صغيرة للـ PerformanceCurve — ثلاث نغمات لونية:
-// amber (للطالب) / slate (للفصل).
-function PerfStatCard({
-  icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone: 'amber' | 'slate';
-}) {
-  const tones =
-    tone === 'amber'
-      ? {
-          wrap: 'bg-amber-50/70 border-amber-200',
-          iconWrap: 'bg-amber-100 text-amber-700',
-          value: 'text-amber-900',
-          label: 'text-amber-700/80',
-        }
-      : {
-          wrap: 'bg-slate-50/80 border-slate-200',
-          iconWrap: 'bg-slate-200/70 text-slate-600',
-          value: 'text-slate-800',
-          label: 'text-slate-500',
-        };
-  return (
-    <div className={`rounded-lg border ${tones.wrap} px-2.5 py-2 flex flex-col gap-1`}>
-      <div className="flex items-center gap-1">
-        <span className={`inline-flex w-5 h-5 items-center justify-center rounded ${tones.iconWrap}`}>
-          {icon}
-        </span>
-        <span className={`text-[11px] ${tones.label}`}>{label}</span>
-      </div>
-      <span className={`text-base font-bold leading-none ${tones.value}`}>{value}</span>
-    </div>
-  );
-}
-
-// يطبّع الاستجابة من /api/exams/student/performance إلى PerformanceData.
-// يدعم شكل Task 6 (timeline) وشكل مبسّط (points).
-function normalizePerformanceData(raw: PerformanceData | undefined | null): PerformanceData {
-  if (!raw || typeof raw !== 'object') return { isEmpty: true, points: [] };
-
-  // شكل مبسّط: points + avgScore
-  if (Array.isArray((raw as PerformanceData).points)) {
-    return raw as PerformanceData;
-  }
-
-  // شكل Task 6/6b: timeline + stats
-  const r = raw as PerformanceData & {
-    timeline?: Array<{
-      date?: string;
-      examTitle?: string;
-      subject?: string;
-      percentage?: number;
-      classAverage?: number;
-      attemptNumber?: number;
-    }>;
-    stats?: {
-      avgTraining?: number | null;
-      avgOfficial?: number | null;
-      bestScore?: number | null;
-      totalAttempts?: number;
-      avgClassScore?: number | null;
-      classRank?: number | null;
-      classSize?: number;
-    };
-  };
-
-  const timeline = Array.isArray(r.timeline) ? r.timeline : [];
-  if (timeline.length === 0) return { isEmpty: true, points: [] };
-
-  const points: PerformancePoint[] = timeline.map((t, i) => ({
-    label: `#${i + 1}`,
-    score: typeof t.percentage === 'number' ? t.percentage : 0,
-    // classAverage: متوسط الفصل لنفس الامتحان — يُرجعه الـ API دائماً
-    // (يساوي درجة الطالب إذا لم يوجد آخرون). نُمرّره كما هو.
-    classAverage: typeof t.classAverage === 'number' ? t.classAverage : undefined,
-    date: t.date,
-    examTitle: t.examTitle,
-    subject: t.subject,
-  }));
-
-  // متوسط الطالب = متوسط كل نسبه
-  const validScores = timeline
-    .map((t) => t.percentage)
-    .filter((p): p is number => typeof p === 'number');
-  const avgScore = validScores.length > 0
-    ? Math.round((validScores.reduce((a, b) => a + b, 0) / validScores.length) * 10) / 10
-    : undefined;
-
-  return {
-    isEmpty: false,
-    points,
-    avgScore,
-    avgTraining: r.stats?.avgTraining ?? undefined,
-    avgOfficial: r.stats?.avgOfficial ?? undefined,
-    bestScore: r.stats?.bestScore ?? undefined,
-    totalExams: r.stats?.totalAttempts,
-    // إحصائيات الفصل (Task 6b)
-    avgClassScore: r.stats?.avgClassScore ?? undefined,
-    classRank: r.stats?.classRank ?? undefined,
-    classSize: r.stats?.classSize,
-  };
-}
-
-// ============================================================
 //  ExamCard — بطاقة امتحان (مستخرجة لإعادة الاستخدام)
 // ============================================================
 function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: AvailableExam) => void }) {
-  const training = isTrainingExam(exam);
   const status = exam.timeStatus;
   const statusInfo =
     status === 'UPCOMING'
@@ -1497,68 +968,16 @@ function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: Avail
       ? { label: 'مفتوح', color: 'bg-green-100 text-green-800 border-green-200' }
       : { label: 'منتهي', color: 'bg-gray-100 text-gray-600 border-gray-200' };
 
-  // منطق الزر: استئناف / إعادة محاولة / ابدأ / انتهت المحاولات
-  const ended = isEndedOrExhausted(exam);
-  const canRetry = training && exam.allowRetakes === true && (exam.attemptsUsed > 0 || ended);
-  const exhausted = ended && exam.allowRetakes !== true;
-
-  // لو allowRetakes === true: المحاولات غير محدودة (attemptsRemaining = 99)
-  const attemptsRemaining = typeof exam.attemptsRemaining === 'number'
-    ? exam.attemptsRemaining
-    : exam.attemptsLeft;
-  const showUnlimited = exam.allowRetakes === true;
-
-  // لوحة ألوان البطاقة حسب النوع
-  const cardBorder = training
-    ? (exam.hasActiveSubmission ? 'border-amber-300 bg-amber-50/40' : 'border-amber-200 bg-amber-50/20')
-    : (exam.hasActiveSubmission ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200');
-  const primaryBtnClass = training
-    ? 'w-full bg-amber-600 hover:bg-amber-700 text-white'
-    : 'w-full bg-[#610000] hover:bg-[#4a0000] text-white';
-
   return (
     <Card
-      className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border ${cardBorder}`}
+      className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer border ${
+        exam.hasActiveSubmission ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'
+      }`}
       onClick={() => onSelect(exam)}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            {/* ====== شارات الامتحان التدريبي ====== */}
-            {training && (
-              <div className="flex items-center gap-1 flex-wrap mb-1.5">
-                <Badge className={`text-[10px] border ${categoryBadgeClass('TRAINING')}`}>
-                  <Dumbbell className="w-3 h-3 ml-0.5" />
-                  تدريبي
-                </Badge>
-                {exam.examPeriod && exam.examPeriod !== 'NONE' && (
-                  <Badge className={`text-[10px] border ${examPeriodBadgeClass(exam.examPeriod)}`}>
-                    {examPeriodLabel(exam.examPeriod)}
-                  </Badge>
-                )}
-                {exam.allowRetakes === true && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 cursor-help">
-                        <Repeat2 className="w-3 h-3" />
-                        محاولات غير محدودة
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>هذا الامتحان التدريبي يسمح بإعادة المحاولة دون حد</TooltipContent>
-                  </Tooltip>
-                )}
-                {exam.showAnswersAfter === true && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex items-center justify-center w-5 h-5 text-amber-700 bg-amber-50 border border-amber-200 rounded cursor-help">
-                        <Eye className="w-3 h-3" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>يعرض الإجابات الصحيحة بعد التسليم</TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            )}
             <CardTitle className="text-base text-gray-900 leading-snug">
               {exam.title}
             </CardTitle>
@@ -1588,7 +1007,7 @@ function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: Avail
           </div>
           <div className="flex items-center gap-1.5 text-gray-600">
             <Hash className="w-3.5 h-3.5 text-gray-400" />
-            {showUnlimited ? 'محاولات غير محدودة' : `${attemptsRemaining} محاولة متبقية`}
+            {exam.attemptsLeft} محاولة متبقية
           </div>
           <div className="flex items-center gap-1.5 text-gray-600">
             {exam.hasPassword ? (
@@ -1606,35 +1025,21 @@ function ExamCard({ exam, onSelect }: { exam: AvailableExam; onSelect: (e: Avail
         )}
       </CardContent>
       <CardFooter className="pt-0 pb-3">
-        {exhausted ? (
-          <Button
-            className="w-full bg-gray-200 text-gray-500 cursor-not-allowed hover:bg-gray-200"
-            size="sm"
-            variant="default"
-            disabled
-            onClick={(e) => e.stopPropagation()}
-          >
-            <XCircle className="w-4 h-4 ml-1" /> انتهت المحاولات
-          </Button>
-        ) : (
-          <Button
-            className={primaryBtnClass}
-            size="sm"
-            variant="default"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect(exam);
-            }}
-          >
-            {exam.hasActiveSubmission ? (
-              <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
-            ) : canRetry ? (
-              <><Repeat2 className="w-4 h-4 ml-1" /> إعادة المحاولة</>
-            ) : (
-              <>ابدأ الامتحان <ArrowLeft className="w-4 h-4 mr-1" /></>
-            )}
-          </Button>
-        )}
+        <Button
+          className="w-full bg-[#610000] hover:bg-[#4a0000] text-white"
+          size="sm"
+          variant="default"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(exam);
+          }}
+        >
+          {exam.hasActiveSubmission ? (
+            <><RotateCcw className="w-4 h-4 ml-1" /> استئناف المحاولة</>
+          ) : (
+            <>ابدأ الامتحان <ArrowLeft className="w-4 h-4 mr-1" /></>
+          )}
+        </Button>
       </CardFooter>
     </Card>
   );
@@ -1797,7 +1202,7 @@ function ExamIntro({
     setLoading(true);
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/student/${exam.id}/start`, student),
+        buildUrl(`/api/exams/${exam.id}/start`, student),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -1978,10 +1383,10 @@ interface ExamRunnerProps {
 }
 
 function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRunnerProps) {
-  const questions = startData.questions || [];
+  const questions = startData.questions;
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, { text?: string; imageUrl?: string; fileUrl?: string }>>({});
-  const [remainingSeconds, setRemainingSeconds] = useState(startData.submission?.remainingSeconds ?? (startData.durationMinutes ? startData.durationMinutes * 60 : 1800));
+  const [remainingSeconds, setRemainingSeconds] = useState(startData.submission.remainingSeconds);
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved' | 'error'>>({});
   const [moderationWarnings, setModerationWarnings] = useState<Record<string, ModerationInfo | null>>({});
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'done' | 'error'>>({});
@@ -2034,7 +1439,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
       // إرسال للـ WebSocket
       proctor.sendViolation({ type, severity, details });
       // إرسال للسيرفر للتسجيل الدائم
-      fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/violation`, student), {
+      fetch(buildUrl(`/api/exams/${exam.id}/proctor`, student), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
         body: JSON.stringify({
@@ -2085,7 +1490,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
   const handleAutoSubmit = useCallback(async () => {
     setSubmitting(true);
     try {
-      await fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/submit`, student), {
+      await fetch(buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
         body: JSON.stringify({ force: true }),
@@ -2119,7 +1524,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     (async () => {
       try {
         const res = await fetch(
-          buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student),
+          buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
           { headers: { 'x-student-id': student.studentId } }
         );
         const data = await res.json();
@@ -2144,7 +1549,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     setSaveStatus(s => ({ ...s, [questionId]: 'saving' }));
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student),
+        buildUrl(`/api/exams/${exam.id}/answers`, student, { submissionId }),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -2187,7 +1592,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(
-        buildUrl(`/api/exams/student/submissions/${submissionId}/answer`, student, { questionId }),
+        buildUrl(`/api/exams/${exam.id}/answers/${questionId}/upload`, student, { submissionId }),
         {
           method: 'POST',
           headers: { 'x-student-id': student.studentId },
@@ -2230,7 +1635,7 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
     setSubmitError(null);
     try {
       const res = await fetch(
-        buildUrl(`/api/exams/student/submissions/${submissionId}/submit`, student),
+        buildUrl(`/api/exams/${exam.id}/submit`, student, { submissionId }),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
@@ -2604,9 +2009,9 @@ function ExamRunner({ student, exam, startData, submissionId, onSubmit }: ExamRu
               answer={answers[currentQuestion.id]}
               uploadStatus={uploadStatus[currentQuestion.id]}
               moderation={moderationWarnings[currentQuestion.id]}
-              allowText={startData.exam?.allowTextAnswers ?? true}
-              allowImage={startData.exam?.allowImageAnswers ?? true}
-              allowPdf={startData.exam?.allowPdfAnswers ?? false}
+              allowText={startData.exam.allowTextAnswers}
+              allowImage={startData.exam.allowImageAnswers}
+              allowPdf={startData.exam.allowPdfAnswers}
               onTextChange={(v) => handleTextChange(currentQuestion.id, v)}
               onUpload={(file) => handleUpload(currentQuestion.id, file)}
             />
@@ -3156,53 +2561,28 @@ function ExamResult({
   const [error, setError] = useState<string | null>(null);
   const [appealDialogFor, setAppealDialogFor] = useState<{ answerId: string; questionId: string; currentScore: number; maxScore: number } | null>(null);
   const [appeals, setAppeals] = useState<any[]>([]);
-  const [revealResults, setRevealResults] = useState(false);
 
   const loadResult = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [resAppeals, resView] = await Promise.all([
-        fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/appeal`, student), {
+      const [resResult, resQuestions, resAppeals] = await Promise.all([
+        fetch(buildUrl(`/api/exams/${exam.id}/result`, student, { submissionId }), {
           headers: { 'x-student-id': student.studentId },
-        }).catch(() => null),
-        // نسخة التسليم — تكشف التفسير والإجابة الصحيحة بعد التسليم للامتحانات التدريبية (showAnswersAfter)
-        // أو الرسمية (showResultImmediately). revealResults=true يضمن عدم كشف أي شيء قبل الأوان.
-        fetch(buildUrl(`/api/exams/student/submissions/${submissionId}`, student), {
+        }),
+        fetch(buildUrl(`/api/exams/${exam.id}`, student), {
+          headers: { 'x-student-id': student.studentId },
+        }),
+        fetch(buildUrl(`/api/exams/${exam.id}/appeals`, student), {
           headers: { 'x-student-id': student.studentId },
         }),
       ]);
-      const dataAppeals = resAppeals ? await resAppeals.json().catch(() => ({} as any)) : ({} as any);
-      // نسخة التسليم قد تفشل بصمت (e.g. امتحان رسمي بدون showResultImmediately) — لا نُفشل كل التحميل
-      const dataView = await resView.json().catch(() => ({} as any));
-      if (resView.ok) setResult(dataView.submission || dataView);
-      else setError(dataView.error || dataView.message || 'فشل جلب النتيجة');
-
-      // ===== دمج التفسير في الأسئلة عند السماح بكشف النتائج =====
-      const view = dataView?.submission;
-      const isRevealed = view?.revealResults === true;
-      setRevealResults(isRevealed);
-      // الأسئلة تأتي من view.answers (كل answer يحوي question: {id, type, text, options, ...})
-      if (Array.isArray(view?.answers)) {
-        const rawQuestions: Question[] = view.answers.map((a: any) => ({
-          id: a?.questionId || a?.question?.id || '',
-          type: a?.question?.type || 'MCQ',
-          text: a?.question?.text || '',
-          options: a?.question?.options ? (typeof a.question.options === 'string' ? JSON.parse(a.question.options) : a.question.options) : null,
-          correctAnswer: isRevealed ? (a?.correctAnswer ?? a?.question?.correctAnswer ?? null) : null,
-          correctText: isRevealed ? (a?.correctText ?? a?.question?.correctText ?? null) : null,
-          points: a?.question?.points ?? 1,
-          order: a?.question?.order ?? 0,
-          explanation: isRevealed ? (a?.explanation ?? a?.question?.explanation ?? null) : null,
-          // بيانات إجابة الطالب
-          studentAnswer: a?.textAnswer ?? null,
-          isCorrect: a?.isCorrect ?? null,
-          score: a?.score ?? null,
-          maxScore: a?.maxScore ?? 1,
-          teacherNote: a?.teacherNote ?? null,
-        } as Question));
-        setQuestions(rawQuestions);
-      }
+      const dataResult = await resResult.json();
+      const dataQuestions = await resQuestions.json();
+      const dataAppeals = await resAppeals.json();
+      if (resResult.ok) setResult(dataResult.result || dataResult);
+      else setError(dataResult.error || dataResult.message || 'فشل جلب النتيجة');
+      if (resQuestions.ok) setQuestions(dataQuestions.questions || []);
       if (resAppeals.ok) setAppeals(dataAppeals.appeals || []);
     } catch (e) {
       setError('تعذّر الاتصال بالخادم');
@@ -3221,7 +2601,7 @@ function ExamResult({
   }, []);
 
   const submitAppeal = async (answerId: string, reason: string, requestedScore?: number) => {
-    const res = await fetch(buildUrl(`/api/exams/student/submissions/${submissionId}/appeal`, student), {
+    const res = await fetch(buildUrl(`/api/exams/${exam.id}/appeals`, student), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-student-id': student.studentId },
       body: JSON.stringify({ answerId, reason, requestedScore }),
@@ -3469,19 +2849,6 @@ function ExamResult({
                     </div>
                   </div>
                   <p className="text-sm text-gray-800 mb-2 line-clamp-2">{q.text}</p>
-                  {/* التفسير — يُكشف فقط بعد التسليم للامتحانات التدريبية (showAnswersAfter)
-                      أو الرسمية (showResultImmediately). revealResults يضمن عدم الكشف قبل الأوان. */}
-                  {revealResults && q.explanation && (
-                    <div className="mt-2 rounded-md border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-2.5">
-                      <div className="flex items-center gap-1.5 text-[11px] text-blue-700 dark:text-blue-300 font-semibold mb-1">
-                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
-                        التفسير
-                      </div>
-                      <p className="text-xs text-blue-900 dark:text-blue-100 whitespace-pre-wrap leading-relaxed">
-                        {q.explanation}
-                      </p>
-                    </div>
-                  )}
                   {ans.teacherNote && (
                     <div className="text-xs bg-blue-50 rounded p-2 text-blue-800 mt-2">
                       <strong>ملاحظة المعلم:</strong> {ans.teacherNote}
