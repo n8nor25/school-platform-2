@@ -24,7 +24,6 @@ const StudentExamsPage = dynamic(() => import('@/components/student-exams-page')
 const ParentExamsPage = dynamic(() => import('@/components/parent-exams-page'), { loading: PageLoader })
 const ParentAnalyticsPage = dynamic(() => import('@/components/parent-analytics-page'), { loading: PageLoader })
 const CoordinatorDashboardPage = dynamic(() => import('@/components/coordinator-dashboard-page'), { loading: PageLoader })
-const DownloadsPage = dynamic(() => import('@/components/downloads-page'), { loading: PageLoader })
 const CustomSectionRenderer = dynamic(() => import('@/components/home/CustomSectionRenderer').then(m => ({ default: m.CustomSectionRenderer })))
 
 // ===== Types =====
@@ -95,7 +94,6 @@ const serviceItems = [
   { label: 'أولياء الأمور', icon: '👨‍👩‍👧', action: 'parents' },
   { label: 'امتحانات الطالب', icon: '📝', action: 'exams' },
   { label: 'لوحة المنسّق', icon: '🎛️', action: 'coordinator' },
-  { label: 'مركز التحميل', icon: '⬇️', action: 'downloads' },
 ]
 
 // ===== Main Component =====
@@ -143,7 +141,6 @@ function HomePage() {
   } | null>(null)
   const [showAnalyticsPage, setShowAnalyticsPage] = useState(false)
   const [showCoordinatorPage, setShowCoordinatorPage] = useState(false)
-  const [showDownloadsPage, setShowDownloadsPage] = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
   const logoClickCount = useRef(0)
@@ -287,7 +284,6 @@ function HomePage() {
       else if (urlAction === 'parents') setShowParentsPage(true)
       else if (urlAction === 'teacher') setShowTeacherPage(true)
       else if (urlAction === 'coordinator') setShowCoordinatorPage(true)
-      else if (urlAction === 'downloads') setShowDownloadsPage(true)
     })
   }, [urlAction, hydrated, router])
 
@@ -301,7 +297,6 @@ function HomePage() {
     if (action === 'exams') setShowExamsPage(true)
     if (action === 'teacher') setShowTeacherPage(true)
     if (action === 'coordinator') setShowCoordinatorPage(true)
-    if (action === 'downloads') setShowDownloadsPage(true)
   }
 
   // الانتقال من بوابة أولياء الأمور إلى صفحة الامتحانات الإلكترونية
@@ -344,7 +339,6 @@ function HomePage() {
   }
   if (showAnalyticsPage) return <ParentAnalyticsPage onBack={() => setShowAnalyticsPage(false)} schoolId={selectedSchoolId} />
   if (showCoordinatorPage) return <CoordinatorDashboardPage onBack={() => setShowCoordinatorPage(false)} schoolId={selectedSchoolId} />
-  if (showDownloadsPage) return <DownloadsPage onBack={() => setShowDownloadsPage(false)} schoolId={selectedSchoolId} />
   if (showParentsPage) return (
     <ParentsPortalPage
       onBack={() => setShowParentsPage(false)}
@@ -663,7 +657,6 @@ function HomePage() {
                   { icon: '📚', title: 'المكتبة الرقمية', desc: 'تصفح الكتب والمراجع الإلكترونية', action: 'library', color: '#9C27B0' },
                   { icon: '📝', title: 'امتحانات الطالب', desc: 'الامتحانات الإلكترونية للطلاب', action: 'exams', color: '#047857' },
                   { icon: '🎛️', title: 'لوحة المنسّق', desc: 'إدارة كل امتحانات المدرسة والإشراف عليها', action: 'coordinator', color: '#0F766E' },
-                  { icon: '⬇️', title: 'مركز التحميل', desc: 'نماذج واستمارات وملفات للتحميل', action: 'downloads', color: '#0891b2' },
                   { icon: '💬', title: 'التواصل مع الإدارة', desc: 'تواصل مباشرة مع إدارة المدرسة', href: '#contact', color: '#E91E63' },
                 ].map(service => (
                   <div key={service.title}
