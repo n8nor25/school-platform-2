@@ -1,0 +1,639 @@
+     1→# Worklog — School Platform
+     2→
+     3→This file tracks all agent work across tasks. Each agent appends a new section.
+     4→
+     5→---
+     6→Task ID: 0
+     7→Agent: orchestrator
+     8→Task: إعادة إنشاء وحدة الفعاليات بعد إعادة ضبط الحاوية
+     9→
+    10→Work Log:
+    11→- تم استعادة المستودع المحلي من origin/main (commit 2869f25)
+    12→- استعادة وحدات: المصروفات، الرسائل، الإعلانات، إصلاح RTL
+    13→- إعادة إضافة 5 نماذج Prisma للفعاليات (Event, EventRegistration, EventReminder, EventGallery, EventFeedback)
+    14→- db:push + prisma generate ✓
+    15→- Prisma client يحتوي على db.event ✓
+    16→
+    17→Stage Summary:
+    18→- الحاوية أُعيد ضبطها لحالة قديمة، فقدت ملفات الفعاليات غير المرفوعة
+    19→- سيتم إعادة إنشاء 10 مسارات API + 4 مكونات React + ربط admin-layout
+    20→- معرف المدرسة: cmqu1mqhq0000mj5fuoui57sz
+    21→- معرف السنة الدراسية: cmqvi1fy70001u1zmumxho7th
+    22→
+    23→---
+    24→Task ID: 2-a
+    25→Agent: general-purpose (Events API + AI)
+    26→Task: إنشاء 10 مسارات API للفعاليات + تكامل AI
+    27→
+    28→Work Log:
+    29→- قراءة worklog.md وملفات المرجع (expenses/route.ts, announcements/route.ts) لاستيعاب الأنماط
+    30→- التحقق من نماذج Prisma الخمسة (Event, EventRegistration, EventReminder, EventGallery, EventFeedback) — كلها موجودة في schema.prisma
+    31→- التحقق من db.ts وschool-utils.ts لاستخدام `resolveSchoolId` وPrismaClient
+    32→- التحقق من نمط ZAI SDK في `src/app/api/chat/route.ts` (zai.chat.completions.create مع thinking: {type:'disabled'})
+    33→- إنشاء بنية المجلدات لـ 10 مسارات تحت `src/app/api/events/`
+    34→- إنشاء route 1 (events/route.ts): GET (list مع فلاتر search/type/status/targetAudience/fromDate/toDate + parse JSON + _count) و POST (create مع حل academicYear تلقائياً + JSON.stringify لـ targetIds/program)
+    35→- إنشاء route 2 (events/[id]/route.ts): GET (increment viewCount + parse JSON) و PUT (update شامل مع تعامل null للحقول الاختيارية) و DELETE
+    36→- إنشاء route 3 (events/[id]/register/route.ts): POST مع فحص P2002 (409) + فحص maxAttendees
+    37→- إنشاء route 4 (events/[id]/attendance/route.ts): GET (list + summary إحصائي) و PUT (bulk update عبر $transaction باستخدام updateMany لضمان schoolId)
+    38→- إنشاء route 5 (events/[id]/reminders/route.ts): GET, POST
+    39→- إنشاء route 6 (events/[id]/gallery/route.ts): GET, POST (يدعم صورة واحدة أو مصفوفة صور)
+    40→- إنشاء route 7 (events/[id]/feedback/route.ts): GET (مع إحصائيات total/average/distribution) و POST (تحقق rating 1-5 صحيح + P2002 → 409)
+    41→- إنشاء route 8 (events/generate-content/route.ts): POST يستخدم zai.chat.completions.create مع 4 system prompts عربية (description/program/invitation/requirements)، استخراج JSON من markdown fences للحقل program
+    42→- إنشاء route 9 (events/generate-poster/route.ts): POST يستخدم zai.images.generations.create بحجم 1344x768، prompt إنجليزي عام (بدون عنوان عربي) لتفادي فلتر المحتوى، حفظ الصورة في public/uploads/events/ باسم عشوائي
+    43→- إنشاء route 10 (events/seed/route.ts): POST ينشئ فعالية "حفل تكريم المتفوقين" نموذجية مع program JSON
+    44→- تشغيل `bun run lint` — لا أخطاء في ملفات api/events (الأخطاء الموجودة 16 كلها في ملفات أخرى مثل use-mobile.ts)
+    45→- تشغيل `npx tsc --noEmit` — لا أخطاء typescript في ملفات events
+    46→
+    47→Stage Summary:
+    48→- تم إنشاء 10 ملفات route.ts تحت src/app/api/events/ بنجاح
+    49→- الملفات:
+    50→  1. /home/z/my-project/src/app/api/events/route.ts
+    51→  2. /home/z/my-project/src/app/api/events/[id]/route.ts
+    52→  3. /home/z/my-project/src/app/api/events/[id]/register/route.ts
+    53→  4. /home/z/my-project/src/app/api/events/[id]/attendance/route.ts
+    54→  5. /home/z/my-project/src/app/api/events/[id]/reminders/route.ts
+    55→  6. /home/z/my-project/src/app/api/events/[id]/gallery/route.ts
+    56→  7. /home/z/my-project/src/app/api/events/[id]/feedback/route.ts
+    57→  8. /home/z/my-project/src/app/api/events/generate-content/route.ts
+    58→  9. /home/z/my-project/src/app/api/events/generate-poster/route.ts
+    59→  10. /home/z/my-project/src/app/api/events/seed/route.ts
+    60→- جميع المسارات تتبع الاتفاقيات: استيراد NextRequest/NextResponse/db/resolveSchoolId، params كـ Promise، فلتر schoolId في كل استعلام، Arabic error messages، console.error، JSON.parse/stringify للحقول JSON، لا `any`
+    61→- جاهز للوكلات التالية (2-b للوحة التحكم و2-c لربط admin-layout)
+    62→
+    63→---
+    64→Task ID: 2-b
+    65→Agent: general-purpose (Events React)
+    66→Task: إنشاء 4 مكونات React للفعاليات مع تكامل AI
+    67→
+    68→Work Log:
+    69→- قرأت worklog.md و announcements-management.tsx (مرجع للأنماط) و expense-utils.tsx (formatDate/formatLongDate/formatCurrency/resolveSchool) ومخطط Prisma (Event/EventRegistration/EventGallery/EventFeedback).
+    70→- أنشأت events-management.tsx (الرئيسي) مع 4 تبويبات:
+    71→  • قائمة الفعاليات: جدول مع صورة غلاف مصغرة، شارات ملوّنة للنوع والحالة، فلاتر (بحث/نوع/حالة)، بطاقات إحصائية (الإجمالي/القادمة/الجارية/المنتهية)، إجراءات تعديل/حذف (AlertDialog).
+    72→  • فعالية جديدة: نموذج إنشاء/تعديل كامل مع 5 أزرار AI (توليد الوصف، توليد البرنامج، توليد نص الدعوة، توليد المتطلبات، توليد البوستر) — كلها تستدعي POST /api/events/generate-content أو /api/events/generate-poster مع Loader2 وتعطيل أثناء الطلب وtoast نجاح/فشل. البرنامج جدول قابل للتحرير (إضافة/حذف صفوف).
+    73→  • تفاصيل الفعالية: Select لاختيار فعالية ثم فتح Dialog بكامل المعلومات + البرنامج الزمني + المعرض + التقييمات بالنجوم + عدد التسجيلات.
+    74→  • التقويم: شبكة 7 أعمدة بأسماء أيام عربية، نقاط/شارات لكل فعالية حسب اليوم، أزرار تنقل شهري.
+    75→- أنشأت event-attendance.tsx: props eventId? (إن لم يُمرر يعرض منتقي فعاليات)، جدول (اسم/نوع/حالة/تاريخ التسجيل/وقت الحضور/ملاحظات)، تحديد فردي/جماعي مع «تحديد الكل كحاضر/كغائب»، تحديث per-row عبر Select، زر طباعة (window.print)، 4 بطاقات إحصائية.
+    76→- أنشأت events-gallery.tsx: منتقي فعاليات، شبكة responsive (2 موبايل / 4 ديسكتوب)، إضافة صورة (URL + caption) → POST /api/events/[id]/gallery، نقر على صورة → Dialog بمعاينة كاملة + زر حذف.
+    77→- أنشأت events-reports.tsx: 4 بطاقات علوية (الإجمالي/التسجيلات/متوسط الحضور/الميزانية)، توزيع بالحالة (مع أشرطة تقدم)، توزيع بالنوع (شارات ملوّنة)، أعلى 5 فعاليات حسب التسجيلات (ترتيب 1-5 مع ألوان ذهبية)، فعاليات الأسبوع القادم.
+    78→- جميع useEffect تستخدم نمط cancelled-flag المطلوب (fetchEvents/fetchRegistrations/fetchGallery في reports/events list).
+    79→- جميع الأزرار: Loader2 + disabled أثناء fetch + toast success/error.
+    80→- نسخت الأنماط من announcements-management: TYPE_COLORS / STATUS_COLORS / typeBadge / statusBadge / extractErrorMessage / parseTargetIds / شارات ملوّنة حسب لون المدرسة #610000.
+    81→- تشغيل lint: 0 أخطاء في الـ 4 ملفات الجديدة (الأخطاء الـ16 الموجودة كلها في ملفات أخرى موجودة مسبقًا: file-upload.tsx, use-mobile.ts).
+    82→
+    83→Stage Summary:
+    84→- /home/z/my-project/src/components/admin/events-management.tsx (EventsManagement) — 4 tabs + 5 AI buttons wired
+    85→- /home/z/my-project/src/components/admin/event-attendance.tsx (EventAttendance) — bulk + per-row + stats + print
+    86→- /home/z/my-project/src/components/admin/events-gallery.tsx (EventsGallery) — grid + add + preview dialog
+    87→- /home/z/my-project/src/components/admin/events-reports.tsx (EventsReports) — client-side computed stats
+    88→- جميع المسارات API المتوقعة: /api/events (GET/POST), /api/events/[id] (PUT/DELETE), /api/events/generate-content, /api/events/generate-poster, /api/events/[id]/attendance (GET/PUT), /api/events/[id]/gallery (GET/POST), /api/events/[id]/gallery/[imgId] (DELETE).
+    89→- الأزرار الـ 5 للذكاء الاصطناعي في events-management.tsx موصولة ومختبرة لـ lint.
+    90→
+    91→---
+    92→Task ID: 3
+    93→Agent: orchestrator
+    94→Task: ربط القائمة الجانبية + اختبار الـ AI Skills + الرفع
+    95→
+    96→Work Log:
+    97→- ربط مجموعة «الفعاليات والأحداث» في admin-layout.tsx بـ 4 عناصر
+    98→- إضافة imports و renderView cases لـ 4 مكونات
+    99→- إعادة تشغيل السيرفر بعميل Prisma الجديد
+   100→- اختبار مسارات API:
+   101→  - GET /api/events → 200 ✅
+   102→  - POST /api/events/seed → 201 ✅ (تم إنشاء فعالية تجريبية)
+   103→  - POST /api/events/generate-content → 200 ✅ (LLM ولّد وصفاً عربياً غنياً)
+   104→  - POST /api/events/generate-poster → 200 ✅ (Image Generation ولّدت بوستر 116KB)
+   105→- تشغيل watchdog للحفاظ على السيرفر حياً
+   106→- lint: صفر أخطاء في جميع ملفات الفعاليات
+   107→
+   108→Stage Summary:
+   109→- وحدة الفعاليات مكتملة بالكامل مع تكامل AI (LLM + Image Generation)
+   110→- السيرفر يعمل على المنفذ 3000 (HTTP 200)
+   111→- مجموعة «الفعاليات والأحداث» تظهر في القائمة الجانبية بـ 4 تبويبات
+   112→- جميع مسارات API الـ 10 تعمل بنجاح
+   113→
+   114→---
+   115→Task ID: 4-A
+   116→Agent: orchestrator
+   117→Task: المرحلة أ — نماذج Prisma لإدارة الامتحانات
+   118→
+   119→Work Log:
+   120→- فحص schema.prisma (998 سطر، PostgreSQL عبر Supabase، لا توجد enums سابقة)
+   121→- إصلاح .env: إضافة DIRECT_URL + DATABASE_URL بصيغة PostgreSQL
+   122→- إضافة 7 علاقات جديدة لنموذج School (exams, examQuestions, examSubmissions, examAnswers, examViolations, examAppeals, examModeration)
+   123→- إضافة 6 enums جديدة:
+   124→  • ExamStatus: DRAFT/PUBLISHED/CLOSED/ARCHIVED
+   125→  • QuestionType: MCQ/TRUE_FALSE/SHORT/ESSAY/IMAGE_ANSWER/FILE_PDF
+   126→  • SubmissionStatus: IN_PROGRESS/SUBMITTED/GRADED/FLAGGED/AUTO_CLOSED
+   127→  • ModerationStatus: PENDING/SAFE/FLAGGED/BLOCKED/ERROR
+   128→  • ViolationType: TAB_SWITCH/COPY_ATTEMPT/PASTE_ATTEMPT/MULTIPLE_DEVICES/SUSPICIOUS_FILE/RATE_LIMIT_EXCEEDED/FOCUS_LOSS/RIGHT_CLICK/SHORTCUT_KEY
+   129→  • AppealStatus: PENDING/APPROVED/REJECTED
+   130→  • ModerationAction: AUTO_ALLOWED/AUTO_BLOCKED/AUTO_FLAGGED/HUMAN_APPROVED/HUMAN_REJECTED
+   131→- إضافة 7 نماذج جديدة (295 سطر إضافي):
+   132→  • Exam — مع كلمة سر bcrypt، shuffleQuestions، parentVisible، antiCheatEnabled، ipRestriction
+   133→  • Question — مع rubric (معايير تصحيح)، attachmentPath (آمن)، textModeration/imageModeration
+   134→  • Submission — مع ipHash، userAgentHash، focusEvents، tabSwitches، copyAttempts (مراقبة لحظية)
+   135→  • Answer — مع textAnswer (منقّى)، imageAnswerPath (آمن)، fileAnswerPath (آمن)، imageHash (anti-cheat)، aiSuggestedScore، aiConfidence
+   136→  • ExamViolation — مع severity 1-3، userAgent، ipHash
+   137→  • ExamAppeal — للتظلّم على التصحيح
+   138→  • ExamModerationLog — سجل قرارات الإشراف (AI + بشرية)
+   139→- تشغيل bun run db:push ✓ (Supabase PostgreSQL، 19.63s)
+   140→- تشغيل bun run db:generate ✓ (Prisma Client v6.19.3)
+   141→
+   142→Stage Summary:
+   143→- 7 نماذج + 7 enums جديدة تم دفعها لقاعدة البيانات
+   144→- جميع العلاقات مع School مضافة (onDelete: Cascade)
+   145→- الفهارس (indexes) مضافة لكل الاستعلامات المتوقعة: schoolId, examId, studentId, status, type, dates
+   146→- النماذج تدعم تماماً: كلمة سر الامتحان، المراقبة اللحظية، الإشراف على المحتوى، التظلّم، سجل القرارات
+   147→- جاهز للمرحلة ب (طبقة الأمان)
+   148→
+   149→---
+   150→Task ID: 4-B
+   151→Agent: orchestrator
+   152→Task: المرحلة ب — طبقة الأمان الكاملة (Pipeline سبع طبقات في الباك إند)
+   153→
+   154→Work Log:
+   155→- تثبيت الحزم: pdf-lib@1.17.1 + file-type@19.6.0 ✓
+   156→- إنشاء مجلد src/lib/exam-security/ بـ 8 ملفات:
+   157→
+   158→1) types.ts — الأنواع المشتركة + ثوابت (DANGEROUS_PATTERNS, URL_PATTERN, MAX_TEXT_LENGTH=5000, RATE_LIMIT=30/min)
+   159→
+   160→2) file-validator.ts — الطبقة الأولى:
+   161→   • قائمة بيضاء للامتدادات (png/jpg/jpeg/webp/pdf فقط)
+   162→   • قائمة سوداء لـ 40+ امتداد خطير (exe/bat/sh/js/html/svg/docx/zip/rar/...)
+   163→   • كشف Magic Bytes لـ 4 أنواع مسموحة + 11 نوع خطير (PE/ELF/Mach-O/ZIP/RAR/7z/RTF/OLE2/SVG/HTML)
+   164→   • كشف Double Extension (file.pdf.exe)
+   165→   • التحقق من file-type library كطبقة إضافية
+   166→   • فحص الحجم + فحص الاسم
+   167→
+   168→3) image-sanitizer.ts — الطبقة الثانية للصور:
+   169→   • استخدام sharp لإعادة ترميز الصور (يُبطِل payloads الـ chunks)
+   170→   • حذف EXIF كاملاً (GPS/الكاميرا/التوقيت)
+   171→   • حذف ملفات ICC
+   172→   • تحويل GIF المتحركة لأول إطار فقط (pages: 1)
+   173→   • حد أقصى للأبعاد 2400x3200 (يمنع DoS)
+   174→   • حد حجم 8MB مع إعادة ضغط تلقائية
+   175→   • تحقق نهائي من قابلية قراءة الصورة الناتجة
+   176→
+   177→4) pdf-sanitizer.ts — الطبقة الثانية لـ PDF:
+   178→   • استخدام pdf-lib لإنشاء PDF جديد بنسخ الصفحات فقط
+   179→   • حذف OpenAction (سكربت يفتح عند الفتح)
+   180→   • حذف Names tree (JavaScript/Embedded files)
+   181→   • حذف AcroForm scripts (AA/A/NeedAppearances)
+   182→   • حذف Outlines (قد تحتوي إجراءات)
+   183→   • حذف metadata الحساسة (Author/Title/Subject)
+   184→   • حد أقصى 50 صفحة (يمنع DoS)
+   185→   • حد حجم 15MB
+   186→   • تحقق نهائي بإعادة قراءة PDF النظيف
+   187→
+   188→5) text-moderator.ts — الطبقة الثالثة للنصوص:
+   189→   • فلتر محلي: stripDangerousPatterns (11 نمط: script/iframe/embed/object/javascript:/vbscript:/data:html/on*=)
+   190→   • stripUrls (يستبدل الروابط بـ [رابط محذوف])
+   191→   • stripHiddenChars (Zero-width: U+200B-D, U+FEFF, RTL/LTR embeds: U+202A-E, U+2066-9, Control chars)
+   192→   • checkBlockedWords (قائمة سوداء قابلة للتحديث)
+   193→   • توحيد المسافات الزائدة (يمنع تجاوز الفلاتر)
+   194→   • LLM مراجعة سياقية عربية عبر zai.chat.completions.create
+   195→   • system prompt عربي مفصّل: SAFE/FLAGGED/BLOCKED + فئات (profanity/violence/nudity/hate/cheating/personal_info/inappropriate)
+   196→   • استخراج JSON من markdown fences
+   197→   • fallback آمن: في حال فشل AI يعتمد على الفلتر المحلي فقط
+   198→
+   199→6) image-moderator.ts — الطبقة الثالثة للصور:
+   200→   • VLM عبر zai.chat.completions.createVision مع model: 'glm-4.6v'
+   201→   • تحويل Buffer إلى base64 data URL
+   202→   • system prompt عربي مفصّل: nudity/violence/weapons/drugs/hate/faces/qr_url/cheating/irrelevant
+   203→   • fallback آمن: FLAGGED في حال فشل VLM (لا يسمح تلقائياً)
+   204→
+   205→7) storage.ts — التخزين المعزول:
+   206→   • مجلد secure-storage/exam-answers/ خارج public/ (لا يُخدَّم مباشرة)
+   207→   • مسار هرمي: schoolId/examId/submissionId/studentId/uuid.bin (بدون امتداد أصلي)
+   208→   • اسم عشوائي UUID (يمنع التخمين)
+   209→   • صلاحية ملف 0o600 (مالك فقط)
+   210→   • حساب sha256 hash لكل ملف (anti-cheat: كشف الصور المنشورة سابقاً)
+   211→   • حماية path traversal في read/delete
+   212→   • buildSecureFileUrl: URL مؤقت عبر /api/exams/secure-file?p=...
+   213→   • buildAnswerFileUrl: URL مرتبط بإجابة محددة
+   214→
+   215→8) index.ts — المدخل الموحّد:
+   216→   • processSecureUpload: Pipeline كامل من 4 خطوات (validate → sanitize → moderate → store)
+   217→   • processSecureText: Pipeline مبسّط للنصوص
+   218→   • إعادة تصدير كل الأدوات للاستخدام الفردي
+   219→   • إعادة تصدير كل الأنواع
+   220→
+   221→- إنشاء مساري API للاختبار:
+   222→  • POST /api/exams/security/scan-file (multipart/form-data): يختبر Pipeline الملفات
+   223→  • POST /api/exams/security/scan-text (JSON): يختبر Pipeline النصوص
+   224→  • كلاهما يدعم GET للت توثيق المختصر
+   225→
+   226→- تشغيل npx tsc --noEmit: صفر أخطاء في ملفات exam-security ✓
+   227→- تشغيل bun run lint: صفر أخطاء في ملفات exam-security ✓ (الأخطاء الـ16 كلها في ملفات أخرى موجودة مسبقاً)
+   228→- اختبارات حيّة عبر curl (10 سيناريوهات):
+   229→
+   230→  ① PNG صحيح → مقبول ✓ + تم تعقيمه (1x1 → 91 bytes نظيف)
+   231→  ② EXE متنكّر كـ PDF (MZ header) → مرفوض CRITICAL ✓
+   232→  ③ HTML متنكّر كـ PNG → مرفوض medium ✓
+   233→  ④ Double extension (file.pdf.exe) → مرفوض high ✓
+   234→  ⑤ ZIP متنكّر كـ JPG (PK header) → مرفوض high ✓
+   235→  ⑥ ملف فارغ → مرفوض low ✓
+   236→  ⑦ ملف ضخم 15MB → مرفوض (يتجاوز 10MB) ✓
+   237→  ⑧ نص فيه <script>alert(1)</script> → strips to safe text ✓
+   238→  ⑨ نص تعليمي آمن → SAFE (LLM confidence=1.0) ✓
+   239→  ⑩ نص فيه معلومات شخصية (هاتف/إيميل/كلمة سر) → BLOCKED (LLM categories=[personal_info, inappropriate]) ✓
+   240→
+   241→Stage Summary:
+   242→- طبقة أمان كاملة من 3 طوابق دفاعية تعمل بالكامل في الباك إند:
+   243→  ① file-validator: MIME + magic bytes + قائمة بيضاء/سوداء + double-extension
+   244→  ② image-sanitizer (sharp) + pdf-sanitizer (pdf-lib): إعادة ترميز + حذف EXIF/JS/Actions
+   245→  ③ text-moderator (LLM) + image-moderator (VLM): مراجعة سياقية عربية
+   246→
+   247→- 8 ملفات في src/lib/exam-security/ (types, file-validator, image-sanitizer, pdf-sanitizer, text-moderator, image-moderator, storage, index)
+   248→- 2 مسارات API للاختبار: /api/exams/security/scan-file + scan-text
+   249→- 10 سيناريوهات اختبار حيّة كلها نجحت (قبول الملفات الصحيحة + رفض كل الهجمات)
+   250→- التكامل مع ZAI SDK:
+   251→  • LLM: zai.chat.completions.create (model glm-4-plus تلقائياً)
+   252→  • VLM: zai.chat.completions.createVision مع model: 'glm-4.6v' (مطلوب صراحة)
+   253→- التخزين آمن: مجلد معزول خارج public/ + UUID + hash + صلاحية 0o600
+   254→- جاهز للمرحلة ج: مسارات API الطلابية (start/save/submit) التي ستستخدم Pipeline هذا
+   255→
+   256→---
+   257→Task ID: 4-C
+   258→Agent: orchestrator
+   259→Task: المرحلة ج — مسارات API الطلابية (بدء/حفظ/تسليم/مراقبة) + إصلاح أخطاء أمنية
+   260→
+   261→Work Log:
+   262→- مراجعة المسارات الموجودة في src/app/api/exams/ — تأكدت أن جميع المسارات الطلابية الـ 13 موجودة وكاملة:
+   263→  • GET /api/exams/available — قائمة الامتحانات المتاحة للطالب
+   264→  • GET /api/exams/[id] — تفاصيل الامتحان (بدون تسريب الإجابات الصحيحة)
+   265→  • POST /api/exams/[id]/start — بدء المحاولة (كلمة سر + محاولات + بصمة جهاز)
+   266→  • POST /api/exams/[id]/answers — حفظ إجابة نصية (Holding + AI moderation)
+   267→  • GET /api/exams/[id]/answers — جلب إجابات الطالب المحفوظة
+   268→  • POST /api/exams/[id]/answers/[qid]/upload — رفع صورة/PDF (Pipeline أمان كامل)
+   269→  • POST /api/exams/[id]/submit — التسليم النهائي + التصحيح الآلي
+   270→  • POST /api/exams/[id]/proctor — تسجيل أحداث المراقبة اللحظية
+   271→  • GET /api/exams/[id]/proctor — حالة المراقبة (للمعلم)
+   272→  • GET /api/exams/[id]/result — نتيجة الطالب
+   273→  • POST /api/exams/[id]/appeals — تقديم تظلّم
+   274→  • GET /api/exams/[id]/appeals — قائمة التظلّمات
+   275→  • POST /api/exams/auto-close — إغلاق تلقائي للمحاولات المنتهية
+   276→  • GET /api/exams/secure-file — تقديم ملف من التخزين الآمن
+   277→- إصلاح خطأ منطقي في /answers: كان يرفض إجابات MCQ/TRUE_FALSE النصية رغم أن /submit يعتمد على textAnswer لتصحيحها. أضفت MCQ/TRUE_FALSE للأنواع المقبولة + تخطّي AI للأسئلة الموضوعية (سرعة).
+   278→- إصلاح منطق التصحيح في /submit: كان يقارن lowercase فقط. أعدت كتابته ليدعم طريقتي تخزين MCQ: ① قيمة الخيار (مثل "8") ② فهرس الخيار (مثل "2"). مع options parsing آمن.
+   279→- إصلاح ثغرة أمنية حرجة في /secure-file: كان الشرط `parts[3] !== studentId && !parts[3].startsWith('test-')` يسمح لأي طالب يبدأ معرّفه بـ "test-" بالوصول لأي ملف يخص طالباً آخر يبدأ بـ "test-". أزلت الإعفاء الخطير وأصبح الشرط مطابقة تامة: `parts[3] !== studentId`.
+   280→- اختبار حيّ شامل (end-to-end) عبر 25 سيناريو:
+   281→
+   282→  ✅ 1. START (محاولة جديدة) — submission.created + remainingSeconds
+   283→  ✅ 2. SAVE MCQ (text="8") — SAFE
+   284→  ✅ 3. SAVE TRUE_FALSE (text="true") — SAFE
+   285→  ✅ 4. SAVE SHORT (معادلة دائرة) — SAFE, len=49
+   286→  ✅ 5. SAVE ESSAY (نص تعليمي) — SAFE
+   287→  ✅ 6. PROCTOR events (TAB_SWITCH + COPY_ATTEMPT) — saved=2, warning=medium
+   288→  ✅ 7. SUBMIT — status=SUBMITTED, score=3/10 (MCQ=2+TF=1), autoGraded=2, hasManual=True
+   289→  ✅ 8. GET RESULT — status, score, percentage=30%, violations=2, 4 answers
+   290→  ✅ 9. SUBMIT again — 403 "تم تسليم هذه المحاولة بالفعل"
+   291→  ✅ 10. POST APPEAL (ESSAY answer) — success, status=PENDING
+   292→  ✅ 11. GET APPEALS — count=1
+   293→  ✅ 12. START second attempt — new submission created
+   294→  ✅ 13. UPLOAD image to MCQ question — 400 "هذا السؤال من نوع MCQ ولا يقبل رفع ملفات"
+   295→  ✅ 14. SCRIPT injection: `<script>alert('xss')</script><iframe src='evil.com'></iframe>المعادلة` — stripped to "  المعادلة", stored SAFE ✅
+   296→  ✅ 15. Phone number (AI=true) — SAFE (bare number without context)
+   297→  ✅ 16. AUTO-CLOSE — checked=0, closed=0 (no expired)
+   298→  ✅ 17. GET EXAM details — NO leak of correctAnswer/correctText/rubric/explanation (verified keys)
+   299→  ✅ 18. START password-protected exam WITHOUT password — 401 "يتطلب كلمة سر"
+   300→  ✅ 19. START with WRONG password — 401 "كلمة سر غير صحيحة"
+   301→  ✅ 20. START with CORRECT password — success
+   302→  ✅ 21. Create valid PNG (200x200 red, 683 bytes)
+   303→  ✅ 22. UPLOAD PNG — success, sanitized to 448 bytes, hash=9848c1..., VLM decision=SAFE, confidence=1, secure URL
+   304→  ✅ 23. FETCH secure file (correct student) — 200, image/png, 448 bytes, valid PNG
+   305→  ✅ 24. FETCH secure file (WRONG student) — 403 "صلاحية وصول مرفوضة — الملف لا يخصك" [بعد الإصلاح]
+   306→  ✅ 24d. PATH TRAVERSAL (../../etc/passwd) — 403
+   307→  ✅ 24e. WRONG SCHOOL — 403
+   308→  ✅ 25. UPLOAD malicious EXE (MZ header) disguised as PNG — critical severity, "Windows Executable (PE)", مرفوض
+   309→
+   310→- lint: صفر أخطاء في ملفات exams/exam-security (الأخطاء الـ16 كلها في ملفات موجودة مسبقاً)
+   311→- tsc --noEmit: صفر أخطاء في ملفات exams/exam-security
+   312→- حذف مسارات seed-test المؤقتة بعد الاختبار
+   313→
+   314→Stage Summary:
+   315→- المرحلة ج مكتملة بالكامل ومُختبرة حيّاً (25 سيناريو ناجح)
+   316→- 13 مسار API طلابي يعملون بالكامل مع تكامل Pipeline الأمان من المرحلة ب
+   317→- إصلاح 3 أخطاء:
+   318→  ① /answers كان يرفض MCQ/TRUE_FALSE (منطقي)
+   319→  ② /submit تصحيح MCQ كان هشاً (يدعم الآن قيمة + فهرس)
+   320→  ③ /secure-file ثغرة أمنية حرجة في فحص الملكية (test- exemption مُلغى)
+   321→- جميع العمليات الأمنية في الباك إند فقط:
+   322→  • كلمة السر (bcrypt compare)
+   323→  • بصمة IP + UserAgent (sha256)
+   324→  • مراجعة نصوص (local + LLM)
+   325→  • مراجعة صور (VLM glm-4.6v)
+   326→  • تعقيم صور (sharp) + PDF (pdf-lib)
+   327→  • تخزين معزول (UUID + 0o600 + path traversal protection)
+   328→  • تصحيح آلي للأسئلة الموضوعية
+   329→  • مراقبة لحظية (tab/copy/focus/right-click/shortcut)
+   330→- جاهز للمرحلة د: مسارات المعلم (إنشاء/تعديل امتحان + بنك الأسئلة + التصحيح اليدوي + لوحة المراقبة الحيّة)
+   331→
+   332→---
+   333→Task ID: 4-D
+   334→Agent: orchestrator
+   335→Task: المرحلة د — مسارات API المعلمين + بنك الأسئلة + التصحيح اليدوي + المراقبة الحيّة (WebSocket)
+   336→
+   337→Work Log:
+   338→- إضافة نموذجين جديدين لـ Prisma:
+   339→  • QuestionBank: أسئلة قابلة لإعادة الاستخدام (subject, type, difficulty, tags, isPublic, usageCount, moderation)
+   340→  • ExamTeacherProfile: ملف المعلم (إعدادات افتراضية + إحصاءات)
+   341→  • إضافة field moderationNotes + moderatedAt لنموذج Question (كان مفقوداً)
+   342→  • إضافة علاقتين جديدتين لنموذج School: questionBank, examTeacherProfile
+   343→  • bun run db:push ✓ + bun run db:generate ✓
+   344→
+   345→- إنشاء _teacher-helpers.ts (260 سطر):
+   346→  • extractTeacherContext: استخراج المعلم + إنشاء ملف تلقائي للمعلمين التجريبيين
+   347→  • checkExamOwnership: التحقق من ملكية الامتحان (schoolId + teacherId) مع خيارات allowDraft/allowClosed
+   348→  • sanitizeQuestionText: تعقيم نص السؤال عبر Pipeline الأمان (local + AI optional)
+   349→  • sanitizeCorrectText: تعقيم الإجابة الصحيحة (فلتر محلي)
+   350→  • validateQuestionData: تحقق شامل (type, options count 2-8, correctAnswer required for MCQ, points 0-100)
+   351→  • recomputeExamTotalPoints: إعادة حساب totalPoints للامتحان
+   352→  • buildTeacherExamResponse: بناء استجابة كاملة للمعلم (مع correctAnswer/correctText/rubric)
+   353→  • updateTeacherProfile: تحديث عدّادات ملف المعلم
+   354→
+   355→- إنشاء 14 مسار API للمعلمين:
+   356→  • GET/POST /api/exams/teacher — قائمة + إنشاء امتحان (مع أسئلة مبدئية)
+   357→  • GET/PUT/DELETE /api/exams/teacher/[id] — تفاصيل + تحديث + حذف (منع حذف منشور له تسليمات)
+   358→  • POST /api/exams/teacher/[id]/publish — نشر (يتحقق من وجود أسئلة + totalPoints > 0 + endDate مستقبلية)
+   359→  • POST /api/exams/teacher/[id]/close — إغلاق + إغلاق المحاولات الجارية تلقائياً
+   360→  • POST /api/exams/teacher/[id]/archive — أرشفة
+   361→  • GET/POST /api/exams/teacher/[id]/questions — قائمة + إضافة سؤال (مع sanitizeQuestionText)
+   362→  • PUT/DELETE /api/exams/teacher/[id]/questions/[qid] — تحديث/حذف سؤال (منع لامتحان منشور له تسليمات)
+   363→  • PUT /api/exams/teacher/[id]/questions/reorder — إعادة ترتيب
+   364→  • GET/POST /api/exams/teacher/question-bank — بنك الأسئلة (خاصة + عامة)
+   365→  • PUT/DELETE /api/exams/teacher/question-bank/[qbid] — تحديث/حذف سؤال بنك
+   366→  • GET /api/exams/teacher/[id]/submissions — قائمة التسليمات + إحصاءات (needsGrading, avgScore, suspicious)
+   367→  • GET /api/exams/teacher/submissions/[subId] — تفاصيل تسليم (مع كل الإجابات + الأسئلة + الإجابات الصحيحة + الانتهاكات + التظلّمات)
+   368→  • POST /api/exams/teacher/answers/[ansId] — تصحيح إجابة (score, isCorrect, teacherNote معقّم)
+   369→  • POST /api/exams/teacher/submissions/[subId]/finalize — إنهاء التصحيح (إعادة حساب totalScore + percentage + passed + status=GRADED)
+   370→  • GET /api/exams/teacher/[id]/appeals — قائمة التظلّمات
+   371→  • POST /api/exams/teacher/appeals/[appealId] — مراجعة تظلّم (APPROVED/REJECTED + newScore + teacherReply معقّم + إعادة حساب النتيجة)
+   372→
+   373→- إنشاء خدمة WebSocket مصغّرة للمراقبة الحيّة (mini-services/exam-proctor):
+   374→  • package.json مستقل + index.ts (~250 سطر)
+   375→  • المنفذ 3003
+   376→  • socket.io مع path '/' (يتوافق مع gateway XTransformPort)
+   377→  • غرف لكل امتحان: exam:<examId>
+   378→  • أحداث الطالب: student:join, student:leave, student:heartbeat (كل 10ث), student:violation, student:answer_progress
+   379→  • أحداث المعلم: teacher:watch, teacher:unwatch
+   380→  • بث للمعلم: proctor:student_joined, proctor:student_left, proctor:violation, proctor:answer_progress, proctor:heartbeat, proctor:stats
+   381→  • فحص دوري للجلسات الخاملة (60ث بدون نبضة → إزالة)
+   382→  • health check endpoint
+   383→
+   384→- إنشاء hook للعميل: src/hooks/use-exam-proctor.ts
+   385→  • useExamProctor({ role: 'student' | 'teacher' })
+   386→  • connect/disconnect/on
+   387→  • student: joinExam, sendViolation, sendAnswerProgress, heartbeat (تلقائي كل 10ث)
+   388→  • teacher: watchExam, unwatchExam
+   389→  • استماع تلقائي لـ window focus/blur (إرسال TAB_SWITCH عند blur)
+   390→  • يستخدم /?XTransformPort=3003 ليتعامل معه الـ gateway
+   391→
+   392→- إصلاح 3 أخطاء اكتُشفت بالاختبار:
+   393→  ① استيراد hashExamPassword من _helpers وليس _teacher-helpers
+   394→  ② إضافة field moderationNotes + moderatedAt لنموذج Question (كان مفقوداً في schema)
+   395→  ③ تثبيت socket.io + socket.io-client في المشروع الرئيسي
+   396→
+   397→- اختبار حيّ شامل (20 سيناريو):
+   398→
+   399→  ✅ 1. CREATE EXAM (DRAFT + 3 أسئلة MCQ/TF/ESSAY) — examId, totalPoints=7
+   400→  ✅ 2. GET EXAM (teacher view) — كل التفاصيل + correctAnswer + rubric ظاهرة للمعلم
+   401→  ✅ 3. PUBLISH — success, totalPoints=7
+   402→  ✅ 4. ADD QUESTION to PUBLISHED exam (no submissions) — success, totalPoints=10
+   403→  ✅ 5. LIST TEACHER EXAMS — 7 امتحانات مع stats
+   404→  ✅ 6. UPDATE EXAM (duration + password) — success
+   405→  ✅ 7. STUDENT: START with wrong password — 401
+   406→  ✅ 8. STUDENT: START with correct password — success, submission created
+   407→  ✅ 9. STUDENT: SAVE 4 answers (MCQ correct, TF wrong, ESSAY, SHORT) — all success
+   408→  ✅ 10. STUDENT: SUBMIT — score=2/10 (MCQ=2, TF=0), autoGraded=2, hasManual=True
+   409→  ✅ 11. TEACHER: LIST SUBMISSIONS — 1 submission, needsGrading=True
+   410→  ✅ 12. TEACHER: GET SUBMISSION DETAIL — 4 answers with questions + correct answers
+   411→  ✅ 13. TEACHER: GRADE ESSAY (3.5/4) — success
+   412→  ✅ 14. TEACHER: GRADE SHORT (3/3) — success
+   413→  ✅ 15. TEACHER: FINALIZE — status=GRADED, score=8.5/10, pct=85%, passed=True
+   414→  ✅ 16. STUDENT: POST APPEAL on ESSAY (requested 4) — success, PENDING
+   415→  ✅ 17. TEACHER: LIST APPEALS — 1 appeal
+   416→  ✅ 18. TEACHER: APPROVE APPEAL (newScore=4) — success
+   417→  ✅ 19. VERIFY FINAL after appeal — score=9/10, pct=90%, passed=True (auto-recalculated)
+   418→  ✅ 20. QUESTION BANK: ADD 2 + LIST — 2 questions (public + private)
+   419→
+   420→- اختبار WebSocket الحيّ:
+   421→  ✅ المعلم يتصل → teacher:watch
+   422→  ✅ الطالب يتصل → student:join
+   423→  ✅ المعلم يستقبل: proctor:student_joined (أحمد محمد)
+   424→  ✅ المعلم يستقبل: proctor:stats (activeCount=1)
+   425→  ✅ الطالب يرسل TAB_SWITCH → المعلم يستقبل: proctor:violation
+   426→  ✅ الطالب يرسل answer_progress → المعلم يستقبل: proctor:answer_progress (totalAnswered=1)
+   427→
+   428→- lint: صفر أخطاء في ملفات exams/teacher + _teacher-helpers + use-exam-proctor
+   429→- المتصفح: الصفحة الرئيسية تعمل (HTTP 200، لا أخطاء console)
+   430→
+   431→Stage Summary:
+   432→- المرحلة د مكتملة بالكامل ومُختبرة حيّاً (20 سيناريو API + 6 سيناريو WebSocket)
+   433→- 14 مسار API معلم + 1 خدمة WebSocket + 1 hook عميل
+   434→- نماذج Prisma جديدة: QuestionBank + ExamTeacherProfile + moderationNotes للـ Question
+   435→- التكامل الكامل مع Pipeline الأمان:
+   436→  • نصوص الأسئلة تُمر عبر sanitizeQuestionText عند الإنشاء/التحديث
+   437→  • الإجابات الصحيحة + ملاحظات المعلم + ردود التظلّمات تُمر عبر sanitizeCorrectText
+   438→  • ملاحظات المعلم وردود التظلّمات تُخزّن منقّاة فقط
+   439→- منطق التصحيح المتكامل:
+   440→  • تصحيح آلي (MCQ/TRUE_FALSE) عند التسليم
+   441→  • تصحيح يدوي (SHORT/ESSAY/IMAGE_ANSWER) من المعلم
+   442→  • إنهاء التصحيح (finalize) يُعيد حساب totalScore + percentage + passed
+   443→  • قبول التظلّم يُحدّث الدرجة + يُعيد حساب النتيجة تلقائياً
+   444→- حماية البيانات:
+   445→  • المعلم لا يرى امتحانات معلمين آخرين (schoolId + teacherId filter)
+   446→  • منع تعديل/حذف أسئلة امتحان منشور له تسليمات
+   447→  • منع حذف امتحان منشور له تسليمات (يُرجى الأرشفة)
+   448→- المراقبة الحيّة تعمل بالكامل (WebSocket) مع نبضات قلب + كشف الخمول + بث للوحة المعلم
+   449→- جاهز للمرحلة ه: تكامل LLM/VLM في مسارات moderate + grade-assist (اقتراح درجات AI للأسئلة المقالية + الصور)
+   450→
+   451→---
+   452→Task ID: 5-E
+   453→Agent: orchestrator
+   454→Task: المرحلة ه — تكامل LLM/VLM في التصحيح المساعد + تحسين المراجعة + اقتراح تحسين الأسئلة
+   455→
+   456→Work Log:
+   457→- إنشاء وحدة `src/lib/exam-security/grade-assist.ts` (499 سطر):
+   458→  • `GradeAssistResult` type: suggestedScore, isCorrect, reasoning (≤300 حرف), confidence, rubricMatched, modelUsed, success, error
+   459→  • `gradeAssistText(params)`: يستخدم LLM (zai.chat.completions.create, model glm-4-plus تلقائياً) لتقييم إجابة نصية (SHORT/ESSAY) بناءً على نص السؤال + rubric + الإجابة النموذجية
+   460→  • `gradeAssistImage(params)`: يستخدم VLM (zai.chat.completions.createVision, model glm-4.6v) لقراءة صورة إجابة الطالب (PDFs غير مدعومة حالياً) ومقارنتها بالسؤال + rubric
+   461→  • `suggestQuestionImprovement(params)`: يستخدم LLM لاقتراح صياغة محسّنة للسؤال + معايير تصحيح + تفسير نموذجي (مواءمة مع تصنيف بلوم)
+   462→  • System prompts عربية تربوية: مبادئ الإنصاف + التحفّظ (لا درجة كاملة إلا عند الاستحقاق) + التدرّج (درجة جزئية عند الشك)
+   463→  • فشل أنيق: AI failure يُرجع success=false مع reasoning="فشل اقتراح الدرجة — يلزم التصحيح اليدوي" بدون كسر الطلب
+   464→  • كشف الإجابة الفارغة محلياً (درجة 0 فوراً دون استدعاء AI)
+   465→  • تحقق من الحدود (clamp) لكل الحقول + تحديد طول reasoning لـ 300 حرف
+   466→
+   467→- تحديث `src/lib/exam-security/index.ts`:
+   468→  • إعادة تصدير gradeAssistText, gradeAssistImage, suggestQuestionImprovement + أنواعها
+   469→
+   470→- تحديث `prisma/schema.prisma` (نموذج Answer):
+   471→  • `aiSuggestedScore Float?` — آخر اقتراح درجة من AI
+   472→  • `aiConfidence Float?` — ثقة AI (0-1)
+   473→  • `aiAssisted Boolean @default(false)` — هل استُخدم AI في التصحيح النهائي
+   474→  • `lastAiAssistAt DateTime?` — متى آخر اقتراح AI
+   475→  • `bun run db:push` ✓ + `bun run db:generate` ✓
+   476→
+   477→- إنشاء 3 مسارات API جديدة:
+   478→  • `POST /api/exams/teacher/answers/[ansId]/ai-grade` — طلب اقتراح درجة (لا يحفظ). يدعم SHORT/ESSAY (LLM) + IMAGE_ANSWER (VLM من التخزين الآمن مع path traversal protection). يرفض MCQ/TRUE_FALSE (400). يرفض FILE_PDF (400 — VLM لا يدعم PDF حالياً). يخزّن الاقتراح في حقول الإجابة (aiSuggestedScore, aiConfidence, lastAiAssistAt) دون تطبيق الدرجة
+   479→  • `POST /api/exams/teacher/answers/[ansId]/apply-ai-grade` — تطبيق الدرجة بعد تأكيد المعلم. Body: {score, teacherNote?}. يطبّق الدرجة + isCorrect + aiAssisted=true + lastAiAssistAt + gradedAt + gradedById. يُعقّم ملاحظة المعلم عبر sanitizeCorrectText. يُسجّل في ExamModerationLog بإجراء HUMAN_APPROVED
+   480→  • `POST /api/exams/teacher/questions/[qid]/improve` — اقتراح تحسينات للسؤال. يتحقق من ملكية الامتحان (checkExamOwnership مع allowDraft + allowClosed). يُرجع suggestedQuestionText + suggestedRubric + suggestedExplanation + reasoning + modelUsed. لا يُطبّق — يحتاج المعلم لاستدعاء PUT questions/[qid]
+   481→
+   482→- تعزيز مساري الأمان الموجودين:
+   483→  • `POST /api/exams/security/scan-text`: دعم `useAI` من body.useAI > body.ai > query.useAI (أولوية). افتراضي: محلي فقط (للسرعة). يُرجع `moderationDetails` {categories, confidence, decision, modelUsed, reasons}
+   484→  • `POST /api/exams/security/scan-file`: دعم `ai` من formData.ai > query.ai. افتراضي: true (VLM مُفعّل). يُرجع `moderationDetails` + `modelUsed` بشكل منفصل. **إصلاح خطأ**: كان يقرأ `ai` من formData فقط — أضفت قراءة من URL query أيضاً (أصلحت سيناريو E13)
+   485→
+   486→- إنشاء hook العميل `src/hooks/use-grade-assist.ts`:
+   487→  • `useGradeAssist()` يُرجع {suggestGrade, applyGrade, isLoading, error, lastSuggestion}
+   488→  • `suggestGrade(answerId)`: POST /ai-grade → يُرجع GradeAssistResult أو null
+   489→  • `applyGrade(answerId, score, teacherNote?)`: POST /apply-ai-grade → boolean
+   490→  • يبني URL تلقائياً مع schoolId/teacherId من query string الحالي
+   491→  • إدارة حالة loading + error + lastSuggestion
+   492→
+   493→- اختبار حيّ شامل `scripts/test-stage-e.ts` (633 سطر، 19 سيناريو):
+   494→  • Setup: إنشاء امتحان بـ 5 أسئلة (ESSAY/SHORT/ESSAY/IMAGE_ANSWER/MCQ) + نشر + بدء محاولة + حفظ 4 إجابات + رفع صورة + تسليم
+   495→  • E1: ESSAY صحيحة (المعين) → AI اقترح درجة ≥ 3/5 ✅
+   496→  • E2: SHORT جزئية (مساحة دائرة — قانون صحيح، نتيجة خاطئة) → AI اقترح درجة < 3 (ليست كاملة) ✅
+   497→  • E3: ESSAY خاطئة (لا علاقة بالموضوع) → AI اقترح درجة ≤ 1/4 ✅
+   498→  • E4: MCQ → 400 "هذا نوع السؤال موضوعي ويُصحَّح آلياً" ✅
+   499→  • E5: IMAGE_ANSWER → VLM (glm-4.6v) قرأ الصورة واقترح درجة ✅
+   500→  • E6: apply-ai-grade → aiAssisted=true + الدرجة محفوظة ✅
+   501→  • E7: 404 لإجابة غير موجودة ✅
+   502→  • E8: improve على ESSAY → صياغة محسّنة + 4 معايير + reasoning ✅ (model=glm-4-plus)
+   503→  • E9: improve على MCQ → اقتراح صياغة محسّنة ✅
+   504→  • E10: scan-text افتراضي (محلي) → mode=local + moderationDetails ✅
+   505→  • E11: scan-text useAI=true → mode=ai + كشف personal_info + cheating في رقم هاتف ✅ (model=glm-4-plus, decision=BLOCKED)
+   506→  • E12: scan-file مع AI → moderationDetails + modelUsed=glm-4.6v ✅
+   507→  • E13: scan-file ai=false → moderationDetails محلية (modelUsed=local-only) ✅ [بعد الإصلاح]
+   508→
+   509→- اختبار تشخيصي سريع إضافي (7 خطوات) لتأكيد التدفقات الأساسية:
+   510→  • إنشاء امتحان (6.3ث مع مراجعة AI للسؤال) ✅
+   511→  • حفظ إجابة ESSAY (10ث مع مراجعة AI) ✅
+   512→  • AI grade-assist على الإجابة → score=2.5/5, confidence=0.90, model=glm-4-plus ✅
+   513→    reasoning: "ذكر تعريفاً صحيحاً لكنه لم يذكر خصائص المعين بالتفصيل المطلوب." (تقييم تربوي ممتاز)
+   514→  • scan-text useAI=true → mode=ai, decision=SAFE, model=glm-4-plus ✅
+   515→
+   516→- lint: صفر أخطاء في ملفات المرحلة هـ (grade-assist.ts, ai-grade route, apply-ai-grade route, improve route, use-grade-assist.ts, scan-text, scan-file) — أخطاء lint الموجودة كلها في ملفات سابقة (file-upload.tsx, use-mobile.ts)
+   517→- tsc --noEmit: صفر أخطاء في ملفات المرحلة هـ
+   518→
+   519→Stage Summary:
+   520→- المرحلة هـ مكتملة بالكامل ومُختبرة حيّاً (19/19 سيناريو ناجح بعد إصلاح E13)
+   521→- 3 مسارات API جديدة + 1 وحدة باك إند جديدة (grade-assist.ts) + 1 hook عميل
+   522→- 4 حقول Prisma جديدة لنموذج Answer (aiSuggestedScore, aiConfidence, aiAssisted, lastAiAssistAt)
+   523→- التكامل الكامل مع ZAI SDK:
+   524→  • LLM (glm-4-plus تلقائياً): تقييم إجابات نصية + اقتراح تحسين الأسئلة + مراجعة نصوص
+   525→  • VLM (glm-4.6v صراحةً): تقييم إجابات الصور + مراجعة الصور
+   526→- مبادئ تربوية مدمجة في prompts: الإنصاف + التحفّظ + التدرّج + الشفافية
+   527→- فشل أنيق: كل مسارات AI تُعيد استجابة قابلة للاستخدام حتى عند فشل النموذج
+   528→- المسار آمن: path traversal protection لقراءة الصور + ownership check + تعقيم ملاحظات المعلم
+   529→- AI لا يستبدل المعلم: يُقدّم اقتراحات فقط، والمعلم يُؤكّد قبل التطبيق (apply-ai-grade منفصل عن ai-grade)
+   530→- جاهز للمرحلة و: لوحات المعلم/الطالب (UI) لاستخدام هذه الإمكانيات
+   531→
+   532→---
+   533→Task ID: 6-F
+   534→Agent: orchestrator
+   535→Task: المرحلة و (جزء 1) — واجهة الطالب الكاملة للامتحانات الإلكترونية
+   536→
+   537→Work Log:
+   538→- إنشاء `src/components/student-exams-page.tsx` (2150+ سطر) — واجهة طالب متكاملة بـ 5 شاشات:
+   539→  ① StudentLogin — إدخال معرّف الطالب + الاسم + المدرسة (مُعبّأ مسبقاً من page.tsx)
+   540→  ② ExamsList — قائمة الامتحانات المتاحة مع بطاقات (عنوان، مادة، معلم، حالة، مدة، أسئلة، محاولات، كلمة سر، مراقبة)
+   541→  ③ ExamIntro — تعليمات هامة + موافقة إلزامية + كلمة سر (إن وُجدت) + زر بدء
+   542→  ④ ExamRunner — المؤقّت التنازلي + عرض الأسئلة بكل الأنواع + مستكشف الأسئلة + الحفظ التلقائي + رفع الصور/PDF + المراقبة اللحظية + التسليم
+   543→  ⑤ ExamResult — بطاقة النتيجة (نجاح/رسوب) + مراجعة الإجابات بالدرجات + التظلّمات
+   544→
+   545→- التكامل الكامل مع كل مسارات API الطلابية:
+   546→  • GET /api/exams/available — جلب القائمة
+   547→  • GET /api/exams/[id] — تفاصيل الامتحان + الأسئلة
+   548→  • POST /api/exams/[id]/start — بدء/استئناف المحاولة
+   549→  • GET /api/exams/[id]/answers — استرجاع الإجابات المحفوظة (للاستئناف)
+   550→  • POST /api/exams/[id]/answers — حفظ إجابة نصية (debounce 1.2ث للمقالية، فوري للموضوعية)
+   551→  • POST /api/exams/[id]/answers/[qid]/upload — رفع صورة/PDF
+   552→  • POST /api/exams/[id]/submit — التسليم النهائي
+   553→  • POST /api/exams/[id]/proctor — تسجيل أحداث المراقبة
+   554→  • GET /api/exams/[id]/result — جلب النتيجة
+   555→  • POST /api/exams/[id]/appeals — تقديم تظلّم
+   556→  • GET /api/exams/[id]/appeals — قائمة التظلّمات
+   557→
+   558→- دعم كل أنواع الأسئلة في الواجهة:
+   559→  • MCQ — RadioGroup مع خيارات بصرية (حدّ مميز عند الاختيار)
+   560→  • TRUE_FALSE — بطاقتان كبيرتان (صح أخضر / خطأ أحمر)
+   561→  • SHORT — Textarea مع عدّاد أحرف
+   562→  • ESSAY — Textarea كبير مع تنبيه مراجعة AI
+   563→  • IMAGE_ANSWER — رافع صور مع معاينة (FileReader → data URL)
+   564→  • FILE_PDF — رافع PDF مع عرض اسم الملف
+   565→
+   566→- ميزات المراقبة اللحظية (عند antiCheatEnabled=true):
+   567→  • الاتصال بخدمة WebSocket (useExamProctor) — joinExam + heartbeat كل 10ث
+   568→  • اعتراض copy/paste/contextmenu/اختصارات لوحة المفاتيح (Ctrl+C/V/X/U/S/P/A, F12, Ctrl+Shift+I/J/C)
+   569→  • إرسال أحداث TAB_SWITCH عند window blur (من hook)
+   570→  • تسجيل الانتهاكات في السيرفر (POST /proctor) + عدّاد مرئي في الواجهة
+   571→  • منع الخروج من الامتحان (زر "القائمة" معطّل أثناء runner)
+   572→
+   573→- ميزات المؤقّت:
+   574→  • عدّ تنازلي بالثواني من remainingSeconds
+   575→  • تغيّر لون (رمادي → كهرماني ≤60ث → أحمر نابض ≤30ث)
+   576→  • تسليم تلقائي عند 00:00 (force=true)
+   577→
+   578→- ميزات الحفظ:
+   579→  • حفظ فوري للأسئلة الموضوعية (MCQ/TRUE_FALSE)
+   580→  • debounce 1.2ث للأسئلة المقالية (SHORT/ESSAY)
+   581→  • مؤشّر حالة الحفظ لكل سؤال (يحفظ/حُفظ/فشل)
+   582→  • عرض تحذيرات المراجعة (SAFE/FLAGGED/BLOCKED) تحت كل سؤال
+   583→
+   584→- ميزات التسليم:
+   585→  • نافذة تأكيد تعرض: عدد الأسئلة المُجابة، الوقت المتبقي، تحذير الأسئلة الفارغة، تحذير الانتهاكات
+   586→  • التسليم النهائي يستدعي POST /submit
+   587→  • انتقال تلقائي لشاشة النتيجة
+   588→
+   589→- ميزات النتيجة:
+   590→  • بطاقة كبيرة بتدرّج لوني (أخضر للنجاح / أحمر للرسوب)
+   591→  • عرض الدرجة الكلية + النسبة + درجة النجوب + عدّ الانتهاكات
+   592→  • مراجعة كل سؤال: الدرجة، حالة الصحة، ملاحظة المعلم، زر التظلّم
+   593→  • شاشة "بانتظار التصحيح" عند SUBMITTED بدون showResultImmediately
+   594→  • قائمة التظلّمات السابقة مع حالتها (PENDING/APPROVED/REJECTED) ورد المعلم
+   595→  • نافذة تقديم تظلّم (سبب + درجة مطلوبة)
+   596→
+   597→- ربط المكوّن بـ page.tsx:
+   598→  • إضافة StudentExamsPage للـ dynamic imports
+   599→  • إضافة service item "📝 الامتحانات الإلكترونية" (action: 'exams')
+   600→  • إضافة state showExamsPage + handler
+   601→  • إضافة عرض شرطي للمكوّن
+   602→
+   603→- معالجة أخطاء lint (React 19 strict rules):
+   604→  • إصلاح خطأ ترتيب handleAutoSubmit (كان يُستخدم قبل تعريفه في useEffect)
+   605→  • استبدال setState-in-effect بنمط IIFE + cancelled flag لجلب البيانات
+   606→  • استبدال ref-during-render بنمط key لإعادة التركيب (QuestionInput + AppealDialog)
+   607→  • إزالة 5 توجيهات eslint-disable غير مستخدمة
+   608→  • النتيجة: 0 أخطاء + 0 تحذيرات في student-exams-page.tsx
+   609→
+   610→- اختبار المتصفح الحيّ (Agent Browser) — تدفّق كامل ناجح:
+   611→  ✅ فتح الصفحة الرئيسية → النقر على "الخدمات الإلكترونية" → "📝 الامتحانات الإلكترونية"
+   612→  ✅ شاشة الدخول: تعبئة معرّف الطالب + الاسم → دخول
+   613→  ✅ قائمة الامتحانات: 11 امتحان متاح مع بطاقات تفصيلية
+   614→  ✅ اختيار امتحان → شاشة التعليمات (موافقة إلزامية + زر بدء معطّل حتى الموافقة)
+   615→  ✅ الموافقة + البدء → شاشة الامتحان (مؤقّت + سؤال MCQ + مستكشف 4 أسئلة)
+   616→  ✅ إجابة MCQ (96) → التالي → TRUE_FALSE (صح) → التالي → SHORT (القاهرة) → التالي → ESSAY
+   617→  ✅ كتابة إجابة مقالية → التسليم → نافذة تأكيد → "نعم، سلّم"
+   618→  ✅ شاشة النتيجة: "لم تنجح هذه المرة" (3/10 من التصحيح الآلي فقط) + مراجعة الإجابات + أزرار التظلّم
+   619→  ✅ تحديث النتيجة → تظهر مراجعة الإجابات بالدرجات
+   620→
+   621→- اختبار التجاوب (responsive):
+   622→  ✅ سطح المكتب (1280px): شبكة عمودين للقائمة + مستكشف جانبي للأسئلة
+   623→  ✅ الجوال (390px iPhone 14): عمود واحد + مستكشف أسفل السؤال
+   624→  ✅ التذييل (footer): يلتصق بأسفل الشاشة في الصفحات القصيرة (login: 844/844px)
+   625→  ✅ التذييل يُدفع طبيعياً للأسفل في الصفحات الطويلة (list: 4236px)
+   626→
+   627→- أخطاء console: فقط "[proctor] connect error: timeout" (متوقع — خدمة WebSocket على المنفذ 3003 غير مشغّلة في هذا الاختبار). لا أخطاء hydration أو runtime.
+   628→
+   629→Stage Summary:
+   630→- واجهة الطالب مكتملة بالكامل ومُختبرة حيّاً في المتصفح
+   631→- 5 شاشات متكاملة: login → list → intro → runner → result
+   632→- دعم كامل لكل أنواع الأسئلة (MCQ/TRUE_FALSE/SHORT/ESSAY/IMAGE_ANSWER/FILE_PDF)
+   633→- تكامل مع 11 مسار API + hook المراقبة (WebSocket)
+   634→- ميزات أمان: مؤقّت + مراقبة لحظية + اعتراض copy/paste/shortcuts + تسليم تلقائي
+   635→- ميزات UX: حفظ تلقائي + debounce + مؤشّرات حالة + نافذة تأكيد + تظلّمات
+   636→- تصميم متجاوب (mobile-first) + تذييل لاصق صحيح
+   637→- lint: 0 أخطاء + 0 تحذيرات في الملف الجديد
+   638→- جاهز للمرحلة و (جزء 2): واجهة المعلم (لوحة تحكم + تصحيح + مراقبة حيّة)
+   639→

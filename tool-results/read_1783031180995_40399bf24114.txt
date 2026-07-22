@@ -1,0 +1,939 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import {
+     5→  ArrowRight, ArrowLeft, LogOut, LogIn, Mail, Phone, User, BookOpen,
+     6→  Users, GraduationCap, ClipboardCheck, CalendarDays, Megaphone,
+     7→  Lightbulb, ShieldCheck, Clock, Sparkles, Star, AlertTriangle,
+     8→  FileText, ListChecks, CalendarClock, BookMarked, Bell, ChevronLeft,
+     9→  TestTube2, MailCheck, PhoneCall, IdCard,
+    10→} from 'lucide-react';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Card, CardContent } from '@/components/ui/card';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Input } from '@/components/ui/input';
+    15→import { Label } from '@/components/ui/label';
+    16→import { toast } from 'sonner';
+    17→
+    18→interface TeacherPortalPageProps {
+    19→  onBack: () => void;
+    20→  schoolId: string;
+    21→}
+    22→
+    23→// ===== Types =====
+    24→interface ClassroomInfo {
+    25→  id: string;
+    26→  name: string;
+    27→  gradeLevel: string;
+    28→  section?: string;
+    29→  studentCount?: number;
+    30→}
+    31→
+    32→interface LoginResponse {
+    33→  teacherId: string;
+    34→  name: string;
+    35→  subject: string;
+    36→  email: string;
+    37→  phone: string;
+    38→  imageUrl?: string | null;
+    39→  classrooms: ClassroomInfo[];
+    40→  testMode: boolean;
+    41→  fakeTeacher?: boolean;
+    42→  warning?: string;
+    43→}
+    44→
+    45→interface DashboardNewsItem {
+    46→  id: string;
+    47→  title: string;
+    48→  excerpt: string;
+    49→  image: string | null;
+    50→  category: string;
+    51→  createdAt: string;
+    52→}
+    53→
+    54→interface DashboardData {
+    55→  teacher: {
+    56→    id: string;
+    57→    name: string;
+    58→    subject: string;
+    59→    email: string;
+    60→    phone: string;
+    61→    imageUrl: string | null;
+    62→  };
+    63→  classrooms: ClassroomInfo[];
+    64→  stats: {
+    65→    totalStudents: number;
+    66→    totalClasses: number;
+    67→    examsThisWeek: number;
+    68→    pendingGrading: number;
+    69→  };
+    70→  recentNews: DashboardNewsItem[];
+    71→  todaySchedule: Array<{
+    72→    id: string;
+    73→    title: string;
+    74→    category: string;
+    75→    grade: string;
+    76→    section: string;
+    77→    fileName: string;
+    78→    filePath: string;
+    79→  }>;
+    80→  fakeTeacher: boolean;
+    81→}
+    82→
+    83→// ===== Static config =====
+    84→const SESSION_KEY = 'teacher-portal-session';
+    85→
+    86→const statsConfig = [
+    87→  {
+    88→    key: 'totalStudents' as const,
+    89→    label: 'إجمالي الطلاب',
+    90→    icon: Users,
+    91→    gradient: 'from-violet-500 to-purple-600',
+    92→    bg: 'bg-violet-50 dark:bg-violet-900/20',
+    93→  },
+    94→  {
+    95→    key: 'totalClasses' as const,
+    96→    label: 'عدد الفصول',
+    97→    icon: BookOpen,
+    98→    gradient: 'from-fuchsia-500 to-pink-600',
+    99→    bg: 'bg-fuchsia-50 dark:bg-fuchsia-900/20',
+   100→  },
+   101→  {
+   102→    key: 'examsThisWeek' as const,
+   103→    label: 'امتحانات هذا الأسبوع',
+   104→    icon: FileText,
+   105→    gradient: 'from-amber-500 to-orange-600',
+   106→    bg: 'bg-amber-50 dark:bg-amber-900/20',
+   107→  },
+   108→  {
+   109→    key: 'pendingGrading' as const,
+   110→    label: 'درجات بانتظار التصحيح',
+   111→    icon: ClipboardCheck,
+   112→    gradient: 'from-rose-500 to-red-600',
+   113→    bg: 'bg-rose-50 dark:bg-rose-900/20',
+   114→  },
+   115→];
+   116→
+   117→const quickActions = [
+   118→  {
+   119→    title: 'إدارة الامتحانات',
+   120→    description: 'إنشاء ومتابعة الامتحانات الإلكترونية',
+   121→    icon: FileText,
+   122→    color: 'from-violet-500 to-purple-600',
+   123→    bgColor: 'bg-violet-50 dark:bg-violet-900/20',
+   124→    borderColor: 'border-violet-200 dark:border-violet-800',
+   125→  },
+   126→  {
+   127→    title: 'تصحيح الدرجات',
+   128→    description: 'مراجعة إجابات الطلاب وتصحيحها',
+   129→    icon: ListChecks,
+   130→    color: 'from-fuchsia-500 to-pink-600',
+   131→    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/20',
+   132→    borderColor: 'border-fuchsia-200 dark:border-fuchsia-800',
+   133→  },
+   134→  {
+   135→    title: 'سجل الحضور',
+   136→    description: 'تسجيل ومتابعة حضور الطلاب',
+   137→    icon: ClipboardCheck,
+   138→    color: 'from-amber-500 to-orange-600',
+   139→    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+   140→    borderColor: 'border-amber-200 dark:border-amber-800',
+   141→  },
+   142→  {
+   143→    title: 'جداول الحصص',
+   144→    description: 'عرض ومتابعة الجداول الأسبوعية',
+   145→    icon: CalendarClock,
+   146→    color: 'from-rose-500 to-red-600',
+   147→    bgColor: 'bg-rose-50 dark:bg-rose-900/20',
+   148→    borderColor: 'border-rose-200 dark:border-rose-800',
+   149→  },
+   150→];
+   151→
+   152→const teacherTips = [
+   153→  {
+   154→    title: 'التحضير الجيد للحصة',
+   155→    description: 'حضّر دروسك مسبقاً وحدّد أهدافاً واضحة لكل حصة لتسهيل عملية التعليم.',
+   156→    icon: BookMarked,
+   157→    color: 'from-violet-500 to-purple-600',
+   158→    emoji: '📖',
+   159→  },
+   160→  {
+   161→    title: 'التفاعل مع الطلاب',
+   162→    description: 'شجّع المشاركة الفعّالة واستخدم الأسئلة المفتوحة لتحفيز التفكير النقدي.',
+   163→    icon: Users,
+   164→    color: 'from-fuchsia-500 to-pink-600',
+   165→    emoji: '💬',
+   166→  },
+   167→  {
+   168→    title: 'التصحيح في الوقت المناسب',
+   169→    description: 'صحّح أوراق الامتحانات سريعاً وقدّم تغذية راجعة بنّاءة تساعد الطلاب على التحسّن.',
+   170→    icon: ListChecks,
+   171→    color: 'from-amber-500 to-orange-600',
+   172→    emoji: '✅',
+   173→  },
+   174→  {
+   175→    title: 'متابعة الحضور بانتظام',
+   176→    description: 'سجّل الحضور يومياً وتواصل مع أولياء الأمور عند تكرار غياب الطالب.',
+   177→    icon: ClipboardCheck,
+   178→    color: 'from-rose-500 to-red-600',
+   179→    emoji: '📝',
+   180→  },
+   181→  {
+   182→    title: 'تنويع أساليب التقييم',
+   183→    description: 'استخدم الاختبارات القصيرة والمشاريع والواجبات للحصول على صورة شاملة عن المستوى.',
+   184→    icon: Lightbulb,
+   185→    color: 'from-teal-500 to-cyan-600',
+   186→    emoji: '💡',
+   187→  },
+   188→  {
+   189→    title: 'التطوير المهني المستمر',
+   190→    description: 'اطلع على أحدث الأساليب التعليمية وحاضر الورش التدريبية لتطوير مهاراتك.',
+   191→    icon: GraduationCap,
+   192→    color: 'from-emerald-500 to-teal-600',
+   193→    emoji: '🎓',
+   194→  },
+   195→];
+   196→
+   197→function categoryBadgeClass(category: string): string {
+   198→  const c = (category || '').trim();
+   199→  const map: Record<string, string> = {
+   200→    'تنبيه': 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+   201→    'أخبار': 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
+   202→    'إعلان': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+   203→    'فعالية': 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/30 dark:text-fuchsia-300',
+   204→  };
+   205→  return map[c] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+   206→}
+   207→
+   208→function formatDate(iso: string): string {
+   209→  try {
+   210→    const d = new Date(iso);
+   211→    return d.toLocaleDateString('ar-EG', {
+   212→      year: 'numeric',
+   213→      month: 'long',
+   214→      day: 'numeric',
+   215→    });
+   216→  } catch {
+   217→    return '';
+   218→  }
+   219→}
+   220→
+   221→export default function TeacherPortalPage({ onBack, schoolId }: TeacherPortalPageProps) {
+   222→  // ===== State =====
+   223→  const [fadeIn, setFadeIn] = useState(false);
+   224→  const [visibleCards, setVisibleCards] = useState<number[]>([]);
+   225→
+   226→  // Login form state
+   227→  const [teacherCode, setTeacherCode] = useState('');
+   228→  const [phone, setPhone] = useState('');
+   229→  const [loginError, setLoginError] = useState<string | null>(null);
+   230→  const [submitting, setSubmitting] = useState(false);
+   231→
+   232→  // Session state
+   233→  const [session, setSession] = useState<LoginResponse | null>(null);
+   234→  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+   235→  const [dashboardLoading, setDashboardLoading] = useState(false);
+   236→
+   237→  // ===== Restore session on mount =====
+   238→  useEffect(() => {
+   239→    let restored: LoginResponse | null = null;
+   240→    try {
+   241→      const raw = sessionStorage.getItem(SESSION_KEY);
+   242→      if (raw) restored = JSON.parse(raw) as LoginResponse;
+   243→    } catch {
+   244→      restored = null;
+   245→    }
+   246→    // set-state-in-effect pattern
+   247→    const t = setTimeout(() => {
+   248→      if (restored) setSession(restored);
+   249→      setFadeIn(true);
+   250→    }, 0);
+   251→    return () => clearTimeout(t);
+   252→  }, []);
+   253→
+   254→  // ===== Fetch dashboard when session changes =====
+   255→  useEffect(() => {
+   256→    if (!session) {
+   257→      const t = setTimeout(() => setDashboard(null), 0);
+   258→      return () => clearTimeout(t);
+   259→    }
+   260→    let cancelled = false;
+   261→    const t1 = setTimeout(() => setDashboardLoading(true), 0);
+   262→    async function run() {
+   263→      try {
+   264→        const res = await fetch(
+   265→          `/api/teacher/dashboard?schoolId=${encodeURIComponent(
+   266→            schoolId
+   267→          )}&teacherId=${encodeURIComponent(session.teacherId)}`
+   268→        );
+   269→        const data = await res.json();
+   270→        if (!res.ok) {
+   271→          throw new Error(data?.error || 'فشل تحميل البيانات');
+   272→        }
+   273→        if (cancelled) return;
+   274→        const t = setTimeout(() => setDashboard(data as DashboardData), 0);
+   275→        void t;
+   276→      } catch (err) {
+   277→        const msg = err instanceof Error ? err.message : 'فشل تحميل البيانات';
+   278→        toast.error(msg);
+   279→      } finally {
+   280→        if (cancelled) return;
+   281→        const t = setTimeout(() => setDashboardLoading(false), 0);
+   282→        void t;
+   283→      }
+   284→    }
+   285→    run();
+   286→    return () => {
+   287→      cancelled = true;
+   288→      clearTimeout(t1);
+   289→    };
+   290→  }, [session, schoolId]);
+   291→
+   292→  // Staggered card animation for quick actions
+   293→  useEffect(() => {
+   294→    if (!session) return;
+   295→    const timeouts: ReturnType<typeof setTimeout>[] = [];
+   296→    quickActions.forEach((_, index) => {
+   297→      timeouts.push(
+   298→        setTimeout(() => {
+   299→          setVisibleCards((prev) =>
+   300→            prev.includes(index) ? prev : [...prev, index]
+   301→          );
+   302→        }, 300 + index * 120)
+   303→      );
+   304→    });
+   305→    return () => timeouts.forEach(clearTimeout);
+   306→  }, [session]);
+   307→
+   308→  // ===== Handlers =====
+   309→  const handleLogin = async (e: React.FormEvent) => {
+   310→    e.preventDefault();
+   311→    setLoginError(null);
+   312→    if (!teacherCode.trim() || !phone.trim()) {
+   313→      const t = setTimeout(() => setLoginError('يرجى إدخال كود المعلم ورقم الهاتف'), 0);
+   314→      return () => clearTimeout(t);
+   315→    }
+   316→    setSubmitting(true);
+   317→    try {
+   318→      const res = await fetch('/api/teacher/login', {
+   319→        method: 'POST',
+   320→        headers: { 'Content-Type': 'application/json' },
+   321→        body: JSON.stringify({ schoolId, teacherCode: teacherCode.trim(), phone: phone.trim() }),
+   322→      });
+   323→      const data = await res.json();
+   324→      if (!res.ok) {
+   325→        throw new Error(data?.error || 'فشل تسجيل الدخول');
+   326→      }
+   327→      const loginData = data as LoginResponse;
+   328→      try {
+   329→        sessionStorage.setItem(SESSION_KEY, JSON.stringify(loginData));
+   330→      } catch {
+   331→        // ignore quota errors
+   332→      }
+   333→      const t = setTimeout(() => {
+   334→        setSession(loginData);
+   335→        setVisibleCards([]);
+   336→      }, 0);
+   337→      void t;
+   338→      if (loginData.testMode) {
+   339→        toast.success('تم تسجيل الدخول في وضع التجربة');
+   340→      } else {
+   341→        toast.success(`مرحباً ${loginData.name}`);
+   342→      }
+   343→      if (loginData.warning) {
+   344→        toast.info(loginData.warning);
+   345→      }
+   346→    } catch (err) {
+   347→      const msg = err instanceof Error ? err.message : 'فشل تسجيل الدخول';
+   348→      const t = setTimeout(() => setLoginError(msg), 0);
+   349→      void t;
+   350→    } finally {
+   351→      const t = setTimeout(() => setSubmitting(false), 0);
+   352→      void t;
+   353→    }
+   354→  };
+   355→
+   356→  const handleLogout = () => {
+   357→    try {
+   358→      sessionStorage.removeItem(SESSION_KEY);
+   359→    } catch {
+   360→      // ignore
+   361→    }
+   362→    const t = setTimeout(() => {
+   363→      setSession(null);
+   364→      setDashboard(null);
+   365→      setTeacherCode('');
+   366→      setPhone('');
+   367→      setVisibleCards([]);
+   368→    }, 0);
+   369→    void t;
+   370→    toast.info('تم تسجيل الخروج من بوابة المعلم');
+   371→  };
+   372→
+   373→  const handleQuickAction = (title: string) => {
+   374→    toast.info(`${title} — قريباً`, {
+   375→      description: 'هذه الخدمة قيد التطوير وستتوفر في الإصدار القادم.',
+   376→    });
+   377→  };
+   378→
+   379→  // ===== Render: Login Form =====
+   380→  if (!session) {
+   381→    return (
+   382→      <div
+   383→        className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-violet-50/30 to-slate-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"
+   384→        dir="rtl"
+   385→      >
+   386→        {/* Header */}
+   387→        <header className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white shadow-xl sticky top-0 z-50">
+   388→          <div className="container mx-auto px-4 py-4">
+   389→            <div className="flex items-center justify-between">
+   390→              <button
+   391→                onClick={onBack}
+   392→                className="flex items-center gap-2 text-white hover:text-violet-300 transition-colors"
+   393→              >
+   394→                <ArrowRight className="w-5 h-5" />
+   395→                <span className="font-medium">العودة للرئيسية</span>
+   396→              </button>
+   397→              <div className="flex items-center gap-3">
+   398→                <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+   399→                  <GraduationCap className="w-6 h-6 text-white" />
+   400→                </div>
+   401→                <div>
+   402→                  <h1 className="text-xl font-bold">بوابة المعلم</h1>
+   403→                  <p className="text-violet-200 text-xs">منصة المعلمين الإلكترونية</p>
+   404→                </div>
+   405→              </div>
+   406→              <div className="w-28" />
+   407→            </div>
+   408→          </div>
+   409→        </header>
+   410→
+   411→        <main className="flex-1 container mx-auto px-4 py-8 max-w-md flex items-center justify-center">
+   412→          <div
+   413→            className={`w-full transition-all duration-700 ${
+   414→              fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+   415→            }`}
+   416→          >
+   417→            <Card className="border-0 shadow-2xl overflow-hidden">
+   418→              <CardContent className="p-0">
+   419→                {/* Gradient header */}
+   420→                <div className="bg-gradient-to-l from-violet-600 via-purple-600 to-fuchsia-600 p-8 text-white text-center relative overflow-hidden">
+   421→                  <div className="absolute top-0 left-0 w-48 h-48 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+   422→                  <div className="absolute bottom-0 right-0 w-40 h-40 bg-white/5 rounded-full translate-x-1/3 translate-y-1/3" />
+   423→                  <div className="relative z-10">
+   424→                    <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center mx-auto mb-4 ring-4 ring-white/10">
+   425→                      <GraduationCap className="w-10 h-10 text-white" />
+   426→                    </div>
+   427→                    <h2 className="text-2xl font-bold mb-1">تسجيل دخول المعلم</h2>
+   428→                    <p className="text-violet-100 text-sm">
+   429→                      أدخل بياناتك للوصول إلى لوحة التحكم
+   430→                    </p>
+   431→                  </div>
+   432→                </div>
+   433→
+   434→                {/* Form */}
+   435→                <form onSubmit={handleLogin} className="p-6 space-y-5">
+   436→                  <div className="space-y-2">
+   437→                    <Label htmlFor="teacherCode" className="text-sm font-medium flex items-center gap-1.5">
+   438→                      <IdCard className="w-4 h-4 text-violet-600" />
+   439→                      كود المعلم / البريد الإلكتروني
+   440→                    </Label>
+   441→                    <Input
+   442→                      id="teacherCode"
+   443→                      type="text"
+   444→                      value={teacherCode}
+   445→                      onChange={(e) => setTeacherCode(e.target.value)}
+   446→                      placeholder="example@school.edu"
+   447→                      autoComplete="username"
+   448→                      disabled={submitting}
+   449→                      className="h-11"
+   450→                    />
+   451→                  </div>
+   452→
+   453→                  <div className="space-y-2">
+   454→                    <Label htmlFor="phone" className="text-sm font-medium flex items-center gap-1.5">
+   455→                      <Phone className="w-4 h-4 text-violet-600" />
+   456→                      رقم الهاتف
+   457→                    </Label>
+   458→                    <Input
+   459→                      id="phone"
+   460→                      type="tel"
+   461→                      value={phone}
+   462→                      onChange={(e) => setPhone(e.target.value)}
+   463→                      placeholder="01XXXXXXXXX"
+   464→                      autoComplete="tel"
+   465→                      disabled={submitting}
+   466→                      className="h-11"
+   467→                      dir="ltr"
+   468→                    />
+   469→                  </div>
+   470→
+   471→                  {loginError && (
+   472→                    <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-sm">
+   473→                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+   474→                      <span>{loginError}</span>
+   475→                    </div>
+   476→                  )}
+   477→
+   478→                  <Button
+   479→                    type="submit"
+   480→                    disabled={submitting}
+   481→                    className="w-full h-12 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-medium text-base shadow-lg"
+   482→                  >
+   483→                    {submitting ? (
+   484→                      <>
+   485→                        <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+   486→                        جاري الدخول...
+   487→                      </>
+   488→                    ) : (
+   489→                      <>
+   490→                        <LogIn className="w-5 h-5" />
+   491→                        دخول بوابة المعلم
+   492→                      </>
+   493→                    )}
+   494→                  </Button>
+   495→
+   496→                  {/* Test mode hint */}
+   497→                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
+   498→                    <TestTube2 className="w-4 h-4 mt-0.5 shrink-0" />
+   499→                    <div>
+   500→                      <p className="font-semibold mb-0.5">وضع التجربة</p>
+   501→                      <p>
+   502→                        ابدأ رقم الهاتف بـ <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">test-</code>
+   503→                        {' '}مثال: <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">test-001</code>
+   504→                        {' '}لتجربة البوابة ببيانات تجريبية دون الحاجة لحساب حقيقي.
+   505→                      </p>
+   506→                    </div>
+   507→                  </div>
+   508→                </form>
+   509→              </CardContent>
+   510→            </Card>
+   511→          </div>
+   512→        </main>
+   513→
+   514→        {/* Sticky footer */}
+   515→        <footer className="mt-auto bg-[#1a2332] text-white/70 text-center text-xs py-3">
+   516→          <div className="container mx-auto px-4">
+   517→            بوابة المعلم الإلكترونية &copy; {new Date().getFullYear()}
+   518→          </div>
+   519→        </footer>
+   520→      </div>
+   521→    );
+   522→  }
+   523→
+   524→  // ===== Render: Dashboard =====
+   525→  const stats = dashboard?.stats ?? {
+   526→    totalStudents: 0,
+   527→    totalClasses: 0,
+   528→    examsThisWeek: 0,
+   529→    pendingGrading: 0,
+   530→  };
+   531→  const classrooms = dashboard?.classrooms ?? session.classrooms ?? [];
+   532→  const recentNews = dashboard?.recentNews ?? [];
+   533→  const todaySchedule = dashboard?.todaySchedule ?? [];
+   534→  const isFake = Boolean(session.fakeTeacher || dashboard?.fakeTeacher);
+   535→
+   536→  return (
+   537→    <div
+   538→      className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-violet-50/20 to-slate-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900"
+   539→      dir="rtl"
+   540→    >
+   541→      {/* Header */}
+   542→      <header className="bg-gradient-to-l from-[#2A374E] to-[#3d4f6e] text-white shadow-xl sticky top-0 z-50">
+   543→        <div className="container mx-auto px-4 py-4">
+   544→          <div className="flex items-center justify-between gap-3">
+   545→            <button
+   546→              onClick={onBack}
+   547→              className="flex items-center gap-2 text-white hover:text-violet-300 transition-colors shrink-0"
+   548→            >
+   549→              <ArrowRight className="w-5 h-5" />
+   550→              <span className="font-medium hidden sm:inline">العودة للرئيسية</span>
+   551→            </button>
+   552→            <div className="flex items-center gap-3 min-w-0">
+   553→              <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg shrink-0">
+   554→                <GraduationCap className="w-6 h-6 text-white" />
+   555→              </div>
+   556→              <div className="min-w-0">
+   557→                <h1 className="text-base md:text-xl font-bold truncate">{session.name}</h1>
+   558→                <p className="text-violet-200 text-xs truncate">{session.subject}</p>
+   559→              </div>
+   560→            </div>
+   561→            <Button
+   562→              onClick={handleLogout}
+   563→              variant="outline"
+   564→              size="sm"
+   565→              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white shrink-0"
+   566→            >
+   567→              <LogOut className="w-4 h-4" />
+   568→              <span className="hidden sm:inline">خروج</span>
+   569→            </Button>
+   570→          </div>
+   571→        </div>
+   572→      </header>
+   573→
+   574→      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
+   575→        {/* Welcome banner */}
+   576→        <div
+   577→          className={`mb-6 transition-all duration-700 ${
+   578→            fadeIn ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+   579→          }`}
+   580→        >
+   581→          <div className="relative overflow-hidden rounded-2xl">
+   582→            <div className="absolute -inset-[2px] bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 rounded-2xl blur-[1px] opacity-60" />
+   583→            <Card className="relative border-0 shadow-2xl rounded-2xl overflow-hidden">
+   584→              <CardContent className="p-0">
+   585→                <div className="bg-gradient-to-l from-violet-700 via-purple-700 to-fuchsia-700 p-6 md:p-10 text-white relative overflow-hidden">
+   586→                  {/* Decorative */}
+   587→                  <div className="absolute top-0 left-0 w-64 h-64 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2" />
+   588→                  <div className="absolute bottom-0 right-0 w-48 h-48 bg-white/5 rounded-full translate-x-1/4 translate-y-1/4" />
+   589→
+   590→                  <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+   591→                    {/* Avatar */}
+   592→                    <div className="shrink-0">
+   593→                      {session.imageUrl ? (
+   594→                        <img
+   595→                          src={session.imageUrl}
+   596→                          alt={session.name}
+   597→                          className="w-24 h-24 md:w-28 md:h-28 rounded-full object-cover ring-4 ring-white/20 shadow-2xl"
+   598→                        />
+   599→                      ) : (
+   600→                        <div className="w-24 h-24 md:w-28 md:h-28 bg-white/20 backdrop-blur rounded-full flex items-center justify-center ring-4 ring-white/20 shadow-2xl">
+   601→                          <User className="w-12 h-12 md:w-14 md:h-14 text-white" />
+   602→                        </div>
+   603→                      )}
+   604→                    </div>
+   605→
+   606→                    {/* Text */}
+   607→                    <div className="flex-1 text-center md:text-right">
+   608→                      <div className="flex items-center justify-center md:justify-start gap-2 mb-2 flex-wrap">
+   609→                        <Sparkles className="w-5 h-5 text-violet-200" />
+   610→                        <Badge className="bg-white/15 text-white border-white/20 text-xs">
+   611→                          بوابة المعلم
+   612→                        </Badge>
+   613→                        {session.testMode && (
+   614→                          <Badge className="bg-amber-400/30 text-amber-100 border-amber-300/30 text-xs flex items-center gap-1">
+   615→                            <TestTube2 className="w-3 h-3" />
+   616→                            وضع التجربة
+   617→                          </Badge>
+   618→                        )}
+   619→                      </div>
+   620→                      <h2 className="text-2xl md:text-3xl font-bold mb-1">
+   621→                        أهلاً {session.name}
+   622→                      </h2>
+   623→                      <p className="text-violet-100/90 text-sm md:text-base">
+   624→                        معلم {session.subject}
+   625→                      </p>
+   626→                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-4 text-xs">
+   627→                        {session.email && (
+   628→                          <div className="flex items-center gap-1.5 text-violet-100">
+   629→                            <Mail className="w-4 h-4" />
+   630→                            <span dir="ltr">{session.email}</span>
+   631→                          </div>
+   632→                        )}
+   633→                        <div className="flex items-center gap-1.5 text-violet-100">
+   634→                          <BookOpen className="w-4 h-4" />
+   635→                          <span>{classrooms.length} فصل</span>
+   636→                        </div>
+   637→                        <div className="flex items-center gap-1.5 text-violet-100">
+   638→                          <ShieldCheck className="w-4 h-4" />
+   639→                          <span>دخول آمن</span>
+   640→                        </div>
+   641→                      </div>
+   642→                    </div>
+   643→                  </div>
+   644→                </div>
+   645→              </CardContent>
+   646→            </Card>
+   647→          </div>
+   648→        </div>
+   649→
+   650→        {/* Fake teacher warning */}
+   651→        {isFake && (
+   652→          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200">
+   653→            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+   654→            <div className="text-sm">
+   655→              <p className="font-semibold mb-0.5">بيانات تجريبية</p>
+   656→              <p className="leading-relaxed">
+   657→                لا يوجد معلمون مسجّلون في هذه المدرسة بعد. أنت تستعرض البوابة ببيانات
+   658→                تجريبية — الإحصائيات والفصول الفارضة هي للعرض فقط.
+   659→              </p>
+   660→            </div>
+   661→          </div>
+   662→        )}
+   663→
+   664→        {/* Loading skeleton */}
+   665→        {dashboardLoading && !dashboard && (
+   666→          <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+   667→            {[0, 1, 2, 3].map((i) => (
+   668→              <div key={i} className="h-28 rounded-xl bg-white/60 dark:bg-gray-800/60 animate-pulse" />
+   669→            ))}
+   670→          </div>
+   671→        )}
+   672→
+   673→        {/* Stats grid */}
+   674→        <div className="mb-8">
+   675→          <div className="flex items-center gap-2 mb-4">
+   676→            <Star className="w-6 h-6 text-violet-600" />
+   677→            <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   678→              نظرة سريعة
+   679→            </h2>
+   680→          </div>
+   681→          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   682→            {statsConfig.map((s) => {
+   683→              const Icon = s.icon;
+   684→              const value = stats[s.key];
+   685→              return (
+   686→                <Card
+   687→                  key={s.key}
+   688→                  className="border-0 shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+   689→                >
+   690→                  <CardContent className="p-5">
+   691→                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${s.gradient} flex items-center justify-center shadow-md mb-3`}>
+   692→                      <Icon className="w-6 h-6 text-white" />
+   693→                    </div>
+   694→                    <div className="text-3xl font-bold text-[#2A374E] dark:text-white mb-0.5">
+   695→                      {dashboardLoading && !dashboard ? '—' : value}
+   696→                    </div>
+   697→                    <div className="text-xs text-gray-500 dark:text-gray-400">
+   698→                      {s.label}
+   699→                    </div>
+   700→                  </CardContent>
+   701→                </Card>
+   702→              );
+   703→            })}
+   704→          </div>
+   705→        </div>
+   706→
+   707→        {/* Quick Actions */}
+   708→        <div className="mb-8">
+   709→          <div className="flex items-center gap-2 mb-4">
+   710→            <Sparkles className="w-6 h-6 text-violet-600" />
+   711→            <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   712→              الإجراءات السريعة
+   713→            </h2>
+   714→          </div>
+   715→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   716→            {quickActions.map((action, index) => {
+   717→              const Icon = action.icon;
+   718→              const visible = visibleCards.includes(index);
+   719→              return (
+   720→                <Card
+   721→                  key={action.title}
+   722→                  className={`border ${action.borderColor} ${action.bgColor} shadow-sm hover:shadow-lg transition-all duration-500 cursor-pointer group overflow-hidden ${
+   723→                    visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+   724→                  }`}
+   725→                  onClick={() => handleQuickAction(action.title)}
+   726→                >
+   727→                  <CardContent className="p-5 flex items-center gap-4">
+   728→                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${action.color} flex items-center justify-center shadow-md group-hover:scale-110 transition-transform shrink-0`}>
+   729→                      <Icon className="w-7 h-7 text-white" />
+   730→                    </div>
+   731→                    <div className="min-w-0 flex-1">
+   732→                      <h3 className="font-bold text-[#2A374E] dark:text-white text-base mb-0.5">
+   733→                        {action.title}
+   734→                      </h3>
+   735→                      <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+   736→                        {action.description}
+   737→                      </p>
+   738→                    </div>
+   739→                    <ChevronLeft className="w-5 h-5 text-gray-400 group-hover:text-violet-600 transition-colors shrink-0" />
+   740→                  </CardContent>
+   741→                </Card>
+   742→              );
+   743→            })}
+   744→          </div>
+   745→        </div>
+   746→
+   747→        {/* Two-column layout: My Classes + Announcements */}
+   748→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+   749→          {/* My Classes */}
+   750→          <div>
+   751→            <div className="flex items-center gap-2 mb-4">
+   752→              <BookOpen className="w-6 h-6 text-violet-600" />
+   753→              <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   754→                فصولي
+   755→              </h2>
+   756→            </div>
+   757→            {classrooms.length === 0 ? (
+   758→              <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700">
+   759→                <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
+   760→                  <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
+   761→                  <p className="text-sm">لا توجد فصول مُسندة إليك حالياً.</p>
+   762→                </CardContent>
+   763→              </Card>
+   764→            ) : (
+   765→              <div className="space-y-3 max-h-96 overflow-y-auto pl-1">
+   766→                {classrooms.map((c) => (
+   767→                  <Card
+   768→                    key={c.id}
+   769→                    className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+   770→                  >
+   771→                    <CardContent className="p-4 flex items-center justify-between gap-3">
+   772→                      <div className="flex items-center gap-3 min-w-0">
+   773→                        <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+   774→                          <BookOpen className="w-5 h-5 text-white" />
+   775→                        </div>
+   776→                        <div className="min-w-0">
+   777→                          <h3 className="font-bold text-[#2A374E] dark:text-white text-sm truncate">
+   778→                            {c.name}
+   779→                          </h3>
+   780→                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+   781→                            {c.gradeLevel}
+   782→                            {c.section ? ` - شعبة ${c.section}` : ''}
+   783→                          </p>
+   784→                        </div>
+   785→                      </div>
+   786→                      <div className="flex items-center gap-1.5 shrink-0">
+   787→                        <Users className="w-4 h-4 text-violet-500" />
+   788→                        <span className="font-bold text-violet-700 dark:text-violet-300 text-sm">
+   789→                          {c.studentCount ?? 0}
+   790→                        </span>
+   791→                      </div>
+   792→                    </CardContent>
+   793→                  </Card>
+   794→                ))}
+   795→              </div>
+   796→            )}
+   797→          </div>
+   798→
+   799→          {/* School Announcements */}
+   800→          <div>
+   801→            <div className="flex items-center gap-2 mb-4">
+   802→              <Megaphone className="w-6 h-6 text-violet-600" />
+   803→              <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   804→                إعلانات المدرسة
+   805→              </h2>
+   806→            </div>
+   807→            {recentNews.length === 0 ? (
+   808→              <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700">
+   809→                <CardContent className="p-8 text-center text-gray-500 dark:text-gray-400">
+   810→                  <Bell className="w-10 h-10 mx-auto mb-3 opacity-40" />
+   811→                  <p className="text-sm">لا توجد إعلانات حالياً.</p>
+   812→                </CardContent>
+   813→              </Card>
+   814→            ) : (
+   815→              <div className="space-y-3 max-h-96 overflow-y-auto pl-1">
+   816→                {recentNews.map((n) => (
+   817→                  <Card
+   818→                    key={n.id}
+   819→                    className="border-0 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+   820→                  >
+   821→                    <CardContent className="p-4">
+   822→                      <div className="flex items-start gap-3">
+   823→                        {n.image ? (
+   824→                          <img
+   825→                            src={n.image}
+   826→                            alt={n.title}
+   827→                            className="w-14 h-14 rounded-lg object-cover shrink-0"
+   828→                          />
+   829→                        ) : (
+   830→                          <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-violet-100 to-fuchsia-100 dark:from-violet-900/30 dark:to-fuchsia-900/30 flex items-center justify-center shrink-0">
+   831→                            <Megaphone className="w-6 h-6 text-violet-500" />
+   832→                          </div>
+   833→                        )}
+   834→                        <div className="min-w-0 flex-1">
+   835→                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+   836→                            <Badge className={`text-[10px] px-2 py-0.5 ${categoryBadgeClass(n.category)}`}>
+   837→                              {n.category}
+   838→                            </Badge>
+   839→                            <span className="text-[10px] text-gray-400">
+   840→                              {formatDate(n.createdAt)}
+   841→                            </span>
+   842→                          </div>
+   843→                          <h3 className="font-bold text-[#2A374E] dark:text-white text-sm leading-snug mb-1">
+   844→                            {n.title}
+   845→                          </h3>
+   846→                          {n.excerpt && (
+   847→                            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+   848→                              {n.excerpt}
+   849→                            </p>
+   850→                          )}
+   851→                        </div>
+   852→                      </div>
+   853→                    </CardContent>
+   854→                  </Card>
+   855→                ))}
+   856→              </div>
+   857→            )}
+   858→          </div>
+   859→        </div>
+   860→
+   861→        {/* Today's schedule (only if data exists) */}
+   862→        {todaySchedule.length > 0 && (
+   863→          <div className="mb-8">
+   864→            <div className="flex items-center gap-2 mb-4">
+   865→              <CalendarClock className="w-6 h-6 text-violet-600" />
+   866→              <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   867→                جدول اليوم
+   868→              </h2>
+   869→            </div>
+   870→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   871→              {todaySchedule.map((s) => (
+   872→                <Card key={s.id} className="border-0 shadow-sm">
+   873→                  <CardContent className="p-4 flex items-center gap-3">
+   874→                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shrink-0">
+   875→                      <CalendarDays className="w-5 h-5 text-white" />
+   876→                    </div>
+   877→                    <div className="min-w-0">
+   878→                      <h3 className="font-bold text-[#2A374E] dark:text-white text-sm truncate">
+   879→                        {s.title}
+   880→                      </h3>
+   881→                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+   882→                        {s.grade || '—'}
+   883→                        {s.section ? ` - ${s.section}` : ''}
+   884→                      </p>
+   885→                    </div>
+   886→                  </CardContent>
+   887→                </Card>
+   888→              ))}
+   889→            </div>
+   890→          </div>
+   891→        )}
+   892→
+   893→        {/* Tips for Teachers */}
+   894→        <div className="mb-8">
+   895→          <div className="flex items-center gap-2 mb-4">
+   896→            <Lightbulb className="w-6 h-6 text-violet-600" />
+   897→            <h2 className="text-xl md:text-2xl font-bold text-[#2A374E] dark:text-white">
+   898→              نصائح للمعلمين
+   899→            </h2>
+   900→          </div>
+   901→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   902→            {teacherTips.map((tip) => {
+   903→              const Icon = tip.icon;
+   904→              return (
+   905→                <Card
+   906→                  key={tip.title}
+   907→                  className="border-0 shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+   908→                >
+   909→                  <CardContent className="p-5">
+   910→                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${tip.color} flex items-center justify-center shadow-md mb-3`}>
+   911→                      <Icon className="w-5 h-5 text-white" />
+   912→                    </div>
+   913→                    <h3 className="font-bold text-[#2A374E] dark:text-white text-sm mb-1">
+   914→                      {tip.title}
+   915→                    </h3>
+   916→                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+   917→                      {tip.description}
+   918→                    </p>
+   919→                  </CardContent>
+   920→                </Card>
+   921→              );
+   922→            })}
+   923→          </div>
+   924→        </div>
+   925→      </main>
+   926→
+   927→      {/* Sticky footer */}
+   928→      <footer className="mt-auto bg-[#1a2332] text-white/70 text-center text-xs py-3">
+   929→        <div className="container mx-auto px-4 flex items-center justify-center gap-2 flex-wrap">
+   930→          <ShieldCheck className="w-3.5 h-3.5" />
+   931→          <span>بوابة المعلم الإلكترونية</span>
+   932→          <span className="opacity-50">|</span>
+   933→          <span>© {new Date().getFullYear()}</span>
+   934→        </div>
+   935→      </footer>
+   936→    </div>
+   937→  );
+   938→}
+   939→

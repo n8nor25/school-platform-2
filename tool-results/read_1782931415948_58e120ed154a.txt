@@ -1,0 +1,501 @@
+     1→
+     2→---
+     3→Task ID: pwa-implementation
+     4→Agent: main (Claude)
+     5→Task: إضافة دعم PWA كامل للمشروع + إصلاح تكامل بوابة أولياء الأمور
+     6→
+     7→Work Log:
+     8→- فحص البنية الحالية: وُجد manifest.json و sw.js و icon-192/512.png أساسيين لكن غير مربوطين بالـ layout
+     9→- إنشاء سكريبت scripts/generate-pwa-icons.ts باستخدام sharp لتوليد:
+    10→  * icon-maskable-192.png و icon-maskable-512.png (مع safe zone 75%)
+    11→  * apple-touch-icon.png (180x180 للـ iOS)
+    12→  * favicon-32.png (لتبويبات المتصفح)
+    13→- تحديث public/manifest.json بـ:
+    14→  * أسماء كاملة بالعربية
+    15→  * أيقونات منفصلة (any + maskable)
+    16→  * shortcuts قابلة للنقر من الشاشة الرئيسية (امتحانات الطالب، أولياء الأمور، النتائج)
+    17→  * display_override: standalone → minimal-ui → browser
+    18→  * orientation: any (يدعم الوضع الأفقي)
+    19→- ترقية public/sw.js بالكامل:
+    20→  * 3 طبقات كاش منفصلة (static, images, pages)
+    21→  * استراتيجية stale-while-revalidate لأصول Next.js الثابتة
+    22→  * استراتيجية cache-first للصور
+    23→  * استراتيجية network-first للصفحات مع fallback
+    24→  * صفحة offline.html احتياطية بالعربية
+    25→  * تجاهل طلبات API و Socket.io و HMR
+    26→  * تحديث تلقائي (skipWaiting + updatefound)
+    27→- إنشاء public/offline.html — صفحة offline أنيقة بالعربية مع:
+    28→  * خلفية متدرجة بلون المدرسة
+    29→  * زر "إعادة المحاولة"
+    30→  * إعادة تحميل تلقائية عند عودة الاتصال
+    31→- إنشاء src/components/pwa/register-sw.tsx — تسجيل SW تلقائي مع:
+    32→  * إشعار تحديث متاح (toast أنيق)
+    33→  * فحص تحديثات كل ساعة
+    34→  * تحديث تلقائي عند عودة الاتصال
+    35→- إنشاء src/components/pwa/install-prompt.tsx — زر تثبيت التطبيق مع:
+    36→  * بانر أنيق أسفل الشاشة
+    37→  * عدم الإزعاج (لا يظهر مجدداً لمدة 7 أيام بعد الرفض)
+    38→  * اختفاء تلقائي بعد التثبيت
+    39→  * دعم iOS standalone detection
+    40→- تحديث src/app/layout.tsx بـ metadata كاملة:
+    41→  * manifest link
+    42→  * theme-color (يختلف حسب الوضع الليلي/النهاري)
+    43→  * apple-touch-icon و apple-mobile-web-app-capable
+    44→  * viewport مع viewport-fit=cover (للأجهزة ذات النوتش)
+    45→  * title template ومفتاح كلمات بالعربية
+    46→  * دمج RegisterSW و InstallPrompt في الـ body
+    47→- معالجة اختصارات PWA في page.tsx:
+    48→  * useEffect يقرأ ?action= من URL ويفتح الصفحة المناسبة
+    49→  * queueMicrotask لتجنّب تحذير set-state-in-effect
+    50→  * تنظيف URL بعد المعالجة (router.replace)
+    51→- إصلاح تكامل page.tsx بعد اكتشاف أن parent-exams-page و teacher-exams-page غير موجودين:
+    52→  * إزالة imports غير موجودة
+    53→  * ربط onOpenExams في ParentsPortalPage بـ StudentExamsPage
+    54→  * إضافة serviceItems لامتحانات الطالب
+    55→  * تحديث شبكة الخدمات في الصفحة الرئيسية
+    56→- إعادة تطبيق تحديثات parents-portal-page.tsx:
+    57→  * تغيير "متابعة النتائج" → "نتائج الامتحانات الإلكترونية"
+    58→  * تغيير "استعلام الآن" → "دخول النتائج"
+    59→  * إضافة onOpenExams prop و handleAction
+    60→  * ربط البطاقة بـ handleAction('exams')
+    61→- التحقق بـ Agent Browser:
+    62→  * Service Worker مسجّل ونشط ✓
+    63→  * manifest مرتبط ويُخدم بشكل صحيح ✓
+    64→  * theme-color = #610000 ✓
+    65→  * apple-touch-icon موجود ✓
+    66→  * اختصار ?action=exams يفتح صفحة الامتحانات ✓
+    67→  * زر "دخول النتائج" في بوابة أولياء الأمور يفتح صفحة الامتحانات ✓
+    68→  * بانر التثبيت يظهر عند محاكاة beforeinstallprompt ✓
+    69→  * زر "لاحقاً" يُخفي البانر ✓
+    70→
+    71→Stage Summary:
+    72→- تم إضافة دعم PWA كامل للمشروع بأكمله
+    73→- التطبيق الآن قابل للتثبيت على جميع الأجهزة (Android, iOS, Desktop Chrome/Edge)
+    74→- يدعم وضع عدم الاتصال (offline) مع صفحة احتياطية بالعربية
+    75→- اختصارات على الشاشة الرئيسية للوصول السريع (امتحانات، أولياء الأمور، النتائج)
+    76→- تحديث تلقائي صامت عند توفّر إصدار جديد
+    77→- زر تثبيت أنيق مع منطق عدم إزعاج
+    78→- تم إصلاح تكامل page.tsx و parents-portal-page.tsx بعد إعادة تعيين المشروع
+    79→
+    80→---
+    81→Task ID: comparative-analytics-6
+    82→Agent: main (Claude)
+    83→Task: تحليلات مقارنة + رسوم بيانية (#6) — تجعل بوابة ولي الأمر احترافية
+    84→
+    85→Work Log:
+    86→- قراءة worklog.md السابق لفهم البنية (PWA + بوابة أولياء الأمور + student-exams-page)
+    87→- فحص schema.prisma لنماذج Submission, Exam, Student, Classroom, ExamAppeal, Answer
+    88→- فحص المكونات القائمة: parents-portal-page.tsx, student-exams-page.tsx, ui/chart.tsx
+    89→- التأكد من توفّر recharts في package.json (^2.15.4) ومكوّن ChartContainer
+    90→- إنشاء src/app/api/exams/analytics/route.ts:
+    91→  * GET /api/exams/analytics?schoolId=&studentId=&studentName=
+    92→  * يستخدم extractStudentContext-like logic (مدرسة + طالب) مع وضع اختبار (test-)
+    93→  * يجمع محاولات الطالب المصحّحة (GRADED, AUTO_CLOSED, SUBMITTED) ويفلتر percentage/submittedAt NOT NULL
+    94→  * يجمّع حسب examId ويأخذ أفضل محاولة لكل امتحان
+    95→  * لكل امتحان: يجلب محاولات الزملاء (في نفس الفصل إن وُجد) ويحسب متوسط الفصل
+    96→  * يحسب KPIs: avgScore, classAvgScore, rank, classSize, totalExams, passedCount, improvementTrend
+    97→  * يبني timeline (خط زمني) + subjectBreakdown (تفصيل المواد) + distribution (5 buckets)
+    98→  * استخدام select بدل include لتفادي حقل gradedByName الذي قد يكون NULL في البيانات القديمة
+    99→- إنشاء src/components/parent-analytics-page.tsx (848 سطر):
+   100→  * LoginScreen: شاشة دخول بمعرّف الطالب + الاسم + المدرسة (مثل student-exams)
+   101→  * AnalyticsDashboard: لوحة احترافية تحتوي على:
+   102→    - Welcome Banner بتدرّج لوني (من #2A374E إلى #3d4f6e)
+   103→    - 4 KPI Cards (متوسط النسبة، الترتيب، عدد الامتحانات، اتجاه التحسّن) مع أيقونات وألوان
+   104→    - Area Chart (Recharts): تطوّر الأداء عبر الامتحانات — ابنك vs متوسط الفصل مع حد النجاح
+   105→    - Radar Chart: نقاط القوة والضعف حسب المادة — ابنك vs متوسط الفصل
+   106→    - Bar Chart: توزيع مستويات الفصل (5 buckets) مع إبراز مستوى الطالب
+   107→    - Subject Breakdown Table: جدول تفصيلي لكل مادة (النسبة، الفرق، عدد الامتحانات)
+   108→    - Recent Exams Timeline: قائمة الامتحانات الأخيرة مع الحالة والتاريخ
+   109→    - Insight Card: رؤى ذكية مُشتقّة من البيانات (أعلى 25%، تحسّن، أقوى/أضعف مادة)
+   110→  * Empty state أنيق عند عدم وجود بيانات
+   111→  * Error state مع زر إعادة المحاولة
+   112→  * Sticky footer مع mt-auto (متطلّبات UI الإلزامية)
+   113→- تحديث src/components/parents-portal-page.tsx:
+   114→  * إضافة import BarChart3 من lucide-react
+   115→  * إضافة prop onOpenAnalytics?: () => void
+   116→  * إضافة بطاقة "تحليلات الأداء المقارنة" (لون بنفسجي/فioletي) إلى quickActions
+   117→  * تحديث handleAction لمعالجة 'analytics' → onOpenAnalytics()
+   118→  * تغيير الشبكة من sm:grid-cols-2 إلى lg:grid-cols-3 لاستيعاب 5 بطاقات
+   119→  * إضافة ring-2 ring-purple-300/60 للبطاقة عند توفّر onOpenAnalytics
+   120→- تحديث src/app/page.tsx:
+   121→  * إضافة dynamic import لـ ParentAnalyticsPage
+   122→  * إضافة state showAnalyticsPage
+   123→  * إضافة handleOpenAnalyticsFromParents callback
+   124→  * تمرير onOpenAnalytics إلى ParentsPortalPage
+   125→  * إضافة شرط العرض: if (showAnalyticsPage) return <ParentAnalyticsPage ... />
+   126→- إصلاح 3 أخطاء برمجية اكتُشفت أثناء التحقق:
+   127→  1. ReferenceError: onBack is not defined في AnalyticsDashboard
+   128→     → تمرير onBack كـ prop من ParentAnalyticsPage إلى AnalyticsDashboard
+   129→  2. Prisma error: gradedByName NULL violation
+   130→     → استخدام select بدل include لتفادي الحقل المشكل
+   131→  3. Bug حرج: نسيان إضافة examId إلى select أدّى إلى تجميع كل المحاولات تحت examId=undefined
+   132→     → أضيف examId: true إلى select، فأصبح timeline يحتوي على 7 امتحانات بدل 1
+   133→- التحقق بـ Agent Browser:
+   134→  * فتح الصفحة الرئيسية ✓
+   135→  * النقر على "بوابة أولياء الأمور" → فتحت البوابة ✓
+   136→  * ظهور بطاقة "تحليلات الأداء المقارنة" الجديدة في شبكة 5 بطاقات ✓
+   137→  * النقر عليها → فتحت شاشة دخول التحليلات ✓
+   138→  * تسجيل دخول بـ test-student-001 + طالب تجريبي للاختبار ✓
+   139→  * لوحة التحليلات تظهر مع:
+   140→    - Banner: "طالب تجريبي للاختبار • 7 امتحان مُصحَّح" ✓
+   141→    - 4 KPI Cards: متوسط 17.1%، ترتيب —، 7 امتحانات، تحسّن -30% ✓
+   142→    - Area Chart مع 7 نقاط وحد النجاح ✓
+   143→    - Radar Chart مع مادتين (رياضيات، الرياضيات) ✓
+   144→    - جدول تفصيل المواد: رياضيات 60% vs 60% (2 امتحانات) ✓
+   145→    - قائمة 7 امتحانات بالترتيب الزمني العكسي مع التواريخ ✓
+   146→    - Insight Cards: انخفاض 30% + أقوى/أضعف مادة ✓
+   147→  * اختبار Responsive على 375px (iPhone): البطاقات في صفوف 2-2-2-2 ✓
+   148→  * اختبار على 1280px Desktop: شبكة 4 KPI Cards في صف واحد ✓
+   149→  * زر "تبديل الطالب" يعيد لشاشة الدخول ✓
+   150→  * زر "العودة للبوابة" يعيد للصفحة الرئيسية ✓
+   151→- التحقق من VLM:
+   152→  * "Layout is visually professional and well-organized, with clear sectioning"
+   153→  * "Line chart has visible axes/lines"
+   154→  * "KPI cards are stacked properly (two per row, no overflow)"
+   155→  * "Nothing is cut off or broken on mobile"
+   156→- فحص ESLint: 0 أخطاء في الملفات الجديدة (parent-analytics-page, analytics/route, parents-portal-page, page.tsx)
+   157→
+   158→Stage Summary:
+   159→- تم إنشاء صفحة تحليلات مقارنة احترافية كاملة لبوابة أولياء الأمور
+   160→- تستخدم Recharts لرسم 4 أنواع من الرسوم البيانية (Area, Radar, Bar, Table)
+   161→- API endpoint يحسب مقارنات حقيقية مع متوسط الفصل + الترتيب + توزيع الدرجات
+   162→- يدعم وضع الاختبار (test-) وطلاب حقيقيين بفصول
+   163→- لوحة تحكم responsive تعمل على الموبايل والديسكتوب
+   164→- رؤى ذكية مُشتقّة من البيانات (تحسّن، ترتيب، أقوى/أضعف مادة)
+   165→- مدمجة بالكامل في بوابة أولياء الأمور كبطاقة جديدة
+   166→- 0 أخطاء lint، 0 أخطاء runtime بعد الإصلاحات
+   167→
+   168→---
+   169→Task ID: teacher-interface-1
+   170→Agent: full-stack-developer
+   171→Task: بناء واجهة المعلم للامتحانات الإلكترونية (teacher-exams-page.tsx)
+   172→
+   173→Work Log:
+   174→- قراءة worklog.md السابق لفهم البنية (PWA + student-exams-page + parent-analytics-page)
+   175→- قراءة student-exams-page.tsx (سطور 1-480) لاستلهام نمط شاشة الدخول + الـ header + الـ footer + buildUrl + formatDate + QUESTION_TYPE_LABELS
+   176→- قراءة parent-analytics-page.tsx (سطور 1-200) لاستلهام نمط الـ dashboard + KPI cards + الـ gradient header
+   177→- فحص مسارات API للمعلم للتأكد من أشكال الاستجابة:
+   178→  * GET /api/exams/teacher → { success, exams: [{ id, title, subject, classroomName, startDate, endDate, durationMinutes, status, totalPoints, passingScore, maxAttempts, hasPassword, timeStatus, submissionsCount, questionsCount }] }
+   179→  * GET /api/exams/teacher/[id] (buildTeacherExamResponse) → { success, exam: { ...كل الحقول..., questions: [{ ..., options, correctAnswer, correctText, rubric, points, order, explanation, textModeration }] } }
+   180→  * GET /api/exams/teacher/[id]/submissions → { success, stats: { total, inProgress, submitted, graded, autoClosed, needsGrading, suspiciousCount, avgScore }, submissions: [{ id, studentId, studentName, attemptNumber, startedAt, submittedAt, status, totalScore, maxScore, percentage, passed, focusEvents, tabSwitches, copyAttempts, gradedAt, gradedByName, answersCount, violationsCount, appealsCount, suspicious, needsGrading }] }
+   181→  * GET /api/exams/teacher/submissions/[subId] → { success, submission: { ..., exam: {...}, answers: [{ id, questionId, textAnswer, imageAnswerUrl, fileAnswerUrl, textModeration, score, maxScore, isCorrect, teacherNote, aiSuggestedScore, aiConfidence, gradedAt, question: {...} }], violations, appeals, violationsCount, appealsCount } }
+   182→  * GET /api/exams/teacher/[id]/appeals → { success, appeals: [{ id, answerId, questionId, questionText, questionType, currentScore, maxScore, requestedScore, studentName, attemptNumber, reason, status, teacherReply, reviewedAt, createdAt }] }
+   183→- التأكد من أن extractTeacherContext يقبل teacherId/teacherName/schoolId كـ query params (لا حاجة لـ headers مخصصة على GET — تجنّب CORS preflight)
+   184→- إنشاء src/components/teacher-exams-page.tsx (~2900 سطر) يتضمّن:
+   185→  * TeacherExamsPage (المكوّن الرئيسي) — إدارة الحالة (screen, teacher, selectedExamId, selectedSubmissionId, toast) + sticky header + sticky footer مع mt-auto + toast overlay
+   186→  * TeacherLogin — بطاقة دخول بمعرّف المعلم + الاسم + المدرسة + hint للوضع التجريبي (test-teacher-001) + سماح بالدخول في الوضع التجريبي حتى لو فشل الفحص
+   187→  * TeacherDashboard — 4 KPI cards + شريط فلترة (status + search) + زر "إنشاء امتحان جديد" (emerald) + قائمة ExamCard + empty state + loading skeletons + إجراءات بحسب الحالة (نشر/إغلاق/أرشفة/حذف) + confirm dialog للحذف
+   188→  * ExamCard — بطاقة امتحان مع badges (status, timeStatus, password) + معلومات (subject, classroom, duration, questions, submissions, points) + تواريخ + أزرار إجراءات بحسب الحالة
+   189→  * CreateExamDialog — dialog كبير (~max-w-2xl) مع كل الحقول (title, subject, classroomName, description, startDate, endDate, durationMinutes, maxAttempts, passingScore, password) + 9 toggles للإعدادات (shuffleQuestions, shuffleOptions, allowReview, showResultImmediately, parentVisible, antiCheatEnabled, allowTextAnswers, allowImageAnswers, allowPdfAnswers) + validation كامل
+   190→  * ExamDetail — header ببيانات الامتحان + Tabs بـ 4 تبويبات (الأسئلة | التسليمات | التظلّمات | الإعدادات)
+   191→  * QuestionsTab — قائمة أسئلة بترقيم + badge للنوع + badge للدرجة + preview للخيارات والإجابة الصحيحة + أزرار تحرير/حذف + empty state + تحذير عند 0 أسئلة
+   192→  * QuestionEditor — dialog لإنشاء/تحرير سؤال: Select للنوع + Textarea للنص + Input للدرجة + حقول شرطية:
+   193→    - MCQ: قائمة خيارات (إضافة/حذف، 2-8) + RadioGroup لاختيار الصحيح
+   194→    - TRUE_FALSE: RadioGroup (صح/خطأ)
+   195→    - SHORT: Input للإجابة النموذجية
+   196→    - ESSAY: Textarea للمعايير
+   197→    - IMAGE_ANSWER/FILE_PDF: تنبيه أن التصحيح يدوي
+   198→    + Textarea للشرح + عرض نتيجة الإشراف (FLAGGED) إن وُجدت + حفظ/إلغاء
+   199→  * SubmissionsTab — 4 KPI stats (total, needsGrading, avgScore, suspicious) + فلترة (status + search) + جدول تسليمات (student, attempt, status, score, violations, action) + زر "تصحيح" يفتح SubmissionGrading
+   200→  * AppealsTab — فلترة بالحالة + قائمة تظلّمات (badge الحالة + badge النوع + student/attempt + السؤال + الدرجة الحالية vs المطلوبة + السبب + رد المعلم للملفات المنتهية) + للـ PENDING: Textarea للرد + زرّي قبول/رفض
+   201→  * SettingsTab — نفس حقول الإنشاء معبّأة مسبقاً + danger zone لحذف الامتحان مع confirm
+   202→  * SubmissionGrading — header (student, attempt, status, passed, score) + Alert للنشاط المشبوه + سجل المخالفات + قائمة الإجابات:
+   203→    - لكل إجابة: badge النوع + badge الدرجة + نص السؤال + إجابة الطالب (text/image/file) + اقتراح AI (إن وُجد) + الإجابة الصحيحة (للـ MCQ/TRUE_FALSE) + ملاحظة المعلم السابقة
+   204→    - للتصحيح اليدوي (SHORT/ESSAY/IMAGE_ANSWER/FILE_PDF): Input للدرجة + Textarea للملاحظة + زر "حفظ"
+   205→    - زر "إنهاء التصحيح" (finalize) مع confirm dialog يُحذّر من الإجابات غير المصحّحة (force option)
+   206→- دوال مساعدة:
+   207→  * teacherFetch<T> — fetch مع timeout 25s + AbortController + معالجة AbortError + Content-Type JSON
+   208→  * buildUrl — يبني URL بـ schoolId + teacherId + teacherName + extra params
+   209→  * formatDate — تنسيق ar-EG بالتاريخ والوقت
+   210→  * toDateTimeLocal / defaultDateTimeLocal — تحويل ISO إلى قيمة datetime-local
+   211→  * statusBadgeClass / submissionStatusBadgeClass / appealStatusBadgeClass — ألوان badges
+   212→  * KpiCard — بطاقة KPI قابلة لإعادة الاستخدام
+   213→  * ToggleRow — صف toggle للإعدادات
+   214→- استخدمت شadcn/ui: Button, Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter, Input, Label, Textarea, Badge, Select, Dialog, Tabs, Alert, Separator, ScrollArea, Progress, Switch, RadioGroup, Checkbox
+   215→- أيقونات lucide-react (~40 أيقونة)
+   216→- ألوان: #610000 (لون المدرسة الأساسي) + emerald-600 للإجراءات الإيجابية + red للحذف + amber للتحذيرات — لا indigo/blue للأزرار الرئيسية
+   217→- RTL مع dir="rtl" + خط عربي
+   218→- Responsive: mobile-first (grid-cols-1 → sm:grid-cols-2 → md:grid-cols-4)
+   219→- Sticky footer مع mt-auto (root wrapper min-h-screen flex flex-col)
+   220→- معالجة loading (spinners/skeletons), error (Alert مع زر إعادة المحاولة), empty states
+   221→- Toast notifications inline (state-based) مع 3 أنواع (success/error/info) + auto-dismiss 4.5s
+   222→- Confirmation dialogs للأفعال المدمّرة (حذف امتحان، إنهاء التصحيح مع إجابات غير مصحّحة)
+   223→- إصلاح 3 أخطاء lint من نوع react-hooks/set-state-in-effect:
+   224→  * تأخير استدعاء fetchExam/fetchAppeals/fetchSubmission داخل useEffect بـ setTimeout(0) لتجنّب setState المتزامن
+   225→
+   226→Stage Summary:
+   227→- تم إنشاء مكوّن واجهة المعلم الكامل في ملف واحد: src/components/teacher-exams-page.tsx
+   228→- يغطّي تدفّق الشاشات الكامل: login → dashboard → exam-detail (4 تبويبات) → submission-grading
+   229→- يدعم كل عمليات API: إنشاء/تحرير/حذف/نشر/إغلاق/أرشفة الامتحانات + إدارة الأسئلة (CRUD) + تصحيح التسليمات يدوياً وآلياً + إنهاء التصحيح + مراجعة التظلّمات (قبول/رفض)
+   230→- يدعم الأنواع الـ 6 من الأسئلة: MCQ, TRUE_FALSE, SHORT, ESSAY, IMAGE_ANSWER, FILE_PDF مع حقول شرطية لكل نوع
+   231→- يعرض اقتراحات الذكاء الاصطناعي للتصحيح (aiSuggestedScore + aiConfidence) إن وُجدت
+   232→- يعرض سجل المخالفات والنشاط المشبوه لكل تسليم
+   233→- متوافق مع وضع الاختبار (test-teacher-001) — يدخل حتى لو فشل الفحص
+   234→- 0 أخطاء lint في الملف الجديد (باقي الأخطاء في ملفات UI قديمة لم أُعدّلها)
+   235→-Compiled بنجاح ✓ (تحقّق من dev.log)
+   236→- المكوّن جاهز للربط من page.tsx في مهمة لاحقة (المهمة الحالية تنحصر في إنشاء الملف فقط)
+   237→
+   238→---
+   239→Task ID: teacher-interface-restore
+   240→Agent: main (Claude)
+   241→Task: استعادة واجهة المعلم التي اختفت من القائمة المنسدلة
+   242→
+   243→Work Log:
+   244→- التحقيق في البلاغ: المستخدم قال "واجهة المعلم اختفت من القائمة المنسدله"
+   245→- فحص القائمة المنسدلة الحالية (serviceItems في page.tsx): لم يوجد أي عنصر "واجهة المعلم"
+   246→- فحص سجل git: لم يوجد أي عنصر معلم في serviceItems في أي التزام سابق
+   247→- اكتشاف السبب الجذري: واجهة برمجة المعلم الكاملة (src/app/api/exams/teacher/) موجودة بالكامل (10+ مسارات: exams CRUD, questions CRUD, submissions, grading, appeals, question-bank, publish, close, archive) لكن لا يوجد مكوّن واجهة مستخدم للمعلم — فُقد خلال إعادة ضبط الحاوية (كما ذُكر في worklog سابق: "parent-exams-page و teacher-exams-page غير موجودين")
+   248→- قراءة شاملة لـ:
+   249→  * prisma/schema.prisma — نماذج Exam, Question, Submission, Answer, ExamAppeal, QuestionBank, ExamTeacherProfile + كل الـ enums
+   250→  * src/app/api/exams/_teacher-helpers.ts — extractTeacherContext (teacherId + schoolId + teacherName, وضع اختبار test-)
+   251→  * src/app/api/exams/teacher/route.ts — GET/POST قائمة الامتحانات + إنشاء
+   252→  * src/app/api/exams/teacher/[id]/route.ts — GET/PUT/DELETE تفاصيل الامتحان
+   253→  * src/app/api/exams/teacher/[id]/questions/route.ts — GET/POST الأسئلة
+   254→  * src/app/api/exams/teacher/[id]/questions/[qid]/route.ts — PUT/DELETE سؤال
+   255→  * src/app/api/exams/teacher/[id]/submissions/route.ts — GET قائمة التسليمات + stats
+   256→  * src/app/api/exams/teacher/submissions/[subId]/route.ts — GET تفاصيل التسليم + الإجابات
+   257→  * src/app/api/exams/teacher/answers/[ansId]/route.ts — POST تصحيح إجابة
+   258→  * src/app/api/exams/teacher/submissions/[subId]/finalize/route.ts — POST إنهاء التصحيح
+   259→  * src/app/api/exams/teacher/[id]/appeals/route.ts — GET التظلّمات
+   260→  * src/app/api/exams/teacher/appeals/[appealId]/route.ts — POST مراجعة تظلّم
+   261→  * src/app/api/exams/teacher/[id]/publish/route.ts + close/route.ts — نشر/إغلاق
+   262→  * src/app/api/exams/teacher/question-bank/route.ts — بنك الأسئلة
+   263→  * src/components/student-exams-page.tsx — نمط الـ UI والدخول
+   264→- تفويض مهمة بناء المكوّن إلى وكيل full-stack-developer (Task ID: teacher-interface-1) مع مواصفة كاملة لكل مسارات API + الـ schema + نمط الـ auth + قواعد CORS (query params فقط على GET) + متطلبات UI (RTL, shadcn/ui, sticky footer, لا indigo/blue)
+   265→- الوكيل أنشأ src/components/teacher-exams-page.tsx (3093 سطر) يحتوي على:
+   266→  * TeacherLogin — شاشة دخول بمعرّف المعلم + الاسم + المدرسة + hint للوضع التجريبي
+   267→  * TeacherDashboard — 4 KPI cards + فلترة (status + search) + قائمة ExamCard + إجراءات حسب الحالة
+   268→  * CreateExamDialog — كل الحقول + 9 toggles للإعدادات
+   269→  * ExamDetail — 4 تبويبات (الأسئلة، التسليمات، التظلّمات، الإعدادات)
+   270→  * QuestionEditor — يدعم الأنواع الـ 6 بحقول شرطية
+   271→  * SubmissionGrading — عرض إجابات الطالب + تصحيح يدوي + إنهاء التصحيح
+   272→  * 0 أخطاء lint (تم إصلاح 3 أخطاء react-hooks/set-state-in-effect)
+   273→- تكامل page.tsx:
+   274→  * إضافة dynamic import لـ TeacherExamsPage
+   275→  * إضافة showTeacherPage state
+   276→  * إضافة 'واجهة المعلم' (icon: 👨‍🏫, action: 'teacher') إلى serviceItems (العنصر السادس)
+   277→  * إضافة معالجة 'teacher' في handleServiceAction + useEffect معامل URL
+   278→  * إضافة شرط العرض: if (showTeacherPage) return <TeacherExamsPage .../>
+   279→- إضافة بطاقة "واجهة المعلم" (لون بنفسجي #7C3AED) إلى شبكة الخدمات في الصفحة الرئيسية
+   280→- إضافة اختصار PWA "واجهة المعلم" (?action=teacher) إلى public/manifest.json
+   281→- التحقق بـ Agent Browser:
+   282→  * فتح الصفحة الرئيسية ✓
+   283→  * القائمة المنسدلة "الخدمات الإلكترونية" تحتوي على 6 عناصر بما فيها "👨🏫 واجهة المعلم" ✓
+   284→  * النقر على "واجهة المعلم" → فتحت شاشة الدخول ✓
+   285→  * تسجيل دخول بـ test-teacher-001 + "أحمد المعلم" ✓
+   286→  * لوحة التحكم تظهر 9 امتحانات حقيقية مع إجراءات حسب الحالة (نشر/حذف للمسودات، إغلاق للمنشورة، أرشفة للمغلقة) ✓
+   287→  * بعض أزرار النشر معطّلة (امتحانات بـ 0 أسئلة) ✓
+   288→  * فتح امتحان → تبويبات (الأسئلة، التسليمات، التظلّمات، الإعدادات) ✓
+   289→  * تبويب التسليمات: بحث + فلترة حالة + empty state صحيح ✓
+   290→  * إنشاء امتحان جديد عبر dialog كامل (عنوان، مادة، فصل، تواريخ، مدة، محاولات، درجة نجاح، كلمة سر، 9 toggles) ✓
+   291→  * الامتحان أُنشئ كمسودة وفتح تلقائياً ✓
+   292→  * إضافة سؤال MCQ (نص + خياران + تحديد الإجابة الصحيحة) ✓
+   293→  * ظهور toast "تمت إضافة السؤال" + السؤال في القائمة ✓
+   294→  * اختصار PWA ?action=teacher يفتح الواجهة مباشرة ✓
+   295→  * اختبار Mobile 375px: الواجهة responsive ✓
+   296→  * فحص VLM: تصميم احترافي، RTL صحيح، ألوان خضراء للإجراءات (لا indigo/blue)، لا مشاكل بصرية ✓
+   297→  * sticky footer صحيح (min-h-screen flex flex-col + mt-auto) ✓
+   298→  * لا أخطاء في console أو dev.log ✓
+   299→  * لا أخطاء lint في الملفات الجديدة/المعدّلة ✓
+   300→
+   301→Stage Summary:
+   302→- تم استعادة واجهة المعلم بالكامل وإضافتها للقائمة المنسدلة + شبكة الخدمات + اختصارات PWA
+   303→- المكوّن (3093 سطر) يغطي: دخول، لوحة تحكم، إنشاء/تحرير امتحان، إدارة أسئلة (6 أنواع)، تصحيح تسليمات، تظلّمات، إعدادات
+   304→- يستخدم query params فقط للـ auth (لا CORS preflight على GET)
+   305→- يدعم الوضع التجريبي (test-teacher-001)
+   306→- 0 أخطاء lint، 0 أخطاء runtime
+   307→- تكامل كامل مع page.tsx + manifest.json + homepage grid
+   308→
+   309→---
+   310→Task ID: 2-b
+   311→Agent: full-stack-developer (coordinator-dashboard)
+   312→Task: بناء مكوّن لوحة المنسّق لإدارة الامتحانات على مستوى المدرسة
+   313→
+   314→Work Log:
+   315→- قراءة worklog.md لفهم ما أنجزه الوكلاء السابقون (PWA + student-exams + parent-analytics + teacher-exams)
+   316→- قراءة teacher-exams-page.tsx (3000+ سطر) لاستلهام نمط الدخول + الـ header + الـ footer + buildUrl + formatDate + coordinatorFetch + toast pattern
+   317→- قراءة parent-analytics-page.tsx لاستلهام نمط Recharts (BarChart, PieChart) مع التسميات العربية + RTL
+   318→- فحص مسارات API للمنسّق للتأكد من أشكال الاستجابة الفعلية:
+   319→  * GET /api/exams/coordinator/overview → { success, kpis:{exams,submissions,appeals,violations}, subjectStats, topTeachers, recentExams, upcomingExams, pendingAppealsExams }
+   320→  * GET /api/exams/coordinator/exams → { success, exams:[...], pagination, filters }
+   321→  * GET /api/exams/coordinator/exams/[id] → { success, exam:{...كل الحقول...}, stats:{submissionsByStatus,gradedCount,avgScore,minScore,maxScore,passCount,passRate,violationsCount,appealsCount}, recentSubmissions }
+   322→  * PATCH /api/exams/coordinator/exams/[id] { action: publish|close|force-close|archive|unarchive|delete|reassign } → { success, message, action, previousStatus, newStatus, coordinator }
+   323→  * GET /api/exams/coordinator/violations → { success, violations:[{id,type,details,createdAt,submissionId,studentName,examId,examTitle,subject,teacherName}], pagination }
+   324→  * GET /api/exams/coordinator/appeals → { success, appeals:[{id,reason,requestedScore,status,teacherReply,reviewedAt,createdAt,updatedAt,studentId,studentName,answerId,currentScore,maxScore,isCorrect,questionText,questionType,questionPoints,submissionId,examId,examTitle,subject,teacherName,submissionPercentage}], pagination }
+   325→- التأكد من أن extractCoordinatorContext يقبل coordinatorId/coordinatorName/schoolId كـ query params (لا headers مخصصة على GET)
+   326→- إنشاء src/components/coordinator-dashboard-page.tsx (3234 سطر) يتضمّن:
+   327→  * CoordinatorDashboardPage (المكوّن الرئيسي) — إدارة الحالة (screen, coordinator, toast) + sticky header مع اسم المنسّق + زر العودة + sticky footer مع mt-auto + toast overlay
+   328→  * CoordinatorLogin — بطاقة دخول بمعرّف المنسّق + الاسم + المدرسة + hint للوضع التجريبي (test-coordinator-001) + سماح بالدخول في الوضع التجريبي حتى لو فشل الفحص
+   329→  * CoordinatorDashboard — Tabs بـ 4 تبويبات (نظرة عامة | الامتحانات | المخالفات | التظلّمات) + فتح ExamDetailPanel كحوار عند النقر على صف
+   330→  * OverviewTab — 7 KPI cards (إجمالي الامتحانات، المنشورة، المسودات، التسليمات، نسبة النجاح، التظلّمات المعلّقة، المخالفات) + 3 رسوم بيانية:
+   331→    - Bar Chart: توزيع الامتحانات حسب الحالة (DRAFT/PUBLISHED/CLOSED/ARCHIVED) بألوان مميّزة لكل شريط
+   332→    - Pie Chart: توزيع التسليمات حسب الحالة (GRADED/IN_PROGRESS/أخرى) مع legend عربي
+   333→    - Horizontal Bar Chart: توزيع المخالفات حسب النوع (7 أنواع) بألوان مميّزة
+   334→    + قائمة أكثر المعلمين نشاطاً (مع badges) + قائمة امتحانات تنتهي قريباً (مع countdown) + جدول إحصائيات المواد + alert للامتحانات ذات التظلّمات المعلّقة + بطاقات أحدث الامتحانات
+   335→  * ExamsTab — شريط فلترة (status select + subject input + search + sort) + جدول desktop (11 عمود) + بطاقات mobile + pagination + مسح الفلاتر
+   336→  * ExamDetailPanel (Dialog) — header ببيانات الامتحان الكاملة + badges للإعدادات (مكافحة الغش، خلط، مرئي لأولياء الأمور، تقييد IP) + 4 KPI cards (المتوسط، أعلى، أدنى، نسبة النجاح) + Bar Chart للتسليمات حسب الحالة + badges للعدّادات (مصحّحة، ناجح، مخالفات، تظلّمات) + جدول أحدث التسليمات + شريط إجراءات إداري:
+   337→    - DRAFT → زر "نشر" (emerald، معطّل إذا 0 أسئلة)
+   338→    - PUBLISHED → زر "إغلاق" (amber) + زر "إغلاق إجباري" (red outline، يفتح ConfirmForceCloseDialog)
+   339→    - CLOSED → زر "أرشفة" (amber)
+   340→    - ARCHIVED → زر "إزالة الأرشفة" (outline)
+   341→    - (لكل ما عدا ARCHIVED) زر "إعادة تعيين معلم" (يفتح ReassignDialog)
+   342→    - دائماً زر "حذف نهائي" (red outline، يفتح ConfirmDeleteDialog مع كتابة العنوان للتأكيد)
+   343→  * ReassignDialog — inputs لـ teacherId + teacherName + تأكيد
+   344→  * ConfirmForceCloseDialog — تحذير بأنه سيُغلق التسليمات النشطة (AUTO_CLOSED) + زر red
+   345→  * ConfirmDeleteDialog — يطلب كتابة عنوان الامتحان بالضبط + زر red معطّل حتى التطابق
+   346→  * ViolationsTab — فلترة (type select + date range) + جدول (النوع، الطالب، الامتحان، المادة، المعلم، التفاصيل، التوقيت) + pagination + badges ملوّنة حسب النوع
+   347→  * AppealsTab — فلترة بالحالة + بطاقات تظلّمات (الطالب، الامتحان، المادة، المعلم، السؤال، الدرجة الحالية/المطلوبة، نسبة الامتحان، السبب، رد المعلم، التوقيت) + pagination
+   348→- دوال مساعدة:
+   349→  * coordinatorFetch<T> — fetch مع timeout 25s (AbortController) + إعادة محاولة واحدة لأخطاء الشبكة/المهلة + لا headers مخصصة على GET (تفادي CORS preflight) + Content-Type JSON على PATCH مع body
+   350→  * buildUrl — يبني URL بـ schoolId + coordinatorId + coordinatorName + extra params (يتجاهل null/undefined/'' )
+   351→  * formatDate / formatDateShort — تنسيق ar-EG
+   352→  * formatCountdown — حساب الوقت المتبقي (أيام/ساعات/دقائق) بالعربية
+   353→  * examStatusBadgeClass / appealStatusBadgeClass / violationBadgeClass — ألوان badges
+   354→- استخدمت shadcn/ui: Button, Card (+ Content/Header/Title/Description/Footer), Input, Label, Textarea, Badge, Select (+ Content/Item/Trigger/Value), Dialog (+ Content/Header/Title/Footer/Description), Tabs (+ Content/List/Trigger), Alert (+ Description/Title), Separator, ScrollArea, Progress, Switch
+   355→- أيقونات lucide-react (~40 أيقونة)
+   356→- Recharts: BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
+   357→- ألوان: #610000 (لون المدرسة الأساسي) + emerald للإجراءات الإيجابية (نشر) + amber للتحذيرات (إغلاق، أرشفة) + red للمدمّر (حذف، إغلاق إجباري) — لا indigo/blue للأزرار الرئيسية
+   358→- RTL مع dir="rtl" + خط عربي (system Arabic stack)
+   359→- Responsive: mobile-first (grid-cols-1 → sm:grid-cols-2 → md:grid-cols-3 → lg:grid-cols-4)
+   360→- Sticky footer مع mt-auto (root wrapper min-h-screen flex flex-col)
+   361→- معالجة loading (skeleton cards + spinner), error (Alert مع زر إعادة المحاولة), empty states (friendly + icon)
+   362→- Toast notifications inline (state-based) مع 3 أنواع (success/error/info) + auto-dismiss 4.5s
+   363→- Confirmation dialogs للأفعال المدمّرة (force-close + delete مع كتابة العنوان)
+   364→- Pagination controls (prev/next + page indicator) على الامتحانات والمخالفات والتظلّمات
+   365→- "تحديث" (refresh) button على كل تبويب
+   366→- إصلاح 6 أخطاء lint من نوع react-hooks/set-state-in-effect بـ setTimeout(0) pattern:
+   367→  * page-reset effect في ExamsTab
+   368→  * setData(null) effect في ExamDetailPanel عند الإغلاق
+   369→  * reset fields effect في ReassignDialog عند الفتح
+   370→  * reset typed effect في ConfirmDeleteDialog عند الفتح
+   371→  * page-reset effect في ViolationsTab
+   372→  * page-reset effect في AppealsTab
+   373→
+   374→Stage Summary:
+   375→- تم إنشاء مكوّن لوحة المنسّق الكامل في ملف واحد: src/components/coordinator-dashboard-page.tsx (3234 سطر)
+   376→- يغطّي تدفّق الشاشات الكامل: login → dashboard (4 تبويبات) → exam-detail-panel (dialog) → sub-dialogs (reassign/force-close/delete)
+   377→- يدعم كل عمليات API: نظرة عامة (KPIs + رسوم + قوائم) + قائمة امتحانات (فلترة + ترقيم + ترتيب) + تفاصيل امتحان (إحصائيات + تسليمات) + إجراءات إدارية (publish/close/force-close/archive/unarchive/reassign/delete) + المخالفات (فلترة + جدول) + التظلّمات (فلترة + بطاقات)
+   378→- يستخدم Recharts لـ 4 رسوم بيانية (BarChart للحالات، PieChart للتسليمات، Horizontal BarChart للمخالفات، BarChart داخل تفاصيل الامتحان للتسليمات حسب الحالة)
+   379→- auth عبر query params فقط على GET (لا CORS preflight) + Content-Type JSON على PATCH
+   380→- يدعم الوضع التجريبي (test-coordinator-001) — يدخل حتى لو فشل الفحص
+   381→- 0 أخطاء lint في الملف الجديد (تم إصلاح 6 أخطاء react-hooks/set-state-in-effect)
+   382→- تم التحقق من dev.log — لا أخطاء compile، الـ API endpoints للمنسّق تعمل (200s على GET/PATCH)
+   383→- المكوّن جاهز للربط من page.tsx في مهمة لاحقة (المهمة الحالية تنحصر في إنشاء الملف فقط)
+   384→
+   385→---
+   386→Task ID: 2 (coordinator-dashboard full)
+   387→Agent: main (Claude)
+   388→Task: لوحة المنسّق / إدارة الامتحانات على مستوى المدرسة — API + مكوّن + ربط + تحقق
+   389→
+   390→Work Log:
+   391→- التحقق من أن التحليلات المقارنة (#6) كانت مكتملة بالفعل (parent-analytics-page.tsx 854 سطر + /api/exams/analytics) — تم التحقق من عمل الـ API (200، 7 امتحانات، timeline، KPIs)
+   392→- بناء API المنسّق (6 مسارات):
+   393→  * src/app/api/exams/_coordinator-helpers.ts — extractCoordinatorContext + buildExamFilter
+   394→  * src/app/api/exams/coordinator/overview/route.ts — KPIs شاملة + subjectStats + topTeachers + recentExams + upcomingExams + pendingAppealsExams
+   395→  * src/app/api/exams/coordinator/exams/route.ts — قائمة مع فلترة (status/subject/teacher/classroom/search/date) + pagination + sort + إحصائيات لكل امتحان (gradedCount/avgScore/passRate/pendingAppeals)
+   396→  * src/app/api/exams/coordinator/exams/[id]/route.ts — GET تفاصيل + إحصائيات تفصيلية + recentSubmissions; PATCH إجراءات (publish/close/force-close/archive/unarchive/delete/reassign)
+   397→  * src/app/api/exams/coordinator/violations/route.ts — كل المخالفات مع فلترة + pagination
+   398→  * src/app/api/exams/coordinator/appeals/route.ts — كل التظلّمات مع فلترة + pagination
+   399→- إصلاح مشكلتين في DB (schema أحدث من DB):
+   400→  * userAgent + ipHash غير موجودين في ExamViolation → أزلتها من select
+   401→  * severity يحتوي قيم نصية ("low") بدلاً من Int → أزلتها من select + where + لفّ violationsCount في try/catch
+   402→- تفويض بناء المكوّن لوكيل full-stack-developer (Task ID: 2-b) → أنشأ coordinator-dashboard-page.tsx (3235 سطر): login + dashboard بـ 4 تبويبات (overview/exams/violations/appeals) + ExamDetailPanel مع إجراءات إدارية + 3 sub-dialogs (reassign/force-close/delete with type-to-confirm)
+   403→- ربط المكوّن في page.tsx:
+   404→  * dynamic import
+   405→  * state showCoordinatorPage
+   406→  * 'لوحة المنسّق' (icon 🎛️) في serviceItems + handleServiceAction + useEffect معامل URL
+   407→  * بطاقة "لوحة المنسّق" (لون #0F766E teal) في شبكة الخدمات
+   408→  * اختصار PWA ?action=coordinator في manifest.json
+   409→- إصلاح bug: schoolIdInput لم يكن يتزامن مع schoolId prop (useState يأخذ القيمة الأولية فقط) → أضفت useEffect مع setTimeout(0) لمزامنته + إصلاح lint error ناتج
+   410→- التحقق بـ Agent Browser:
+   411→  * القائمة المنسدلة تحتوي "🎛️ لوحة المنسّق" ✓
+   412→  * النقر → شاشة الدخول ✓
+   413→  * حقل schoolId يُملأ تلقائياً (cmqu1mqhq...) ✓
+   414→  * تسجيل دخول بـ test-coordinator-001 + "أحمد المنسّق" ✓
+   415→  * لوحة التحكم تظهر 4 تبويبات ✓
+   416→  * تبويب نظرة عامة: 7 KPI cards + 3 charts (bar/pie) + top teachers + subject stats + upcoming + recent + pending appeals ✓ (VLM أكد: KPIs مرئية، charts مرسومة ببيانات، RTL صحيح، لا مشاكل بصرية)
+   417→  * تبويب الامتحانات: جدول 11 عمود ببيانات حقيقية + فلترة + بحث + sort ✓
+   418→  * فتح تفاصيل امتحان → dialog كامل (عنوان، حالة، إحصائيات، إجراءات إدارية) ✓
+   419→  * إعادة تعيين معلم → فتح sub-dialog مع نموذج (النظام رفض معرّف غير موجود بـ foreign key constraint — سلوك صحيح)
+   420→  * تبويب المخالفات: جدول ببيانات حقيقية (فقدان التركيز، اختصار لوحة المفاتيح...) ✓
+   421→  * تبويب التظلّمات: بطاقات تفصيلية (طالب، امتحان، سؤال، درجة حالية/مطلوبة، حالة) ✓
+   422→  * sticky footer مرئي عند التمرير للأسفل ✓
+   423→  * mobile 375px: layout responsive، cards عمودية، charts بلا cutoff، لا horizontal scroll ✓ (VLM أكد)
+   424→  * 0 أخطاء lint في coordinator-dashboard-page.tsx ✓
+   425→  * 0 أخطاء runtime في dev.log ✓
+   426→
+   427→Stage Summary:
+   428→- تم بناء لوحة المنسّق / إدارة الامتحانات بالكامل: API (6 مسارات) + مكوّن (3235 سطر) + ربط في page.tsx + اختصار PWA
+   429→- المنسّق يرى ويدير كل امتحانات المدرسة (نظرة عامة + إحصائيات + فلترة + إجراءات إدارية: publish/close/force-close/archive/unarchive/delete/reassign)
+   430→- 4 تبويبات: نظرة عامة (KPIs + charts)، الامتحانات (جدول مع فلترة)، المخالفات، التظلّمات
+   431→- يستخدم query params فقط للـ auth على GET (لا CORS preflight)
+   432→- يدعم الوضع التجريبي (test-coordinator-001)
+   433→- 0 أخطاء lint، 0 أخطاء runtime، متجاوب مع الموبايل
+   434→- التحليلات المقارنة (#6) كانت مكتملة بالفعل وتم التحقق من عملها
+   435→
+   436→---
+   437→Task ID: 3 (student-exams improvements)
+   438→Agent: main (Claude)
+   439→Task: تحسينات واجهة الطالب المتبقية — إحصائيات + فلترة + تعليم أسئلة + اختصارات + طباعة
+   440→
+   441→Work Log:
+   442→- فحص student-exams-page.tsx (2149 سطر) — وجدته شاملاً (login/list/intro/runner/result/appeals) لكن تفتقد تحسينات احترافية
+   443→- بناء API جديد: GET /api/exams/student-stats
+   444→  * يُرجع KPIs (totalExams, avgScore, passRate, bestScore, totalAppeals) + timeline (آخر 10 نتائج) + subjectBreakdown + recentResults
+   445→  * تم اختباره: 7 امتحانات، متوسط 17.1%، أعلى 90%، 2 تظلّم
+   446→- إصلاح bug في /api/exams/_helpers.ts: حقل gradedByName يحوي NULL في DB القديمة → أضفت select محدد لتفاديه
+   447→- إضافة imports: recharts (BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line) + lucide icons جديدة (Bookmark, BookmarkCheck, Wifi, WifiOff, Search, Filter, History, TrendingUp, Trophy, Target, Percent, Printer, Keyboard)
+   448→- إضافة useMemo للـ imports
+   449→- إعادة كتابة ExamsList بالكامل (+ مكوّنات مساعدة جديدة):
+   450→  * StudentStatsHeader — رأس تدرّجي بنفسجي (#610000→#7a1a1a) فيه KPIs (4 بطاقات) + LineChart للأداء الزمني (آخر 10) + تلميح وضع تجريبي
+   451→  * تبويب: المتاحة / النتائج السابقة (مع عدّادات)
+   452→  * شريط فلترة: بحث (عنوان/مادة/معلم) + فلتر مادة + فلتر حالة (مفتوح/قادم/منتهي) + زر مسح + تحديث
+   453→  * ExamCard (مستخرج) — بطاقة امتحان
+   454→  * HistoryTab — تفصيل الأداء حسب المادة (progress bars) + آخر النتائج (بطاقات ملوّنة)
+   455→- تحسينات ExamRunner:
+   456→  * تعليم الأسئلة للمراجعة (flaggedQuestions Set) + زر تعليم في رأس السؤال + badge "للمراجعة"
+   457→  * فلترة المستكشف: الكل / للمراجعة / غير مُجاب
+   458→  * نقطة تعليم صغيرة على أزرار الأسئلة المعلّمة
+   459→  * زر "اذهب لأول سؤال معلّم"
+   460→  * اختصارات لوحة المفاتيح: ArrowLeft/Right للتنقل (RTL)، F للتعليم، N للتالي غير المُجاب، 1-9 للقفز، ? للوحة الاختصارات، Esc للإغلاق
+   461→  * تلميح اختصارات يظهر مرة واحدة (sessionStorage) بعد ثانيتين
+   462→  * لوحة اختصارات قابلة للإظهار/الإخفاء مع ShortcutRow component
+   463→  * مؤشر حالة الاتصال (online/offline) مع تنبيه عند الانقطاع
+   464→  * beforeunload: تحذير قبل مغادرة الصفحة أثناء الامتحان
+   465→- تحسينات ExamResult:
+   466→  * زر طباعة/حفظ PDF (window.print) مع classes print:
+   467→  * رسم بياني (BarChart عمودي) لتوزيع نتائج الأسئلة (صحيحة/خاطئة/قيد المراجعة) مع مفتاح ملوّن
+   468→  * classes print: لإخفاء العناصر غير الضرورية عند الطباعة
+   469→- إصلاح bug في StudentLogin: schoolIdInput لم يكن يتزامن مع schoolId prop (نفس مشكلة coordinator) → أضفت useEffect مع setTimeout(0)
+   470→- إصلاح lint error: set-state-in-effect في مؤشر الاتصال → setTimeout(0)
+   471→- التحقق بـ Agent Browser + VLM:
+   472→  * الدخول بـ test-student-001 + "طالب تجريبي" ✓
+   473→  * رأس الإحصائيات يظهر: 4 KPIs + LineChart للأداء (VLM أكد) ✓
+   474→  * تبويب المتاحة/النتائج السابقة يعمل ✓
+   475→  * البحث بـ "جبر" → "لا نتائج مطابقة" (صحيح) ✓
+   476→  * البحث بـ "الرياضيات" → 4 امتحانات (صحيح) ✓
+   477→  * فلتر الحالة + المادة يعمل ✓
+   478→  * تبويب النتائج السابقة: Performance by Subject + Recent Results (VLM أكد: progress bars + بطاقات ملوّنة) ✓
+   479→  * بدء امتحان → Runner يظهر: زر اختصارات (?) + زر تعليم (F) + فلترة المستكشف (الكل/للمراجعة/غير مُجاب) + مؤشر متصل + مؤقّت ✓
+   480→  * النقر على زر التعليم → "للمراجعة (1)" ظهر في المستكشف ✓
+   481→  * الضغط على ? → لوحة اختصارات ظهرت (السؤال التالي/السابق، تعليم، التالي غير مُجاب، قفز، إظهار) ✓
+   482→  * الضغط على ArrowLeft → انتقل من سؤال 1 إلى سؤال 2 ✓ (تحقّق via JS)
+   483→  * beforeunload listener مسجّل ✓
+   484→  * mobile 375px: layout responsive، المؤقّت مرئي، لا horizontal scroll (VLM أكد) ✓
+   485→  * 0 أخطاء lint في student-exams-page.tsx ✓
+   486→  * 0 أخطاء runtime في الكود الجديد (console.error من useExamProctor متوقع — WebSocket demo) ✓
+   487→
+   488→Stage Summary:
+   489→- تمت إضافة 6 تحسينات احترافية لواجهة الطالب:
+   490→  1. رأس إحصائيات الطالب (KPIs + LineChart للأداء الزمني) على النمط الاحترافي
+   491→  2. بحث وفلترة في قائمة الامتحانات (بحث نصي + فلتر مادة + فلتر حالة)
+   492→  3. تبويب النتائج السابقة (أداء حسب المادة + آخر النتائج)
+   493→  4. تعليم الأسئلة للمراجعة (bookmark) مع فلترة المستكشف
+   494→  5. اختصارات لوحة المفاتيح الكاملة (أسهم/F/N/أرقام/?) + تلميح + لوحة
+   495→  6. مؤشر الاتصال + beforeunload + رسم بياني للنتائج + زر طباعة
+   496→- API جديد: /api/exams/student-stats (KPIs + timeline + subjectBreakdown + recentResults)
+   497→- إصلاح bug في _helpers.ts (gradedByName NULL)
+   498→- إصلاح bug في StudentLogin (schoolIdInput sync)
+   499→- 0 أخطاء lint في student-exams-page.tsx، 0 أخطاء runtime
+   500→- متجاوب مع الموبايل، RTL صحيح، sticky footer
+   501→

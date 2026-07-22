@@ -1,0 +1,778 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react'
+     4→import {
+     5→  Plus, Edit, Trash2, Users, AlertCircle, X, Archive, ArchiveRestore,
+     6→  Search, Filter, Download, UserPlus, Phone, MapPin, Calendar,
+     7→  GraduationCap, ChevronDown, Eye
+     8→} from 'lucide-react'
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Input } from '@/components/ui/input'
+    12→import { Label } from '@/components/ui/label'
+    13→import { Badge } from '@/components/ui/badge'
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+    15→import {
+    16→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+    17→} from '@/components/ui/select'
+    18→import { Textarea } from '@/components/ui/textarea'
+    19→import { Skeleton } from '@/components/ui/skeleton'
+    20→import { toast } from 'sonner'
+    21→import { useAdminStore } from '@/lib/admin-store'
+    22→
+    23→// ===== Types =====
+    24→interface Classroom {
+    25→  id: string
+    26→  name: string
+    27→  gradeLevel: string
+    28→  section: string
+    29→  capacity: number
+    30→  _count?: { students: number }
+    31→}
+    32→
+    33→interface AcademicYear {
+    34→  id: string
+    35→  name: string
+    36→  isActive: boolean
+    37→}
+    38→
+    39→interface Student {
+    40→  id: string
+    41→  studentNumber: string
+    42→  name: string
+    43→  nationalId: string | null
+    44→  dateOfBirth: string | null
+    45→  gender: string
+    46→  address: string | null
+    47→  phone: string | null
+    48→  parentName: string | null
+    49→  parentPhone: string | null
+    50→  parentNationalId: string | null
+    51→  enrollDate: string
+    52→  status: string
+    53→  previousSchool: string | null
+    54→  notes: string | null
+    55→  archived: boolean
+    56→  classroomId: string | null
+    57→  classroom?: { name: string; gradeLevel: string } | null
+    58→}
+    59→
+    60→interface StudentForm {
+    61→  studentNumber: string
+    62→  name: string
+    63→  nationalId: string
+    64→  dateOfBirth: string
+    65→  gender: string
+    66→  address: string
+    67→  phone: string
+    68→  parentName: string
+    69→  parentPhone: string
+    70→  parentNationalId: string
+    71→  enrollDate: string
+    72→  status: string
+    73→  previousSchool: string
+    74→  notes: string
+    75→  classroomId: string
+    76→}
+    77→
+    78→const defaultForm: StudentForm = {
+    79→  studentNumber: '',
+    80→  name: '',
+    81→  nationalId: '',
+    82→  dateOfBirth: '',
+    83→  gender: 'ذكر',
+    84→  address: '',
+    85→  phone: '',
+    86→  parentName: '',
+    87→  parentPhone: '',
+    88→  parentNationalId: '',
+    89→  enrollDate: new Date().toISOString().split('T')[0],
+    90→  status: 'نشط',
+    91→  previousSchool: '',
+    92→  notes: '',
+    93→  classroomId: '',
+    94→}
+    95→
+    96→const statusColors: Record<string, string> = {
+    97→  'نشط': 'bg-green-100 text-green-700',
+    98→  'منقول': 'bg-blue-100 text-blue-700',
+    99→  'منسحب': 'bg-red-100 text-red-700',
+   100→  'متخرج': 'bg-purple-100 text-purple-700',
+   101→}
+   102→
+   103→export function StudentsManagement() {
+   104→  const [students, setStudents] = useState<Student[]>([])
+   105→  const [classrooms, setClassrooms] = useState<Classroom[]>([])
+   106→  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+   107→  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<string>('')
+   108→  const [loading, setLoading] = useState(true)
+   109→  const [form, setForm] = useState<StudentForm>(defaultForm)
+   110→  const [editId, setEditId] = useState<string | null>(null)
+   111→  const [dialogOpen, setDialogOpen] = useState(false)
+   112→  const [viewDialogOpen, setViewDialogOpen] = useState(false)
+   113→  const [viewStudent, setViewStudent] = useState<Student | null>(null)
+   114→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   115→  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+   116→  const [saving, setSaving] = useState(false)
+   117→  const [showArchived, setShowArchived] = useState(false)
+   118→  const [searchQuery, setSearchQuery] = useState('')
+   119→  const [filterStatus, setFilterStatus] = useState<string>('all')
+   120→  const [filterClassroom, setFilterClassroom] = useState<string>('all')
+   121→  const { selectedSchoolId } = useAdminStore()
+   122→
+   123→  // Fetch academic years
+   124→  const fetchAcademicYears = useCallback(async () => {
+   125→    try {
+   126→      const res = await fetch(`/api/academic-years?schoolId=${selectedSchoolId}`)
+   127→      if (res.ok) {
+   128→        const data = await res.json()
+   129→        setAcademicYears(Array.isArray(data) ? data : [])
+   130→        // Auto-select the active academic year
+   131→        const active = data.find((y: AcademicYear) => y.isActive)
+   132→        if (active) setSelectedAcademicYearId(active.id)
+   133→      }
+   134→    } catch { /* ignore */ }
+   135→  }, [selectedSchoolId])
+   136→
+   137→  // Fetch classrooms
+   138→  const fetchClassrooms = useCallback(async () => {
+   139→    if (!selectedAcademicYearId) return
+   140→    try {
+   141→      const res = await fetch(`/api/classrooms?schoolId=${selectedSchoolId}&academicYearId=${selectedAcademicYearId}`)
+   142→      if (res.ok) {
+   143→        const data = await res.json()
+   144→        setClassrooms(Array.isArray(data) ? data : [])
+   145→      }
+   146→    } catch { /* ignore */ }
+   147→  }, [selectedSchoolId, selectedAcademicYearId])
+   148→
+   149→  // Fetch students
+   150→  const fetchStudents = useCallback(async () => {
+   151→    setLoading(true)
+   152→    try {
+   153→      const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   154→      if (showArchived) params.set('includeArchived', 'true')
+   155→      if (searchQuery) params.set('search', searchQuery)
+   156→      if (filterStatus !== 'all') params.set('status', filterStatus)
+   157→      if (filterClassroom !== 'all') params.set('classroomId', filterClassroom)
+   158→      const res = await fetch(`/api/students?${params.toString()}`)
+   159→      if (res.ok) {
+   160→        const data = await res.json()
+   161→        setStudents(Array.isArray(data) ? data : [])
+   162→      }
+   163→    } catch {
+   164→      toast.error('فشل في تحميل بيانات الطلاب')
+   165→    } finally {
+   166→      setLoading(false)
+   167→    }
+   168→  }, [selectedSchoolId, showArchived, searchQuery, filterStatus, filterClassroom])
+   169→
+   170→  useEffect(() => { fetchAcademicYears() }, [fetchAcademicYears])
+   171→  useEffect(() => { fetchClassrooms() }, [fetchClassrooms])
+   172→  useEffect(() => { fetchStudents() }, [fetchStudents])
+   173→
+   174→  const archivedCount = students.filter(s => s.archived).length
+   175→
+   176→  const openAdd = () => {
+   177→    setEditId(null)
+   178→    setForm(defaultForm)
+   179→    setDialogOpen(true)
+   180→  }
+   181→
+   182→  const openEdit = (student: Student) => {
+   183→    setEditId(student.id)
+   184→    setForm({
+   185→      studentNumber: student.studentNumber,
+   186→      name: student.name,
+   187→      nationalId: student.nationalId || '',
+   188→      dateOfBirth: student.dateOfBirth ? student.dateOfBirth.split('T')[0] : '',
+   189→      gender: student.gender,
+   190→      address: student.address || '',
+   191→      phone: student.phone || '',
+   192→      parentName: student.parentName || '',
+   193→      parentPhone: student.parentPhone || '',
+   194→      parentNationalId: student.parentNationalId || '',
+   195→      enrollDate: student.enrollDate ? student.enrollDate.split('T')[0] : '',
+   196→      status: student.status,
+   197→      previousSchool: student.previousSchool || '',
+   198→      notes: student.notes || '',
+   199→      classroomId: student.classroomId || '',
+   200→    })
+   201→    setDialogOpen(true)
+   202→  }
+   203→
+   204→  const openView = (student: Student) => {
+   205→    setViewStudent(student)
+   206→    setViewDialogOpen(true)
+   207→  }
+   208→
+   209→  const handleSave = async () => {
+   210→    if (!form.name.trim() || !form.studentNumber.trim()) {
+   211→      toast.error('يرجى إدخال اسم الطالب ورقم القيد')
+   212→      return
+   213→    }
+   214→    setSaving(true)
+   215→    try {
+   216→      const body = {
+   217→        schoolId: selectedSchoolId,
+   218→        ...form,
+   219→        classroomId: form.classroomId || null,
+   220→        nationalId: form.nationalId || null,
+   221→        dateOfBirth: form.dateOfBirth || null,
+   222→        enrollDate: form.enrollDate || new Date().toISOString().split('T')[0],
+   223→        address: form.address || null,
+   224→        phone: form.phone || null,
+   225→        parentName: form.parentName || null,
+   226→        parentPhone: form.parentPhone || null,
+   227→        parentNationalId: form.parentNationalId || null,
+   228→        previousSchool: form.previousSchool || null,
+   229→        notes: form.notes || null,
+   230→      }
+   231→
+   232→      const res = editId
+   233→        ? await fetch(`/api/students/${editId}`, {
+   234→            method: 'PUT',
+   235→            headers: { 'Content-Type': 'application/json' },
+   236→            body: JSON.stringify(body),
+   237→          })
+   238→        : await fetch('/api/students', {
+   239→            method: 'POST',
+   240→            headers: { 'Content-Type': 'application/json' },
+   241→            body: JSON.stringify(body),
+   242→          })
+   243→
+   244→      if (res.ok) {
+   245→        toast.success(editId ? 'تم تحديث بيانات الطالب' : 'تم إضافة الطالب بنجاح')
+   246→        setDialogOpen(false)
+   247→        fetchStudents()
+   248→      } else {
+   249→        const errData = await res.json().catch(() => ({}))
+   250→        if (errData.error?.includes('already exists')) {
+   251→          toast.error('رقم القيد موجود مسبقاً في هذه المدرسة')
+   252→        } else {
+   253→          toast.error('فشل في حفظ البيانات')
+   254→        }
+   255→      }
+   256→    } catch {
+   257→      toast.error('فشل في حفظ البيانات')
+   258→    } finally {
+   259→      setSaving(false)
+   260→    }
+   261→  }
+   262→
+   263→  const handleDelete = async (id: string) => {
+   264→    try {
+   265→      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' })
+   266→      if (res.ok) {
+   267→        toast.success('تم حذف الطالب بنجاح')
+   268→        fetchStudents()
+   269→      } else {
+   270→        toast.error('فشل في حذف الطالب')
+   271→      }
+   272→    } catch {
+   273→      toast.error('فشل في حذف الطالب')
+   274→    } finally {
+   275→      setDeleteDialogOpen(false)
+   276→      setDeleteTarget(null)
+   277→    }
+   278→  }
+   279→
+   280→  const handleArchive = async (id: string, archive: boolean) => {
+   281→    try {
+   282→      const res = await fetch(`/api/students/${id}`, {
+   283→        method: 'PUT',
+   284→        headers: { 'Content-Type': 'application/json' },
+   285→        body: JSON.stringify({ archived: archive }),
+   286→      })
+   287→      if (res.ok) {
+   288→        toast.success(archive ? 'تم أرشفة الطالب' : 'تم استعادة الطالب')
+   289→        fetchStudents()
+   290→      } else {
+   291→        toast.error('فشل في العملية')
+   292→      }
+   293→    } catch {
+   294→      toast.error('فشل في العملية')
+   295→    }
+   296→  }
+   297→
+   298→  return (
+   299→    <div className="space-y-6">
+   300→      {/* Header */}
+   301→      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+   302→        <h2 className="text-lg font-bold text-[#1a1a2e] flex items-center gap-2">
+   303→          <Users className="w-5 h-5 text-[#610000]" />
+   304→          إدارة الطلاب
+   305→          <Badge variant="secondary" className="mr-2">{students.length} طالب</Badge>
+   306→        </h2>
+   307→        <div className="flex gap-2 flex-wrap">
+   308→          <Button
+   309→            variant={showArchived ? 'default' : 'outline'}
+   310→            size="sm"
+   311→            className={`min-h-[44px] ${showArchived ? 'bg-[#610000] hover:bg-[#8B0000] text-white' : ''}`}
+   312→            onClick={() => setShowArchived(!showArchived)}
+   313→          >
+   314→            {showArchived ? <ArchiveRestore className="w-4 h-4 ml-1" /> : <Archive className="w-4 h-4 ml-1" />}
+   315→            المؤرشف
+   316→            {archivedCount > 0 && (
+   317→              <span className="mr-1.5 bg-white/20 px-1.5 py-0.5 rounded-full text-xs">{archivedCount}</span>
+   318→            )}
+   319→          </Button>
+   320→          <Button onClick={openAdd} className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]">
+   321→            <UserPlus className="w-4 h-4 ml-1" />
+   322→            إضافة طالب
+   323→          </Button>
+   324→        </div>
+   325→      </div>
+   326→
+   327→      {/* Filters */}
+   328→      <Card>
+   329→        <CardContent className="p-4">
+   330→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+   331→            {/* Search */}
+   332→            <div className="relative">
+   333→              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   334→              <Input
+   335→                placeholder="بحث بالاسم أو الرقم..."
+   336→                value={searchQuery}
+   337→                onChange={(e) => setSearchQuery(e.target.value)}
+   338→                className="pr-9 h-10"
+   339→              />
+   340→            </div>
+   341→            {/* Academic Year */}
+   342→            <Select value={selectedAcademicYearId} onValueChange={setSelectedAcademicYearId}>
+   343→              <SelectTrigger className="h-10">
+   344→                <SelectValue placeholder="السنة الدراسية" />
+   345→              </SelectTrigger>
+   346→              <SelectContent>
+   347→                {academicYears.map(y => (
+   348→                  <SelectItem key={y.id} value={y.id}>
+   349→                    {y.name} {y.isActive && '⭐'}
+   350→                  </SelectItem>
+   351→                ))}
+   352→              </SelectContent>
+   353→            </Select>
+   354→            {/* Classroom Filter */}
+   355→            <Select value={filterClassroom} onValueChange={setFilterClassroom}>
+   356→              <SelectTrigger className="h-10">
+   357→                <SelectValue placeholder="الفصل" />
+   358→              </SelectTrigger>
+   359→              <SelectContent>
+   360→                <SelectItem value="all">جميع الفصول</SelectItem>
+   361→                {classrooms.map(c => (
+   362→                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+   363→                ))}
+   364→              </SelectContent>
+   365→            </Select>
+   366→            {/* Status Filter */}
+   367→            <Select value={filterStatus} onValueChange={setFilterStatus}>
+   368→              <SelectTrigger className="h-10">
+   369→                <SelectValue placeholder="الحالة" />
+   370→              </SelectTrigger>
+   371→              <SelectContent>
+   372→                <SelectItem value="all">جميع الحالات</SelectItem>
+   373→                <SelectItem value="نشط">نشط</SelectItem>
+   374→                <SelectItem value="منقول">منقول</SelectItem>
+   375→                <SelectItem value="منسحب">منسحب</SelectItem>
+   376→                <SelectItem value="متخرج">متخرج</SelectItem>
+   377→              </SelectContent>
+   378→            </Select>
+   379→          </div>
+   380→        </CardContent>
+   381→      </Card>
+   382→
+   383→      {/* Students Table */}
+   384→      {loading ? (
+   385→        <div className="space-y-3">
+   386→          {Array.from({ length: 5 }).map((_, i) => (
+   387→            <Skeleton key={i} className="h-16 rounded-lg" />
+   388→          ))}
+   389→        </div>
+   390→      ) : students.length === 0 ? (
+   391→        <Card>
+   392→          <CardContent className="py-12 text-center">
+   393→            <AlertCircle className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+   394→            <p className="text-gray-400 text-lg">لا يوجد طلاب مسجلون</p>
+   395→            <p className="text-gray-300 text-sm mt-1">اضغط على &quot;إضافة طالب&quot; لبدء تسجيل الطلاب</p>
+   396→          </CardContent>
+   397→        </Card>
+   398→      ) : (
+   399→        <Card>
+   400→          <CardContent className="p-0">
+   401→            <div className="overflow-x-auto">
+   402→              <table className="w-full text-sm">
+   403→                <thead>
+   404→                  <tr className="border-b bg-gray-50">
+   405→                    <th className="text-right p-3 font-semibold text-gray-600">رقم القيد</th>
+   406→                    <th className="text-right p-3 font-semibold text-gray-600">الاسم</th>
+   407→                    <th className="text-right p-3 font-semibold text-gray-600 hidden md:table-cell">الفصل</th>
+   408→                    <th className="text-right p-3 font-semibold text-gray-600 hidden sm:table-cell">الجنس</th>
+   409→                    <th className="text-right p-3 font-semibold text-gray-600 hidden lg:table-cell">هاتف ولي الأمر</th>
+   410→                    <th className="text-right p-3 font-semibold text-gray-600">الحالة</th>
+   411→                    <th className="text-center p-3 font-semibold text-gray-600">إجراءات</th>
+   412→                  </tr>
+   413→                </thead>
+   414→                <tbody>
+   415→                  {students.map((student) => (
+   416→                    <tr
+   417→                      key={student.id}
+   418→                      className={`border-b hover:bg-gray-50 transition-colors ${student.archived ? 'opacity-50' : ''}`}
+   419→                    >
+   420→                      <td className="p-3 font-mono text-[#610000] font-bold">{student.studentNumber}</td>
+   421→                      <td className="p-3">
+   422→                        <div>
+   423→                          <span className="font-medium text-[#1a1a2e]">{student.name}</span>
+   424→                          {student.archived && (
+   425→                            <span className="mr-2 text-xs bg-gray-300 text-gray-600 px-1.5 py-0.5 rounded-full">مؤرشف</span>
+   426→                          )}
+   427→                        </div>
+   428→                      </td>
+   429→                      <td className="p-3 hidden md:table-cell">
+   430→                        {student.classroom ? (
+   431→                          <Badge variant="outline" className="text-xs">{student.classroom.name}</Badge>
+   432→                        ) : (
+   433→                          <span className="text-gray-300">—</span>
+   434→                        )}
+   435→                      </td>
+   436→                      <td className="p-3 hidden sm:table-cell">{student.gender}</td>
+   437→                      <td className="p-3 hidden lg:table-cell" dir="ltr">{student.parentPhone || '—'}</td>
+   438→                      <td className="p-3">
+   439→                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[student.status] || 'bg-gray-100 text-gray-600'}`}>
+   440→                          {student.status}
+   441→                        </span>
+   442→                      </td>
+   443→                      <td className="p-3">
+   444→                        <div className="flex gap-1 justify-center">
+   445→                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(student)}>
+   446→                            <Eye className="w-4 h-4 text-gray-500" />
+   447→                          </Button>
+   448→                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(student)}>
+   449→                            <Edit className="w-4 h-4 text-blue-500" />
+   450→                          </Button>
+   451→                          <Button
+   452→                            variant="ghost"
+   453→                            size="icon"
+   454→                            className="h-8 w-8"
+   455→                            onClick={() => handleArchive(student.id, !student.archived)}
+   456→                          >
+   457→                            {student.archived
+   458→                              ? <ArchiveRestore className="w-4 h-4 text-green-500" />
+   459→                              : <Archive className="w-4 h-4 text-orange-500" />
+   460→                            }
+   461→                          </Button>
+   462→                          <Button
+   463→                            variant="ghost"
+   464→                            size="icon"
+   465→                            className="h-8 w-8"
+   466→                            onClick={() => { setDeleteTarget(student.id); setDeleteDialogOpen(true) }}
+   467→                          >
+   468→                            <Trash2 className="w-4 h-4 text-red-500" />
+   469→                          </Button>
+   470→                        </div>
+   471→                      </td>
+   472→                    </tr>
+   473→                  ))}
+   474→                </tbody>
+   475→              </table>
+   476→            </div>
+   477→          </CardContent>
+   478→        </Card>
+   479→      )}
+   480→
+   481→      {/* Add/Edit Dialog */}
+   482→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   483→        <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   484→          <DialogHeader>
+   485→            <DialogTitle>{editId ? 'تعديل بيانات الطالب' : 'إضافة طالب جديد'}</DialogTitle>
+   486→            <DialogDescription>
+   487→              {editId ? 'تعديل بيانات الطالب المسجل' : 'أدخل بيانات الطالب الجديد'}
+   488→            </DialogDescription>
+   489→          </DialogHeader>
+   490→          <div className="space-y-4 mt-4">
+   491→            {/* Basic Info */}
+   492→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   493→              <div>
+   494→                <Label>رقم القيد *</Label>
+   495→                <Input
+   496→                  value={form.studentNumber}
+   497→                  onChange={(e) => setForm({ ...form, studentNumber: e.target.value })}
+   498→                  className="h-11 mt-1.5"
+   499→                  placeholder="مثال: 2024001"
+   500→                />
+   501→              </div>
+   502→              <div>
+   503→                <Label>اسم الطالب *</Label>
+   504→                <Input
+   505→                  value={form.name}
+   506→                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+   507→                  className="h-11 mt-1.5"
+   508→                  placeholder="الاسم بالكامل"
+   509→                />
+   510→              </div>
+   511→            </div>
+   512→
+   513→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   514→              <div>
+   515→                <Label>الرقم القومي</Label>
+   516→                <Input
+   517→                  value={form.nationalId}
+   518→                  onChange={(e) => setForm({ ...form, nationalId: e.target.value })}
+   519→                  className="h-11 mt-1.5"
+   520→                  placeholder="الرقم القومي"
+   521→                  dir="ltr"
+   522→                />
+   523→              </div>
+   524→              <div>
+   525→                <Label>تاريخ الميلاد</Label>
+   526→                <Input
+   527→                  type="date"
+   528→                  value={form.dateOfBirth}
+   529→                  onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
+   530→                  className="h-11 mt-1.5"
+   531→                />
+   532→              </div>
+   533→              <div>
+   534→                <Label>الجنس</Label>
+   535→                <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+   536→                  <SelectTrigger className="h-11 mt-1.5">
+   537→                    <SelectValue />
+   538→                  </SelectTrigger>
+   539→                  <SelectContent>
+   540→                    <SelectItem value="ذكر">ذكر</SelectItem>
+   541→                    <SelectItem value="أنثى">أنثى</SelectItem>
+   542→                  </SelectContent>
+   543→                </Select>
+   544→              </div>
+   545→            </div>
+   546→
+   547→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   548→              <div>
+   549→                <Label>الفصل</Label>
+   550→                <Select value={form.classroomId} onValueChange={(v) => setForm({ ...form, classroomId: v })}>
+   551→                  <SelectTrigger className="h-11 mt-1.5">
+   552→                    <SelectValue placeholder="اختر الفصل" />
+   553→                  </SelectTrigger>
+   554→                  <SelectContent>
+   555→                    <SelectItem value="">بدون فصل</SelectItem>
+   556→                    {classrooms.map(c => (
+   557→                      <SelectItem key={c.id} value={c.id}>{c.name} ({c.gradeLevel})</SelectItem>
+   558→                    ))}
+   559→                  </SelectContent>
+   560→                </Select>
+   561→              </div>
+   562→              <div>
+   563→                <Label>الحالة</Label>
+   564→                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+   565→                  <SelectTrigger className="h-11 mt-1.5">
+   566→                    <SelectValue />
+   567→                  </SelectTrigger>
+   568→                  <SelectContent>
+   569→                    <SelectItem value="نشط">نشط</SelectItem>
+   570→                    <SelectItem value="منقول">منقول</SelectItem>
+   571→                    <SelectItem value="منسحب">منسحب</SelectItem>
+   572→                    <SelectItem value="متخرج">متخرج</SelectItem>
+   573→                  </SelectContent>
+   574→                </Select>
+   575→              </div>
+   576→            </div>
+   577→
+   578→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   579→              <div>
+   580→                <Label>العنوان</Label>
+   581→                <Input
+   582→                  value={form.address}
+   583→                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+   584→                  className="h-11 mt-1.5"
+   585→                  placeholder="عنوان السكن"
+   586→                />
+   587→              </div>
+   588→              <div>
+   589→                <Label>هاتف الطالب</Label>
+   590→                <Input
+   591→                  value={form.phone}
+   592→                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+   593→                  className="h-11 mt-1.5"
+   594→                  placeholder="رقم الهاتف"
+   595→                  dir="ltr"
+   596→                />
+   597→              </div>
+   598→            </div>
+   599→
+   600→            {/* Separator */}
+   601→            <div className="border-t pt-4">
+   602→              <h4 className="font-semibold text-[#1a1a2e] mb-3 flex items-center gap-2">
+   603→                <Phone className="w-4 h-4 text-[#009688]" />
+   604→                بيانات ولي الأمر
+   605→              </h4>
+   606→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   607→                <div>
+   608→                  <Label>اسم ولي الأمر</Label>
+   609→                  <Input
+   610→                    value={form.parentName}
+   611→                    onChange={(e) => setForm({ ...form, parentName: e.target.value })}
+   612→                    className="h-11 mt-1.5"
+   613→                    placeholder="اسم الأب / ولي الأمر"
+   614→                  />
+   615→                </div>
+   616→                <div>
+   617→                  <Label>هاتف ولي الأمر</Label>
+   618→                  <Input
+   619→                    value={form.parentPhone}
+   620→                    onChange={(e) => setForm({ ...form, parentPhone: e.target.value })}
+   621→                    className="h-11 mt-1.5"
+   622→                    placeholder="رقم الهاتف"
+   623→                    dir="ltr"
+   624→                  />
+   625→                </div>
+   626→              </div>
+   627→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+   628→                <div>
+   629→                  <Label>الرقم القومي لولي الأمر</Label>
+   630→                  <Input
+   631→                    value={form.parentNationalId}
+   632→                    onChange={(e) => setForm({ ...form, parentNationalId: e.target.value })}
+   633→                    className="h-11 mt-1.5"
+   634→                    placeholder="الرقم القومي"
+   635→                    dir="ltr"
+   636→                  />
+   637→                </div>
+   638→                <div>
+   639→                  <Label>المدرسة السابقة</Label>
+   640→                  <Input
+   641→                    value={form.previousSchool}
+   642→                    onChange={(e) => setForm({ ...form, previousSchool: e.target.value })}
+   643→                    className="h-11 mt-1.5"
+   644→                    placeholder="اسم المدرسة السابقة"
+   645→                  />
+   646→                </div>
+   647→              </div>
+   648→            </div>
+   649→
+   650→            <div>
+   651→              <Label>ملاحظات</Label>
+   652→              <Textarea
+   653→                value={form.notes}
+   654→                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+   655→                className="mt-1.5"
+   656→                placeholder="أي ملاحظات إضافية..."
+   657→                rows={2}
+   658→              />
+   659→            </div>
+   660→          </div>
+   661→          <div className="flex gap-3 justify-end mt-4">
+   662→            <Button variant="outline" onClick={() => setDialogOpen(false)} className="min-h-[44px]">
+   663→              <X className="w-4 h-4 ml-1" />
+   664→              إلغاء
+   665→            </Button>
+   666→            <Button
+   667→              onClick={handleSave}
+   668→              disabled={saving}
+   669→              className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   670→            >
+   671→              {saving ? 'جاري الحفظ...' : editId ? 'حفظ التعديلات' : 'إضافة الطالب'}
+   672→            </Button>
+   673→          </div>
+   674→        </DialogContent>
+   675→      </Dialog>
+   676→
+   677→      {/* View Student Details Dialog */}
+   678→      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+   679→        <DialogContent dir="rtl" className="max-w-lg">
+   680→          <DialogHeader>
+   681→            <DialogTitle className="flex items-center gap-2">
+   682→              <Users className="w-5 h-5 text-[#610000]" />
+   683→              بيانات الطالب
+   684→            </DialogTitle>
+   685→          </DialogHeader>
+   686→          {viewStudent && (
+   687→            <div className="space-y-4 mt-2">
+   688→              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+   689→                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#610000] to-[#8B0000] flex items-center justify-center text-white text-xl font-bold shrink-0">
+   690→                  {viewStudent.name.charAt(0)}
+   691→                </div>
+   692→                <div>
+   693→                  <h3 className="text-lg font-bold text-[#1a1a2e]">{viewStudent.name}</h3>
+   694→                  <p className="text-[#610000] font-mono">رقم القيد: {viewStudent.studentNumber}</p>
+   695→                  <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[viewStudent.status] || 'bg-gray-100 text-gray-600'}`}>
+   696→                    {viewStudent.status}
+   697→                  </span>
+   698→                </div>
+   699→              </div>
+   700→
+   701→              <div className="grid grid-cols-2 gap-3 text-sm">
+   702→                <div className="p-3 bg-gray-50 rounded-lg">
+   703→                  <span className="text-gray-400 block text-xs mb-1">الجنس</span>
+   704→                  <span className="font-medium">{viewStudent.gender}</span>
+   705→                </div>
+   706→                <div className="p-3 bg-gray-50 rounded-lg">
+   707→                  <span className="text-gray-400 block text-xs mb-1">تاريخ الميلاد</span>
+   708→                  <span className="font-medium">{viewStudent.dateOfBirth ? new Date(viewStudent.dateOfBirth).toLocaleDateString('ar-EG') : '—'}</span>
+   709→                </div>
+   710→                <div className="p-3 bg-gray-50 rounded-lg">
+   711→                  <span className="text-gray-400 block text-xs mb-1">الرقم القومي</span>
+   712→                  <span className="font-medium" dir="ltr">{viewStudent.nationalId || '—'}</span>
+   713→                </div>
+   714→                <div className="p-3 bg-gray-50 rounded-lg">
+   715→                  <span className="text-gray-400 block text-xs mb-1">الفصل</span>
+   716→                  <span className="font-medium">{viewStudent.classroom?.name || '—'}</span>
+   717→                </div>
+   718→                <div className="p-3 bg-gray-50 rounded-lg">
+   719→                  <span className="text-gray-400 block text-xs mb-1">العنوان</span>
+   720→                  <span className="font-medium">{viewStudent.address || '—'}</span>
+   721→                </div>
+   722→                <div className="p-3 bg-gray-50 rounded-lg">
+   723→                  <span className="text-gray-400 block text-xs mb-1">هاتف الطالب</span>
+   724→                  <span className="font-medium" dir="ltr">{viewStudent.phone || '—'}</span>
+   725→                </div>
+   726→                <div className="p-3 bg-gray-50 rounded-lg">
+   727→                  <span className="text-gray-400 block text-xs mb-1">ولي الأمر</span>
+   728→                  <span className="font-medium">{viewStudent.parentName || '—'}</span>
+   729→                </div>
+   730→                <div className="p-3 bg-gray-50 rounded-lg">
+   731→                  <span className="text-gray-400 block text-xs mb-1">هاتف ولي الأمر</span>
+   732→                  <span className="font-medium" dir="ltr">{viewStudent.parentPhone || '—'}</span>
+   733→                </div>
+   734→                <div className="p-3 bg-gray-50 rounded-lg">
+   735→                  <span className="text-gray-400 block text-xs mb-1">تاريخ القيد</span>
+   736→                  <span className="font-medium">{new Date(viewStudent.enrollDate).toLocaleDateString('ar-EG')}</span>
+   737→                </div>
+   738→                <div className="p-3 bg-gray-50 rounded-lg">
+   739→                  <span className="text-gray-400 block text-xs mb-1">المدرسة السابقة</span>
+   740→                  <span className="font-medium">{viewStudent.previousSchool || '—'}</span>
+   741→                </div>
+   742→              </div>
+   743→              {viewStudent.notes && (
+   744→                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+   745→                  <span className="text-amber-600 block text-xs mb-1">ملاحظات</span>
+   746→                  <span className="text-amber-800">{viewStudent.notes}</span>
+   747→                </div>
+   748→              )}
+   749→            </div>
+   750→          )}
+   751→        </DialogContent>
+   752→      </Dialog>
+   753→
+   754→      {/* Delete Confirmation */}
+   755→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   756→        <DialogContent dir="rtl">
+   757→          <DialogHeader>
+   758→            <DialogTitle>تأكيد الحذف</DialogTitle>
+   759→            <DialogDescription>هل أنت متأكد من حذف هذا الطالب؟ لا يمكن التراجع عن هذا الإجراء.</DialogDescription>
+   760→          </DialogHeader>
+   761→          <div className="flex gap-3 justify-end mt-4">
+   762→            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="min-h-[44px]">
+   763→              إلغاء
+   764→            </Button>
+   765→            <Button
+   766→              variant="destructive"
+   767→              onClick={() => deleteTarget && handleDelete(deleteTarget)}
+   768→              className="min-h-[44px]"
+   769→            >
+   770→              حذف
+   771→            </Button>
+   772→          </div>
+   773→        </DialogContent>
+   774→      </Dialog>
+   775→    </div>
+   776→  )
+   777→}
+   778→

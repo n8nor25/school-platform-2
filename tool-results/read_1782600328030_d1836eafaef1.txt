@@ -1,0 +1,807 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback } from 'react'
+     4→     4→import {
+     5→     5→  Plus, Edit, Trash2, Bus as BusIcon, AlertCircle, X, Search,
+     6→     6→  Phone, User, Hash, Calendar, Settings, BarChart3
+     7→     7→} from 'lucide-react'
+     8→     8→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     9→     9→import { Button } from '@/components/ui/button'
+    10→    10→import { Input } from '@/components/ui/input'
+    11→    11→import { Label } from '@/components/ui/label'
+    12→    12→import { Badge } from '@/components/ui/badge'
+    13→    13→import { Textarea } from '@/components/ui/textarea'
+    14→    14→import { Switch } from '@/components/ui/switch'
+    15→    15→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+    16→    16→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    17→    17→import { Skeleton } from '@/components/ui/skeleton'
+    18→    18→import { toast } from 'sonner'
+    19→    19→import { useAdminStore } from '@/lib/admin-store'
+    20→    20→
+    21→    21→interface Bus {
+    22→    22→  id: string
+    23→    23→  plateNumber: string
+    24→    24→  driverName: string
+    25→    25→  driverPhone: string | null
+    26→    26→  driverLicense: string | null
+    27→    27→  supervisorName: string | null
+    28→    28→  supervisorPhone: string | null
+    29→    29→  capacity: number
+    30→    30→  model: string | null
+    31→    31→  color: string | null
+    32→    32→  active: boolean
+    33→    33→  notes: string | null
+    34→    34→  _count?: { routes: number }
+    35→    35→}
+    36→    36→
+    37→    37→interface BusForm {
+    38→    38→  plateNumber: string
+    39→    39→  driverName: string
+    40→    40→  driverPhone: string
+    41→    41→  driverLicense: string
+    42→    42→  supervisorName: string
+    43→    43→  supervisorPhone: string
+    44→    44→  capacity: string
+    45→    45→  model: string
+    46→    46→  color: string
+    47→    47→  notes: string
+    48→    48→  active: boolean
+    49→    49→}
+    50→    50→
+    51→    51→const defaultForm: BusForm = {
+    52→    52→  plateNumber: '',
+    53→    53→  driverName: '',
+    54→    54→  driverPhone: '',
+    55→    55→  driverLicense: '',
+    56→    56→  supervisorName: '',
+    57→    57→  supervisorPhone: '',
+    58→    58→  capacity: '30',
+    59→    59→  model: '',
+    60→    60→  color: '',
+    61→    61→  notes: '',
+    62→    62→  active: true,
+    63→    63→}
+    64→    64→
+    65→    65→export function BusFleetManagement() {
+    66→    66→  const [buses, setBuses] = useState<Bus[]>([])
+    67→    67→  const [loading, setLoading] = useState(true)
+    68→    68→  const [form, setForm] = useState<BusForm>(defaultForm)
+    69→    69→  const [editId, setEditId] = useState<string | null>(null)
+    70→    70→  const [dialogOpen, setDialogOpen] = useState(false)
+    71→    71→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    72→    72→  const [deleteTarget, setDeleteTarget] = useState<Bus | null>(null)
+    73→    73→  const [saving, setSaving] = useState(false)
+    74→    74→  const [search, setSearch] = useState('')
+    75→    75→  const [activeFilter, setActiveFilter] = useState<string>('all')
+    76→    76→  const { selectedSchoolId } = useAdminStore()
+    77→    77→
+    78→    78→  const fetchBuses = useCallback(async () => {
+    79→    79→    if (!selectedSchoolId) return
+    80→    80→    try {
+    81→    81→      setLoading(true)
+    82→    82→      const params = new URLSearchParams({ schoolId: selectedSchoolId })
+    83→    83→      if (search.trim()) params.set('search', search.trim())
+    84→    84→      if (activeFilter === 'true') params.set('active', 'true')
+    85→    85→      if (activeFilter === 'false') params.set('active', 'false')
+    86→    86→      const res = await fetch(`/api/buses?${params.toString()}`)
+    87→    87→      if (res.ok) {
+    88→    88→        const data = await res.json()
+    89→    89→        setBuses(Array.isArray(data.buses) ? data.buses : [])
+    90→    90→      } else {
+    91→    91→        toast.error('فشل في تحميل الباصات')
+    92→    92→      }
+    93→    93→    } catch {
+    94→    94→      toast.error('فشل في تحميل الباصات')
+    95→    95→    } finally {
+    96→    96→      setLoading(false)
+    97→    97→    }
+    98→    98→  }, [selectedSchoolId, search, activeFilter])
+    99→    99→
+   100→   100→  useEffect(() => {
+   101→   101→    let cancelled = false
+   102→   102→    const load = async () => {
+   103→   103→      if (!selectedSchoolId) return
+   104→   104→      try {
+   105→   105→        setLoading(true)
+   106→   106→        const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   107→   107→        if (search.trim()) params.set('search', search.trim())
+   108→   108→        if (activeFilter === 'true') params.set('active', 'true')
+   109→   109→        if (activeFilter === 'false') params.set('active', 'false')
+   110→   110→        const res = await fetch(`/api/buses?${params.toString()}`)
+   111→   111→        if (res.ok) {
+   112→   112→          const data = await res.json()
+   113→   113→          if (!cancelled) setBuses(Array.isArray(data.buses) ? data.buses : [])
+   114→   114→        } else if (!cancelled) {
+   115→   115→          toast.error('فشل في تحميل الباصات')
+   116→   116→        }
+   117→   117→      } catch {
+   118→   118→        if (!cancelled) toast.error('فشل في تحميل الباصات')
+   119→   119→      } finally {
+   120→   120→        if (!cancelled) setLoading(false)
+   121→   121→      }
+   122→   122→    }
+   123→   123→    load()
+   124→   124→    return () => { cancelled = true }
+   125→   125→  }, [selectedSchoolId, search, activeFilter])
+   126→   126→
+   127→   127→  const openAdd = () => {
+   128→   128→    setEditId(null)
+   129→   129→    setForm(defaultForm)
+   130→   130→    setDialogOpen(true)
+   131→   131→  }
+   132→   132→
+   133→   133→  const openEdit = (bus: Bus) => {
+   134→   134→    setEditId(bus.id)
+   135→   135→    setForm({
+   136→   136→      plateNumber: bus.plateNumber,
+   137→   137→      driverName: bus.driverName,
+   138→   138→      driverPhone: bus.driverPhone || '',
+   139→   139→      driverLicense: bus.driverLicense || '',
+   140→   140→      supervisorName: bus.supervisorName || '',
+   141→   141→      supervisorPhone: bus.supervisorPhone || '',
+   142→   142→      capacity: String(bus.capacity),
+   143→   143→      model: bus.model || '',
+   144→   144→      color: bus.color || '',
+   145→   145→      notes: bus.notes || '',
+   146→   146→      active: bus.active,
+   147→   147→    })
+   148→   148→    setDialogOpen(true)
+   149→   149→  }
+   150→   150→
+   151→   151→  const handleSave = async () => {
+   152→   152→    if (!form.plateNumber.trim() || !form.driverName.trim()) {
+   153→   153→      toast.error('رقم اللوحة واسم السائق مطلوبان')
+   154→   154→      return
+   155→   155→    }
+   156→   156→    setSaving(true)
+   157→   157→    try {
+   158→   158→      const body = {
+   159→   159→        plateNumber: form.plateNumber.trim(),
+   160→   160→        driverName: form.driverName.trim(),
+   161→   161→        driverPhone: form.driverPhone.trim() || null,
+   162→   162→        driverLicense: form.driverLicense.trim() || null,
+   163→   163→        supervisorName: form.supervisorName.trim() || null,
+   164→   164→        supervisorPhone: form.supervisorPhone.trim() || null,
+   165→   165→        capacity: Number(form.capacity) || 30,
+   166→   166→        model: form.model.trim() || null,
+   167→   167→        color: form.color.trim() || null,
+   168→   168→        notes: form.notes.trim() || null,
+   169→   169→        active: form.active,
+   170→   170→      }
+   171→   171→      const url = editId
+   172→   172→        ? `/api/buses/${editId}?schoolId=${selectedSchoolId}`
+   173→   173→        : `/api/buses?schoolId=${selectedSchoolId}`
+   174→   174→      const res = await fetch(url, {
+   175→   175→        method: editId ? 'PUT' : 'POST',
+   176→   176→        headers: { 'Content-Type': 'application/json' },
+   177→   177→        body: JSON.stringify(body),
+   178→   178→      })
+   179→   179→      const data = await res.json()
+   180→   180→      if (res.ok) {
+   181→   181→        toast.success(editId ? 'تم تحديث الباص' : 'تم إضافة الباص بنجاح')
+   182→   182→        setDialogOpen(false)
+   183→   183→        fetchBuses()
+   184→   184→      } else if (res.status === 409) {
+   185→   185→        toast.error(data.error || 'رقم اللوحة مُستخدم بالفعل')
+   186→   186→      } else {
+   187→   187→        toast.error(data.error || 'فشل في حفظ البيانات')
+   188→   188→      }
+   189→   189→    } catch {
+   190→   190→      toast.error('فشل في حفظ البيانات')
+   191→   191→    } finally {
+   192→   192→      setSaving(false)
+   193→   193→    }
+   194→   194→  }
+   195→   195→
+   196→   196→  const handleDelete = async () => {
+   197→   197→    if (!deleteTarget) return
+   198→   198→    try {
+   199→   199→      const res = await fetch(`/api/buses/${deleteTarget.id}?schoolId=${selectedSchoolId}`, {
+   200→   200→        method: 'DELETE',
+   201→   201→      })
+   202→   202→      const data = await res.json()
+   203→   203→      if (res.ok) {
+   204→   204→        toast.success('تم حذف الباص بنجاح')
+   205→   205→        fetchBuses()
+   206→   206→      } else if (res.status === 409) {
+   207→   207→        toast.error(data.error || 'لا يمكن حذف الباص')
+   208→   208→      } else {
+   209→   209→        toast.error(data.error || 'فشل في حذف الباص')
+   210→   210→      }
+   211→   211→    } catch {
+   212→   212→      toast.error('فشل في حذف الباص')
+   213→   213→    } finally {
+   214→   214→      setDeleteDialogOpen(false)
+   215→   215→      setDeleteTarget(null)
+   216→   216→    }
+   217→   217→  }
+   218→   218→
+   219→   219→  // Stats
+   220→   220→  const totalBuses = buses.length
+   221→   221→  const activeBuses = buses.filter((b) => b.active).length
+   222→   222→  const totalCapacity = buses.reduce((sum, b) => sum + b.capacity, 0)
+   223→   223→  const modelCounts: Record<string, number> = {}
+   224→   224→  buses.forEach((b) => {
+   225→   225→    const m = b.model || 'غير محدد'
+   226→   226→    modelCounts[m] = (modelCounts[m] || 0) + 1
+   227→   227→  })
+   228→   228→
+   229→   229→  return (
+   230→   230→    <div className="space-y-6">
+   231→   231→      <div className="flex justify-between items-center flex-wrap gap-3">
+   232→   232→        <h2 className="text-lg font-bold text-[#1a1a2e] flex items-center gap-2">
+   233→   233→          <BusIcon className="w-5 h-5 text-[#610000]" />
+   234→   234→          إدارة أسطول الباصات
+   235→   235→        </h2>
+   236→   236→      </div>
+   237→   237→
+   238→   238→      <Tabs defaultValue="list">
+   239→   239→        <TabsList className="bg-gray-100">
+   240→   240→          <TabsTrigger value="list" className="data-[state=active]:bg-white">
+   241→   241→            <BusIcon className="w-4 h-4 ml-1" /> القائمة
+   242→   242→          </TabsTrigger>
+   243→   243→          <TabsTrigger value="add" className="data-[state=active]:bg-white">
+   244→   244→            <Plus className="w-4 h-4 ml-1" /> إضافة باص
+   245→   245→          </TabsTrigger>
+   246→   246→          <TabsTrigger value="stats" className="data-[state=active]:bg-white">
+   247→   247→            <BarChart3 className="w-4 h-4 ml-1" /> إحصائيات
+   248→   248→          </TabsTrigger>
+   249→   249→        </TabsList>
+   250→   250→
+   251→   251→        {/* List Tab */}
+   252→   252→        <TabsContent value="list" className="space-y-4">
+   253→   253→          <Card>
+   254→   254→            <CardContent className="p-4">
+   255→   255→              <div className="flex flex-wrap gap-3 items-center">
+   256→   256→                <div className="relative flex-1 min-w-[200px]">
+   257→   257→                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   258→   258→                  <Input
+   259→   259→                    placeholder="بحث برقم اللوحة أو اسم السائق..."
+   260→   260→                    value={search}
+   261→   261→                    onChange={(e) => setSearch(e.target.value)}
+   262→   262→                    className="pr-10 h-11"
+   263→   263→                  />
+   264→   264→                </div>
+   265→   265→                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+   266→   266→                  {[
+   267→   267→                    { value: 'all', label: 'الكل' },
+   268→   268→                    { value: 'true', label: 'نشط' },
+   269→   269→                    { value: 'false', label: 'متوقف' },
+   270→   270→                  ].map((opt) => (
+   271→   271→                    <button
+   272→   272→                      key={opt.value}
+   273→   273→                      onClick={() => setActiveFilter(opt.value)}
+   274→   274→                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors min-h-[36px] ${
+   275→   275→                        activeFilter === opt.value
+   276→   276→                          ? 'bg-white text-[#610000] shadow-sm'
+   277→   277→                          : 'text-gray-500 hover:text-gray-700'
+   278→   278→                      }`}
+   279→   279→                    >
+   280→   280→                      {opt.label}
+   281→   281→                    </button>
+   282→   282→                  ))}
+   283→   283→                </div>
+   284→   284→                <Button
+   285→   285→                  onClick={openAdd}
+   286→   286→                  className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   287→   287→                >
+   288→   288→                  <Plus className="w-4 h-4 ml-1" />
+   289→   289→                  إضافة باص
+   290→   290→                </Button>
+   291→   291→              </div>
+   292→   292→            </CardContent>
+   293→   293→          </Card>
+   294→   294→
+   295→   295→          {loading ? (
+   296→   296→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   297→   297→              {Array.from({ length: 6 }).map((_, i) => (
+   298→   298→                <Skeleton key={i} className="h-48 rounded-xl" />
+   299→   299→              ))}
+   300→   300→            </div>
+   301→   301→          ) : buses.length === 0 ? (
+   302→   302→            <Card>
+   303→   303→              <CardContent className="py-12 text-center">
+   304→   304→                <AlertCircle className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+   305→   305→                <p className="text-gray-400">لا توجد باصات مسجلة</p>
+   306→   306→              </CardContent>
+   307→   307→            </Card>
+   308→   308→          ) : (
+   309→   309→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   310→   310→              {buses.map((bus) => (
+   311→   311→                <Card key={bus.id} className="hover:shadow-lg transition-shadow">
+   312→   312→                  <CardContent className="p-4">
+   313→   313→                    <div className="flex items-start justify-between gap-2 mb-3">
+   314→   314→                      <div className="flex items-center gap-2">
+   315→   315→                        <div className="w-11 h-11 rounded-lg bg-[#610000]/10 flex items-center justify-center">
+   316→   316→                          <BusIcon className="w-5 h-5 text-[#610000]" />
+   317→   317→                        </div>
+   318→   318→                        <div>
+   319→   319→                          <h3 className="font-bold text-[#1a1a2e]">{bus.plateNumber}</h3>
+   320→   320→                          <p className="text-xs text-gray-500">{bus.model || '—'}</p>
+   321→   321→                        </div>
+   322→   322→                      </div>
+   323→   323→                      <Badge
+   324→   324→                        className={
+   325→   325→                          bus.active
+   326→   326→                            ? 'bg-green-100 text-green-700 hover:bg-green-100'
+   327→   327→                            : 'bg-gray-200 text-gray-600 hover:bg-gray-200'
+   328→   328→                        }
+   329→   329→                      >
+   330→   330→                        {bus.active ? 'نشط' : 'متوقف'}
+   331→   331→                      </Badge>
+   332→   332→                    </div>
+   333→   333→
+   334→   334→                    <div className="space-y-2 text-sm">
+   335→   335→                      <div className="flex items-center gap-2 text-gray-600">
+   336→   336→                        <User className="w-4 h-4 text-[#610000]" />
+   337→   337→                        <span className="font-medium">{bus.driverName}</span>
+   338→   338→                      </div>
+   339→   339→                      {bus.driverPhone && (
+   340→   340→                        <div className="flex items-center gap-2 text-gray-600" dir="ltr">
+   341→   341→                          <Phone className="w-4 h-4 text-[#610000]" />
+   342→   342→                          <span>{bus.driverPhone}</span>
+   343→   343→                        </div>
+   344→   344→                      )}
+   345→   345→                      {bus.supervisorName && (
+   346→   346→                        <div className="flex items-center gap-2 text-gray-600">
+   347→   347→                          <User className="w-4 h-4 text-gray-400" />
+   348→   348→                          <span className="text-xs">مشرف: {bus.supervisorName}</span>
+   349→   349→                        </div>
+   350→   350→                      )}
+   351→   351→                      <div className="flex items-center gap-2 text-gray-600">
+   352→   352→                        <Hash className="w-4 h-4 text-[#610000]" />
+   353→   353→                        <span className="text-xs">السعة: {bus.capacity} راكب</span>
+   354→   354→                      </div>
+   355→   355→                      <div className="flex items-center gap-2 text-gray-600">
+   356→   356→                        <Calendar className="w-4 h-4 text-[#610000]" />
+   357→   357→                        <span className="text-xs">الخطوط: {bus._count?.routes || 0}</span>
+   358→   358→                      </div>
+   359→   359→                    </div>
+   360→   360→
+   361→   361→                    <div className="flex gap-2 mt-3 justify-end">
+   362→   362→                      <Button
+   363→   363→                        variant="outline"
+   364→   364→                        size="sm"
+   365→   365→                        className="min-h-[40px]"
+   366→   366→                        onClick={() => openEdit(bus)}
+   367→   367→                      >
+   368→   368→                        <Edit className="w-3.5 h-3.5 ml-1" />
+   369→   369→                        تعديل
+   370→   370→                      </Button>
+   371→   371→                      <Button
+   372→   372→                        variant="outline"
+   373→   373→                        size="sm"
+   374→   374→                        className="text-red-500 hover:text-red-700 hover:bg-red-50 min-h-[40px]"
+   375→   375→                        onClick={() => { setDeleteTarget(bus); setDeleteDialogOpen(true) }}
+   376→   376→                      >
+   377→   377→                        <Trash2 className="w-3.5 h-3.5 ml-1" />
+   378→   378→                        حذف
+   379→   379→                      </Button>
+   380→   380→                    </div>
+   381→   381→                  </CardContent>
+   382→   382→                </Card>
+   383→   383→              ))}
+   384→   384→            </div>
+   385→   385→          )}
+   386→   386→        </TabsContent>
+   387→   387→
+   388→   388→        {/* Add Tab */}
+   389→   389→        <TabsContent value="add">
+   390→   390→          <Card>
+   391→   391→            <CardHeader>
+   392→   392→              <CardTitle className="text-base flex items-center gap-2">
+   393→   393→                <Plus className="w-4 h-4 text-[#610000]" />
+   394→   394→                إضافة باص جديد
+   395→   395→              </CardTitle>
+   396→   396→            </CardHeader>
+   397→   397→            <CardContent>
+   398→   398→              <BusFormComponent
+   399→   399→                form={defaultForm}
+   400→   400→                onChange={() => {}}
+   401→   401→                onSubmit={async (body) => {
+   402→   402→                  setSaving(true)
+   403→   403→                  try {
+   404→   404→                    const res = await fetch(`/api/buses?schoolId=${selectedSchoolId}`, {
+   405→   405→                      method: 'POST',
+   406→   406→                      headers: { 'Content-Type': 'application/json' },
+   407→   407→                      body: JSON.stringify(body),
+   408→   408→                    })
+   409→   409→                    const data = await res.json()
+   410→   410→                    if (res.ok) {
+   411→   411→                      toast.success('تم إضافة الباص بنجاح')
+   412→   412→                      fetchBuses()
+   413→   413→                    } else if (res.status === 409) {
+   414→   414→                      toast.error(data.error || 'رقم اللوحة مُستخدم')
+   415→   415→                    } else {
+   416→   416→                      toast.error(data.error || 'فشل')
+   417→   417→                    }
+   418→   418→                  } finally {
+   419→   419→                    setSaving(false)
+   420→   420→                  }
+   421→   421→                }}
+   422→   422→                saving={saving}
+   423→   423→                submitLabel="إضافة الباص"
+   424→   424→              />
+   425→   425→            </CardContent>
+   426→   426→          </Card>
+   427→   427→        </TabsContent>
+   428→   428→
+   429→   429→        {/* Stats Tab */}
+   430→   430→        <TabsContent value="stats">
+   431→   431→          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   432→   432→            <Card>
+   433→   433→              <CardContent className="p-4">
+   434→   434→                <div className="flex items-center gap-3">
+   435→   435→                  <div className="w-11 h-11 rounded-lg bg-[#610000]/10 flex items-center justify-center">
+   436→   436→                    <BusIcon className="w-5 h-5 text-[#610000]" />
+   437→   437→                  </div>
+   438→   438→                  <div>
+   439→   439→                    <p className="text-xs text-gray-500">إجمالي الباصات</p>
+   440→   440→                    <p className="text-xl font-bold text-[#1a1a2e]">{totalBuses}</p>
+   441→   441→                  </div>
+   442→   442→                </div>
+   443→   443→              </CardContent>
+   444→   444→            </Card>
+   445→   445→            <Card>
+   446→   446→              <CardContent className="p-4">
+   447→   447→                <div className="flex items-center gap-3">
+   448→   448→                  <div className="w-11 h-11 rounded-lg bg-green-100 flex items-center justify-center">
+   449→   449→                    <Settings className="w-5 h-5 text-green-600" />
+   450→   450→                  </div>
+   451→   451→                  <div>
+   452→   452→                    <p className="text-xs text-gray-500">باصات نشطة</p>
+   453→   453→                    <p className="text-xl font-bold text-[#1a1a2e]">{activeBuses}</p>
+   454→   454→                  </div>
+   455→   455→                </div>
+   456→   456→              </CardContent>
+   457→   457→            </Card>
+   458→   458→            <Card>
+   459→   459→              <CardContent className="p-4">
+   460→   460→                <div className="flex items-center gap-3">
+   461→   461→                  <div className="w-11 h-11 rounded-lg bg-amber-100 flex items-center justify-center">
+   462→   462→                    <Hash className="w-5 h-5 text-amber-600" />
+   463→   463→                  </div>
+   464→   464→                  <div>
+   465→   465→                    <p className="text-xs text-gray-500">إجمالي السعة</p>
+   466→   466→                    <p className="text-xl font-bold text-[#1a1a2e]">{totalCapacity}</p>
+   467→   467→                  </div>
+   468→   468→                </div>
+   469→   469→              </CardContent>
+   470→   470→            </Card>
+   471→   471→            <Card>
+   472→   472→              <CardContent className="p-4">
+   473→   473→                <div className="flex items-center gap-3">
+   474→   474→                  <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center">
+   475→   475→                    <BusIcon className="w-5 h-5 text-gray-600" />
+   476→   476→                  </div>
+   477→   477→                  <div>
+   478→   478→                    <p className="text-xs text-gray-500">باصات متوقفة</p>
+   479→   479→                    <p className="text-xl font-bold text-[#1a1a2e]">{totalBuses - activeBuses}</p>
+   480→   480→                  </div>
+   481→   481→                </div>
+   482→   482→              </CardContent>
+   483→   483→            </Card>
+   484→   484→          </div>
+   485→   485→
+   486→   486→          <Card className="mt-4">
+   487→   487→            <CardHeader>
+   488→   488→              <CardTitle className="text-base">توزيع الباصات حسب الموديل</CardTitle>
+   489→   489→            </CardHeader>
+   490→   490→            <CardContent>
+   491→   491→              {Object.keys(modelCounts).length === 0 ? (
+   492→   492→                <p className="text-gray-400 text-center py-6">لا توجد بيانات</p>
+   493→   493→              ) : (
+   494→   494→                <div className="space-y-3">
+   495→   495→                  {Object.entries(modelCounts).map(([model, count]) => (
+   496→   496→                    <div key={model} className="flex items-center gap-3">
+   497→   497→                      <span className="text-sm font-medium w-32 truncate">{model}</span>
+   498→   498→                      <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
+   499→   499→                        <div
+   500→   500→                          className="bg-[#610000] h-full rounded-full flex items-center justify-end px-2 text-white text-xs font-bold"
+   501→   501→                          style={{ width: `${(count / totalBuses) * 100}%` }}
+   502→   502→                        >
+   503→   503→                          {count}
+   504→   504→                        </div>
+   505→   505→                      </div>
+   506→   506→                    </div>
+   507→   507→                  ))}
+   508→   508→                </div>
+   509→   509→              )}
+   510→   510→            </CardContent>
+   511→   511→          </Card>
+   512→   512→        </TabsContent>
+   513→   513→      </Tabs>
+   514→   514→
+   515→   515→      {/* Edit Dialog */}
+   516→   516→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   517→   517→        <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   518→   518→          <DialogHeader>
+   519→   519→            <DialogTitle>{editId ? 'تعديل بيانات الباص' : 'إضافة باص جديد'}</DialogTitle>
+   520→   520→            <DialogDescription>
+   521→   521→              {editId ? 'تعديل بيانات الباص' : 'أدخل بيانات الباص الجديد'}
+   522→   522→            </DialogDescription>
+   523→   523→          </DialogHeader>
+   524→   524→          <div className="space-y-4 mt-2">
+   525→   525→            <div className="grid sm:grid-cols-2 gap-3">
+   526→   526→              <div>
+   527→   527→                <Label>رقم اللوحة *</Label>
+   528→   528→                <Input
+   529→   529→                  value={form.plateNumber}
+   530→   530→                  onChange={(e) => setForm({ ...form, plateNumber: e.target.value })}
+   531→   531→                  className="h-11 mt-1.5"
+   532→   532→                  placeholder="رقم اللوحة"
+   533→   533→                />
+   534→   534→              </div>
+   535→   535→              <div>
+   536→   536→                <Label>اسم السائق *</Label>
+   537→   537→                <Input
+   538→   538→                  value={form.driverName}
+   539→   539→                  onChange={(e) => setForm({ ...form, driverName: e.target.value })}
+   540→   540→                  className="h-11 mt-1.5"
+   541→   541→                  placeholder="اسم السائق"
+   542→   542→                />
+   543→   543→              </div>
+   544→   544→              <div>
+   545→   545→                <Label>هاتف السائق</Label>
+   546→   546→                <Input
+   547→   547→                  value={form.driverPhone}
+   548→   548→                  onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
+   549→   549→                  className="h-11 mt-1.5"
+   550→   550→                  dir="ltr"
+   551→   551→                  placeholder="01xxxxxxxxx"
+   552→   552→                />
+   553→   553→              </div>
+   554→   554→              <div>
+   555→   555→                <Label>رقم الرخصة</Label>
+   556→   556→                <Input
+   557→   557→                  value={form.driverLicense}
+   558→   558→                  onChange={(e) => setForm({ ...form, driverLicense: e.target.value })}
+   559→   559→                  className="h-11 mt-1.5"
+   560→   560→                  placeholder="رقم الرخصة"
+   561→   561→                />
+   562→   562→              </div>
+   563→   563→              <div>
+   564→   564→                <Label>اسم المشرف</Label>
+   565→   565→                <Input
+   566→   566→                  value={form.supervisorName}
+   567→   567→                  onChange={(e) => setForm({ ...form, supervisorName: e.target.value })}
+   568→   568→                  className="h-11 mt-1.5"
+   569→   569→                  placeholder="اسم المشرف"
+   570→   570→                />
+   571→   571→              </div>
+   572→   572→              <div>
+   573→   573→                <Label>هاتف المشرف</Label>
+   574→   574→                <Input
+   575→   575→                  value={form.supervisorPhone}
+   576→   576→                  onChange={(e) => setForm({ ...form, supervisorPhone: e.target.value })}
+   577→   577→                  className="h-11 mt-1.5"
+   578→   578→                  dir="ltr"
+   579→   579→                  placeholder="01xxxxxxxxx"
+   580→   580→                />
+   581→   581→              </div>
+   582→   582→              <div>
+   583→   583→                <Label>السعة</Label>
+   584→   584→                <Input
+   585→   585→                  type="number"
+   586→   586→                  value={form.capacity}
+   587→   587→                  onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+   588→   588→                  className="h-11 mt-1.5"
+   589→   589→                  placeholder="30"
+   590→   590→                />
+   591→   591→              </div>
+   592→   592→              <div>
+   593→   593→                <Label>الموديل</Label>
+   594→   594→                <Input
+   595→   595→                  value={form.model}
+   596→   596→                  onChange={(e) => setForm({ ...form, model: e.target.value })}
+   597→   597→                  className="h-11 mt-1.5"
+   598→   598→                  placeholder="مثال: تويوتا كوستر"
+   599→   599→                />
+   600→   600→              </div>
+   601→   601→              <div>
+   602→   602→                <Label>اللون</Label>
+   603→   603→                <Input
+   604→   604→                  value={form.color}
+   605→   605→                  onChange={(e) => setForm({ ...form, color: e.target.value })}
+   606→   606→                  className="h-11 mt-1.5"
+   607→   607→                  placeholder="اللون"
+   608→   608→                />
+   609→   609→              </div>
+   610→   610→              <div className="flex items-end gap-3 pb-2">
+   611→   611→                <Switch
+   612→   612→                  checked={form.active}
+   613→   613→                  onCheckedChange={(checked) => setForm({ ...form, active: checked })}
+   614→   614→                />
+   615→   615→                <Label className="cursor-pointer">الباص نشط</Label>
+   616→   616→              </div>
+   617→   617→            </div>
+   618→   618→            <div>
+   619→   619→              <Label>ملاحظات</Label>
+   620→   620→              <Textarea
+   621→   621→                value={form.notes}
+   622→   622→                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+   623→   623→                className="mt-1.5 min-h-[80px]"
+   624→   624→                placeholder="ملاحظات إضافية"
+   625→   625→              />
+   626→   626→            </div>
+   627→   627→          </div>
+   628→   628→          <div className="flex gap-3 justify-end mt-4">
+   629→   629→            <Button variant="outline" onClick={() => setDialogOpen(false)} className="min-h-[44px]">
+   630→   630→              <X className="w-4 h-4 ml-1" />
+   631→   631→              إلغاء
+   632→   632→            </Button>
+   633→   633→            <Button
+   634→   634→              onClick={handleSave}
+   635→   635→              disabled={saving}
+   636→   636→              className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   637→   637→            >
+   638→   638→              {saving ? 'جاري الحفظ...' : editId ? 'حفظ التعديلات' : 'إضافة الباص'}
+   639→   639→            </Button>
+   640→   640→          </div>
+   641→   641→        </DialogContent>
+   642→   642→      </Dialog>
+   643→   643→
+   644→   644→      {/* Delete Confirmation */}
+   645→   645→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   646→   646→        <DialogContent dir="rtl">
+   647→   647→          <DialogHeader>
+   648→   648→            <DialogTitle>تأكيد الحذف</DialogTitle>
+   649→   649→            <DialogDescription>
+   650→   650→              هل أنت متأكد من حذف الباص رقم &quot;{deleteTarget?.plateNumber}&quot;؟
+   651→   651→            </DialogDescription>
+   652→   652→          </DialogHeader>
+   653→   653→          <div className="flex gap-3 justify-end mt-4">
+   654→   654→            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="min-h-[44px]">
+   655→   655→              إلغاء
+   656→   656→            </Button>
+   657→   657→            <Button variant="destructive" onClick={handleDelete} className="min-h-[44px]">
+   658→   658→              حذف
+   659→   659→            </Button>
+   660→   660→          </div>
+   661→   661→        </DialogContent>
+   662→   662→      </Dialog>
+   663→   663→    </div>
+   664→   664→  )
+   665→   665→}
+   666→   666→
+   667→   667→// Reusable form component for the "Add" tab
+   668→   668→function BusFormComponent({
+   669→   669→  form: initialForm,
+   670→   670→  onSubmit,
+   671→   671→  saving,
+   672→   672→  submitLabel,
+   673→   673→}: {
+   674→   674→  form: BusForm
+   675→   675→  onChange: (form: BusForm) => void
+   676→   676→  onSubmit: (body: Record<string, unknown>) => Promise<void>
+   677→   677→  saving: boolean
+   678→   678→  submitLabel: string
+   679→   679→}) {
+   680→   680→  const [form, setForm] = useState<BusForm>(initialForm)
+   681→   681→
+   682→   682→  const handleSubmit = async () => {
+   683→   683→    if (!form.plateNumber.trim() || !form.driverName.trim()) {
+   684→   684→      toast.error('رقم اللوحة واسم السائق مطلوبان')
+   685→   685→      return
+   686→   686→    }
+   687→   687→    await onSubmit({
+   688→   688→      plateNumber: form.plateNumber.trim(),
+   689→   689→      driverName: form.driverName.trim(),
+   690→   690→      driverPhone: form.driverPhone.trim() || null,
+   691→   691→      driverLicense: form.driverLicense.trim() || null,
+   692→   692→      supervisorName: form.supervisorName.trim() || null,
+   693→   693→      supervisorPhone: form.supervisorPhone.trim() || null,
+   694→   694→      capacity: Number(form.capacity) || 30,
+   695→   695→      model: form.model.trim() || null,
+   696→   696→      color: form.color.trim() || null,
+   697→   697→      notes: form.notes.trim() || null,
+   698→   698→      active: form.active,
+   699→   699→    })
+   700→   700→    setForm(defaultForm)
+   701→   701→  }
+   702→   702→
+   703→   703→  return (
+   704→   704→    <div className="space-y-4">
+   705→   705→      <div className="grid sm:grid-cols-2 gap-3">
+   706→   706→        <div>
+   707→   707→          <Label>رقم اللوحة *</Label>
+   708→   708→          <Input
+   709→   709→            value={form.plateNumber}
+   710→   710→            onChange={(e) => setForm({ ...form, plateNumber: e.target.value })}
+   711→   711→            className="h-11 mt-1.5"
+   712→   712→          />
+   713→   713→        </div>
+   714→   714→        <div>
+   715→   715→          <Label>اسم السائق *</Label>
+   716→   716→          <Input
+   717→   717→            value={form.driverName}
+   718→   718→            onChange={(e) => setForm({ ...form, driverName: e.target.value })}
+   719→   719→            className="h-11 mt-1.5"
+   720→   720→          />
+   721→   721→        </div>
+   722→   722→        <div>
+   723→   723→          <Label>هاتف السائق</Label>
+   724→   724→          <Input
+   725→   725→            value={form.driverPhone}
+   726→   726→            onChange={(e) => setForm({ ...form, driverPhone: e.target.value })}
+   727→   727→            className="h-11 mt-1.5"
+   728→   728→            dir="ltr"
+   729→   729→          />
+   730→   730→        </div>
+   731→   731→        <div>
+   732→   732→          <Label>رقم الرخصة</Label>
+   733→   733→          <Input
+   734→   734→            value={form.driverLicense}
+   735→   735→            onChange={(e) => setForm({ ...form, driverLicense: e.target.value })}
+   736→   736→            className="h-11 mt-1.5"
+   737→   737→          />
+   738→   738→        </div>
+   739→   739→        <div>
+   740→   740→          <Label>اسم المشرف</Label>
+   741→   741→          <Input
+   742→   742→            value={form.supervisorName}
+   743→   743→            onChange={(e) => setForm({ ...form, supervisorName: e.target.value })}
+   744→   744→            className="h-11 mt-1.5"
+   745→   745→          />
+   746→   746→        </div>
+   747→   747→        <div>
+   748→   748→          <Label>هاتف المشرف</Label>
+   749→   749→          <Input
+   750→   750→            value={form.supervisorPhone}
+   751→   751→            onChange={(e) => setForm({ ...form, supervisorPhone: e.target.value })}
+   752→   752→            className="h-11 mt-1.5"
+   753→   753→            dir="ltr"
+   754→   754→          />
+   755→   755→        </div>
+   756→   756→        <div>
+   757→   757→          <Label>السعة</Label>
+   758→   758→          <Input
+   759→   759→            type="number"
+   760→   760→            value={form.capacity}
+   761→   761→            onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+   762→   762→            className="h-11 mt-1.5"
+   763→   763→          />
+   764→   764→        </div>
+   765→   765→        <div>
+   766→   766→          <Label>الموديل</Label>
+   767→   767→          <Input
+   768→   768→            value={form.model}
+   769→   769→            onChange={(e) => setForm({ ...form, model: e.target.value })}
+   770→   770→            className="h-11 mt-1.5"
+   771→   771→          />
+   772→   772→        </div>
+   773→   773→        <div>
+   774→   774→          <Label>اللون</Label>
+   775→   775→          <Input
+   776→   776→            value={form.color}
+   777→   777→            onChange={(e) => setForm({ ...form, color: e.target.value })}
+   778→   778→            className="h-11 mt-1.5"
+   779→   779→          />
+   780→   780→        </div>
+   781→   781→        <div className="flex items-end gap-3 pb-2">
+   782→   782→          <Switch
+   783→   783→            checked={form.active}
+   784→   784→            onCheckedChange={(checked) => setForm({ ...form, active: checked })}
+   785→   785→          />
+   786→   786→          <Label className="cursor-pointer">الباص نشط</Label>
+   787→   787→        </div>
+   788→   788→      </div>
+   789→   789→      <div>
+   790→   790→        <Label>ملاحظات</Label>
+   791→   791→        <Textarea
+   792→   792→          value={form.notes}
+   793→   793→          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+   794→   794→          className="mt-1.5 min-h-[80px]"
+   795→   795→        />
+   796→   796→      </div>
+   797→   797→      <Button
+   798→   798→        onClick={handleSubmit}
+   799→   799→        disabled={saving}
+   800→   800→        className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   801→   801→      >
+   802→   802→        {saving ? 'جاري الحفظ...' : submitLabel}
+   803→   803→      </Button>
+   804→   804→    </div>
+   805→   805→  )
+   806→   806→}
+   807→   807→

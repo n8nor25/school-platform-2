@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * ============================================================
+     5→ *  واجهة المعلم للامتحانات الإلكترونية
+     6→ *  TeacherExamsPage
+     7→ * ============================================================
+     8→ *  تدفّق الشاشات:
+     9→ *    login → dashboard (exam list)
+    10→ *              └── exam-detail (tabs: questions | submissions | appeals | settings)
+    11→ *                    ├── create-exam (dialog)
+    12→ *                    ├── question-editor (dialog)
+    13→ *                    └── submission-grading (detail view)
+    14→ *
+    15→ *  التكامل:
+    16→ *    • GET    /api/exams/teacher
+    17→ *    • POST   /api/exams/teacher
+    18→ *    • GET    /api/exams/teacher/[id]
+    19→ *    • PUT    /api/exams/teacher/[id]
+    20→ *    • DELETE /api/exams/teacher/[id]
+    21→ *    • POST   /api/exams/teacher/[id]/publish
+    22→ *    • POST   /api/exams/teacher/[id]/close
+    23→ *    • POST   /api/exams/teacher/[id]/archive
+    24→ *    • GET    /api/exams/teacher/[id]/questions
+    25→ *    • POST   /api/exams/teacher/[id]/questions
+    26→ *    • PUT    /api/exams/teacher/[id]/questions/[qid]
+    27→ *    • DELETE /api/exams/teacher/[id]/questions/[qid]
+    28→ *    • GET    /api/exams/teacher/[id]/submissions
+    29→ *    • GET    /api/exams/teacher/submissions/[subId]
+    30→ *    • POST   /api/exams/teacher/answers/[ansId]
+    31→ *    • POST   /api/exams/teacher/submissions/[subId]/finalize
+    32→ *    • GET    /api/exams/teacher/[id]/appeals
+    33→ *    • POST   /api/exams/teacher/appeals/[appealId]
+    34→ * ============================================================
+    35→ */
+    36→
+    37→import React, { useState, useEffect, useCallback } from 'react';
+    38→import {
+    39→  ArrowRight, ArrowLeft, Plus, Search, RefreshCw, Loader2, AlertCircle,
+    40→  FileText, Clock, Calendar, Users, BookOpen, Settings, ListChecks,
+    41→  Edit3, Trash2, Eye, Send, CheckCircle2, XCircle, AlertTriangle,
+    42→  Shield, Lock, EyeOff, Eye as EyeIcon, Save, X, ChevronLeft,
+    43→  GraduationCap, LogOut, ClipboardList, Gavel, MessageSquareWarning,
+    44→  Hash, Award, TrendingUp, Filter, FileImage, FileType, HelpCircle,
+    45→  Check, Ban, Info, Sparkles, ShieldAlert, Hash as HashIcon,
+    46→} from 'lucide-react';
+    47→import { Button } from '@/components/ui/button';
+    48→import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+    49→import { Input } from '@/components/ui/input';
+    50→import { Label } from '@/components/ui/label';
+    51→import { Textarea } from '@/components/ui/textarea';
+    52→import { Badge } from '@/components/ui/badge';
+    53→import {
+    54→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    55→} from '@/components/ui/select';
+    56→import {
+    57→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+    58→  DialogDescription,
+    59→} from '@/components/ui/dialog';
+    60→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    61→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+    62→import { Separator } from '@/components/ui/separator';
+    63→import { ScrollArea } from '@/components/ui/scroll-area';
+    64→import { Progress } from '@/components/ui/progress';
+    65→import { Switch } from '@/components/ui/switch';
+    66→import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+    67→import { Checkbox } from '@/components/ui/checkbox';
+    68→
+    69→// ===== Types =====
+    70→
+    71→interface TeacherExamsPageProps {
+    72→  onBack: () => void;
+    73→  schoolId?: string;
+    74→}
+    75→
+    76→interface TeacherInfo {
+    77→  teacherId: string;
+    78→  teacherName: string;
+    79→  schoolId: string;
+    80→}
+    81→
+    82→type Screen = 'login' | 'dashboard' | 'exam-detail' | 'submission-grading';
+    83→
+    84→type QuestionType =
+    85→  | 'MCQ' | 'TRUE_FALSE' | 'SHORT' | 'ESSAY' | 'IMAGE_ANSWER' | 'FILE_PDF';
+    86→
+    87→interface ExamListItem {
+    88→  id: string;
+    89→  title: string;
+    90→  subject: string;
+    91→  classroomName: string | null;
+    92→  startDate: string;
+    93→  endDate: string;
+    94→  durationMinutes: number;
+    95→  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
+    96→  totalPoints: number;
+    97→  passingScore: number | null;
+    98→  maxAttempts: number;
+    99→  hasPassword: boolean;
+   100→  timeStatus: 'UPCOMING' | 'OPEN' | 'ENDED';
+   101→  submissionsCount: number;
+   102→  questionsCount: number;
+   103→}
+   104→
+   105→interface Question {
+   106→  id: string;
+   107→  type: QuestionType;
+   108→  text: string;
+   109→  options: string[] | null;
+   110→  correctAnswer: string | null;
+   111→  correctText: string | null;
+   112→  rubric: Record<string, unknown> | string | null;
+   113→  points: number;
+   114→  order: number;
+   115→  explanation: string | null;
+   116→  textModeration?: string | null;
+   117→}
+   118→
+   119→interface ExamDetail {
+   120→  id: string;
+   121→  title: string;
+   122→  description: string | null;
+   123→  subject: string;
+   124→  teacherName: string | null;
+   125→  classroomName: string | null;
+   126→  startDate: string;
+   127→  endDate: string;
+   128→  durationMinutes: number;
+   129→  hasPassword: boolean;
+   130→  shuffleQuestions: boolean;
+   131→  shuffleOptions: boolean;
+   132→  allowReview: boolean;
+   133→  showResultImmediately: boolean;
+   134→  parentVisible: boolean;
+   135→  maxAttempts: number;
+   136→  maxFileSizeMb: number;
+   137→  allowTextAnswers: boolean;
+   138→  allowImageAnswers: boolean;
+   139→  allowPdfAnswers: boolean;
+   140→  antiCheatEnabled: boolean;
+   141→  ipRestriction: string | null;
+   142→  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
+   143→  totalPoints: number;
+   144→  passingScore: number | null;
+   145→  questionsCount: number;
+   146→  submissionsCount: number;
+   147→  questions: Question[];
+   148→}
+   149→
+   150→interface SubmissionListItem {
+   151→  id: string;
+   152→  studentId: string;
+   153→  studentName: string;
+   154→  attemptNumber: number;
+   155→  startedAt: string;
+   156→  submittedAt: string | null;
+   157→  autoClosedAt: string | null;
+   158→  status: 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED' | 'FLAGGED' | 'AUTO_CLOSED';
+   159→  totalScore: number | null;
+   160→  maxScore: number | null;
+   161→  percentage: number | null;
+   162→  passed: boolean | null;
+   163→  focusEvents: number;
+   164→  tabSwitches: number;
+   165→  copyAttempts: number;
+   166→  gradedAt: string | null;
+   167→  gradedByName: string | null;
+   168→  answersCount: number;
+   169→  violationsCount: number;
+   170→  appealsCount: number;
+   171→  suspicious: boolean;
+   172→  needsGrading: boolean;
+   173→}
+   174→
+   175→interface SubmissionStats {
+   176→  total: number;
+   177→  inProgress: number;
+   178→  submitted: number;
+   179→  graded: number;
+   180→  autoClosed: number;
+   181→  needsGrading: number;
+   182→  suspiciousCount: number;
+   183→  avgScore: number;
+   184→}
+   185→
+   186→interface AnswerDetail {
+   187→  id: string;
+   188→  questionId: string;
+   189→  textAnswer: string | null;
+   190→  imageAnswerUrl: string | null;
+   191→  fileAnswerUrl: string | null;
+   192→  textModeration: string | null;
+   193→  imageModeration: string | null;
+   194→  fileModeration: string | null;
+   195→  moderationNotes: string | null;
+   196→  score: number | null;
+   197→  maxScore: number | null;
+   198→  isCorrect: boolean | null;
+   199→  teacherNote: string | null;
+   200→  aiSuggestedScore: number | null;
+   201→  aiConfidence: number | null;
+   202→  gradedAt: string | null;
+   203→  gradedById: string | null;
+   204→  question: Question;
+   205→}
+   206→
+   207→interface SubmissionDetail {
+   208→  id: string;
+   209→  examId: string;
+   210→  studentId: string;
+   211→  studentName: string;
+   212→  attemptNumber: number;
+   213→  startedAt: string;
+   214→  submittedAt: string | null;
+   215→  autoClosedAt: string | null;
+   216→  status: SubmissionListItem['status'];
+   217→  totalScore: number | null;
+   218→  maxScore: number | null;
+   219→  percentage: number | null;
+   220→  passed: boolean | null;
+   221→  focusEvents: number;
+   222→  tabSwitches: number;
+   223→  copyAttempts: number;
+   224→  lastActivityAt: string | null;
+   225→  gradedAt: string | null;
+   226→  gradedByName: string | null;
+   227→  exam: {
+   228→    id: string;
+   229→    title: string;
+   230→    subject: string;
+   231→    totalPoints: number;
+   232→    passingScore: number | null;
+   233→  };
+   234→  answers: AnswerDetail[];
+   235→  violations: Array<{
+   236→    id: string;
+   237→    type: string;
+   238→    severity: string;
+   239→    details: string | null;
+   240→    createdAt: string;
+   241→  }>;
+   242→  appeals: Array<{
+   243→    id: string;
+   244→    reason: string;
+   245→    requestedScore: number | null;
+   246→    status: string;
+   247→    teacherReply: string | null;
+   248→    reviewedAt: string | null;
+   249→    createdAt: string;
+   250→  }>;
+   251→  violationsCount: number;
+   252→  appealsCount: number;
+   253→}
+   254→
+   255→interface AppealListItem {
+   256→  id: string;
+   257→  answerId: string;
+   258→  questionId: string;
+   259→  questionText: string;
+   260→  questionType: QuestionType;
+   261→  currentScore: number | null;
+   262→  maxScore: number | null;
+   263→  requestedScore: number | null;
+   264→  studentName: string;
+   265→  attemptNumber: number;
+   266→  reason: string;
+   267→  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+   268→  teacherReply: string | null;
+   269→  reviewedAt: string | null;
+   270→  createdAt: string;
+   271→}
+   272→
+   273→interface ToastMessage {
+   274→  type: 'success' | 'error' | 'info';
+   275→  text: string;
+   276→}
+   277→
+   278→// ===== Constants =====
+   279→
+   280→const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
+   281→  MCQ: 'اختيار من متعدد',
+   282→  TRUE_FALSE: 'صح / خطأ',
+   283→  SHORT: 'إجابة قصيرة',
+   284→  ESSAY: 'سؤال مقالي',
+   285→  IMAGE_ANSWER: 'إجابة بصورة',
+   286→  FILE_PDF: 'إجابة بملف PDF',
+   287→};
+   288→
+   289→const EXAM_STATUS_LABELS: Record<ExamListItem['status'], string> = {
+   290→  DRAFT: 'مسودة',
+   291→  PUBLISHED: 'منشور',
+   292→  CLOSED: 'مغلق',
+   293→  ARCHIVED: 'مؤرشف',
+   294→};
+   295→
+   296→const SUBMISSION_STATUS_LABELS: Record<SubmissionListItem['status'], string> = {
+   297→  IN_PROGRESS: 'قيد الحل',
+   298→  SUBMITTED: 'تم التسليم',
+   299→  GRADED: 'تم التصحيح',
+   300→  FLAGGED: 'مُعلَّق',
+   301→  AUTO_CLOSED: 'أُغلق تلقائياً',
+   302→};
+   303→
+   304→const APPEAL_STATUS_LABELS: Record<AppealListItem['status'], string> = {
+   305→  PENDING: 'بانتظار المراجعة',
+   306→  APPROVED: 'مقبول',
+   307→  REJECTED: 'مرفوض',
+   308→};
+   309→
+   310→const TIME_STATUS_LABELS: Record<ExamListItem['timeStatus'], string> = {
+   311→  UPCOMING: 'لم يبدأ بعد',
+   312→  OPEN: 'مفتوح الآن',
+   313→  ENDED: 'انتهى',
+   314→};
+   315→
+   316→// ===== Helpers =====
+   317→
+   318→async function teacherFetch<T>(url: string, options?: RequestInit): Promise<T> {
+   319→  const controller = new AbortController();
+   320→  const timeout = setTimeout(() => controller.abort(), 25000);
+   321→  try {
+   322→    const res = await fetch(url, {
+   323→      ...options,
+   324→      signal: controller.signal,
+   325→      headers: {
+   326→        'Content-Type': 'application/json',
+   327→        ...(options?.headers || {}),
+   328→      },
+   329→    });
+   330→    const data = await res.json().catch(() => ({}));
+   331→    if (!res.ok) throw new Error((data as Record<string, unknown>).error as string || `HTTP ${res.status}`);
+   332→    return data as T;
+   333→  } catch (err: unknown) {
+   334→    if (err instanceof Error && err.name === 'AbortError') throw new Error('انتهت مهلة الطلب');
+   335→    throw err;
+   336→  } finally {
+   337→    clearTimeout(timeout);
+   338→  }
+   339→}
+   340→
+   341→function buildUrl(base: string, teacher: TeacherInfo, extra?: Record<string, string>): string {
+   342→  const params = new URLSearchParams();
+   343→  params.set('schoolId', teacher.schoolId);
+   344→  params.set('teacherId', teacher.teacherId);
+   345→  params.set('teacherName', teacher.teacherName);
+   346→  if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+   347→  return `${base}?${params.toString()}`;
+   348→}
+   349→
+   350→function formatDate(iso: string | null): string {
+   351→  if (!iso) return '—';
+   352→  try {
+   353→    return new Date(iso).toLocaleDateString('ar-EG', {
+   354→      year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+   355→    });
+   356→  } catch {
+   357→    return iso;
+   358→  }
+   359→}
+   360→
+   361→function toDateTimeLocal(iso: string): string {
+   362→  try {
+   363→    const d = new Date(iso);
+   364→    const off = d.getTimezoneOffset();
+   365→    return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+   366→  } catch {
+   367→    return '';
+   368→  }
+   369→}
+   370→
+   371→function defaultDateTimeLocal(minutesFromNow: number): string {
+   372→  const d = new Date(Date.now() + minutesFromNow * 60000);
+   373→  const off = d.getTimezoneOffset();
+   374→  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
+   375→}
+   376→
+   377→function statusBadgeClass(status: ExamListItem['status']): string {
+   378→  switch (status) {
+   379→    case 'DRAFT': return 'bg-amber-100 text-amber-800 border-amber-200';
+   380→    case 'PUBLISHED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+   381→    case 'CLOSED': return 'bg-gray-200 text-gray-700 border-gray-300';
+   382→    case 'ARCHIVED': return 'bg-slate-200 text-slate-700 border-slate-300';
+   383→    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+   384→  }
+   385→}
+   386→
+   387→function submissionStatusBadgeClass(status: SubmissionListItem['status']): string {
+   388→  switch (status) {
+   389→    case 'IN_PROGRESS': return 'bg-blue-100 text-blue-800 border-blue-200';
+   390→    case 'SUBMITTED': return 'bg-amber-100 text-amber-800 border-amber-200';
+   391→    case 'GRADED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+   392→    case 'FLAGGED': return 'bg-red-100 text-red-800 border-red-200';
+   393→    case 'AUTO_CLOSED': return 'bg-purple-100 text-purple-800 border-purple-200';
+   394→    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+   395→  }
+   396→}
+   397→
+   398→function appealStatusBadgeClass(status: AppealListItem['status']): string {
+   399→  switch (status) {
+   400→    case 'PENDING': return 'bg-amber-100 text-amber-800 border-amber-200';
+   401→    case 'APPROVED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+   402→    case 'REJECTED': return 'bg-red-100 text-red-800 border-red-200';
+   403→    default: return 'bg-gray-100 text-gray-700 border-gray-200';
+   404→  }
+   405→}
+   406→
+   407→// ===== Main Component =====
+   408→
+   409→export default function TeacherExamsPage({ onBack, schoolId }: TeacherExamsPageProps) {
+   410→  const [screen, setScreen] = useState<Screen>('login');
+   411→  const [teacher, setTeacher] = useState<TeacherInfo | null>(null);
+   412→  const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
+   413→  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+   414→  const [toast, setToast] = useState<ToastMessage | null>(null);
+   415→
+   416→  const showToast = useCallback((type: ToastMessage['type'], text: string) => {
+   417→    setToast({ type, text });
+   418→    setTimeout(() => setToast(null), 4500);
+   419→  }, []);
+   420→
+   421→  const handleLogin = (info: TeacherInfo) => {
+   422→    setTeacher(info);
+   423→    setScreen('dashboard');
+   424→  };
+   425→
+   426→  const handleSwitchTeacher = () => {
+   427→    setTeacher(null);
+   428→    setSelectedExamId(null);
+   429→    setSelectedSubmissionId(null);
+   430→    setScreen('login');
+   431→  };
+   432→
+   433→  const handleOpenExam = (examId: string) => {
+   434→    setSelectedExamId(examId);
+   435→    setScreen('exam-detail');
+   436→  };
+   437→
+   438→  const handleBackToDashboard = () => {
+   439→    setSelectedExamId(null);
+   440→    setScreen('dashboard');
+   441→  };
+   442→
+   443→  const handleOpenSubmission = (submissionId: string) => {
+   444→    setSelectedSubmissionId(submissionId);
+   445→    setScreen('submission-grading');
+   446→  };
+   447→
+   448→  const handleBackToExamDetail = () => {
+   449→    setSelectedSubmissionId(null);
+   450→    setScreen('exam-detail');
+   451→  };
+   452→
+   453→  return (
+   454→    <div className="min-h-screen flex flex-col" dir="rtl" style={{ backgroundColor: '#f5f5f5' }}>
+   455→      {/* Header */}
+   456→      <header className="sticky top-0 z-40 bg-white shadow-sm border-b">
+   457→        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+   458→          <div className="flex items-center gap-3 min-w-0">
+   459→            <Button
+   460→              variant="ghost"
+   461→              size="sm"
+   462→              onClick={() => {
+   463→                if (screen === 'login') onBack();
+   464→                else if (screen === 'dashboard') onBack();
+   465→                else if (screen === 'exam-detail') handleBackToDashboard();
+   466→                else if (screen === 'submission-grading') handleBackToExamDetail();
+   467→              }}
+   468→              className="text-gray-600 hover:text-gray-900"
+   469→            >
+   470→              <ArrowRight className="w-4 h-4 ml-1" />
+   471→              {screen === 'login' || screen === 'dashboard' ? 'الموقع' : screen === 'exam-detail' ? 'القائمة' : 'الامتحان'}
+   472→            </Button>
+   473→            <Separator orientation="vertical" className="h-6" />
+   474→            <div className="flex items-center gap-2 min-w-0">
+   475→              <div className="w-9 h-9 rounded-lg bg-[#610000] flex items-center justify-center flex-shrink-0">
+   476→                <GraduationCap className="w-5 h-5 text-white" />
+   477→              </div>
+   478→              <div className="min-w-0">
+   479→                <h1 className="text-sm font-bold text-gray-900 truncate">امتحانات المعلم</h1>
+   480→                {teacher && screen !== 'login' && (
+   481→                  <p className="text-xs text-gray-500 truncate">
+   482→                    {teacher.teacherName} • {teacher.teacherId}
+   483→                  </p>
+   484→                )}
+   485→              </div>
+   486→            </div>
+   487→          </div>
+   488→          {teacher && screen !== 'login' && (
+   489→            <div className="flex items-center gap-2">
+   490→              <Button variant="ghost" size="sm" onClick={onBack} className="text-gray-500 hidden sm:flex">
+   491→                <LogOut className="w-4 h-4 ml-1" />
+   492→                الرئيسية
+   493→              </Button>
+   494→              <Button variant="ghost" size="sm" onClick={handleSwitchTeacher} className="text-gray-500">
+   495→                <Users className="w-4 h-4 ml-1" />
+   496→                تبديل المعلم
+   497→              </Button>
+   498→            </div>
+   499→          )}
+   500→        </div>
+   501→      </header>
+   502→
+   503→      {/* Toast */}
+   504→      {toast && (
+   505→        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] w-full max-w-md px-4">
+   506→          <Alert
+   507→            variant={toast.type === 'error' ? 'destructive' : 'default'}
+   508→            className={`shadow-lg border ${toast.type === 'success' ? 'bg-emerald-50 border-emerald-200' : toast.type === 'info' ? 'bg-blue-50 border-blue-200' : ''}`}
+   509→          >
+   510→            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+   511→            {toast.type === 'error' && <AlertCircle className="w-4 h-4" />}
+   512→            {toast.type === 'info' && <Info className="w-4 h-4 text-blue-600" />}
+   513→            <AlertDescription className="font-medium">{toast.text}</AlertDescription>
+   514→          </Alert>
+   515→        </div>
+   516→      )}
+   517→
+   518→      {/* Content */}
+   519→      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+   520→        {screen === 'login' && (
+   521→          <TeacherLogin onLogin={handleLogin} schoolId={schoolId} onBack={onBack} />
+   522→        )}
+   523→        {screen === 'dashboard' && teacher && (
+   524→          <TeacherDashboard teacher={teacher} onOpenExam={handleOpenExam} showToast={showToast} />
+   525→        )}
+   526→        {screen === 'exam-detail' && teacher && selectedExamId && (
+   527→          <ExamDetail
+   528→            teacher={teacher}
+   529→            examId={selectedExamId}
+   530→            onBack={handleBackToDashboard}
+   531→            onOpenSubmission={handleOpenSubmission}
+   532→            showToast={showToast}
+   533→          />
+   534→        )}
+   535→        {screen === 'submission-grading' && teacher && selectedExamId && selectedSubmissionId && (
+   536→          <SubmissionGrading
+   537→            teacher={teacher}
+   538→            submissionId={selectedSubmissionId}
+   539→            onBack={handleBackToExamDetail}
+   540→            showToast={showToast}
+   541→          />
+   542→        )}
+   543→      </main>
+   544→
+   545→      {/* Footer */}
+   546→      <footer className="mt-auto bg-white border-t py-3 px-4 text-center">
+   547→        <p className="text-xs text-gray-500">
+   548→          لوحة تحكّم المعلم • إنشاء وإدارة الامتحانات الإلكترونية وتصحيح التسليمات
+   549→        </p>
+   550→      </footer>
+   551→    </div>
+   552→  );
+   553→}
+   554→
+   555→// ============================================================
+   556→//  ① TeacherLogin — شاشة الدخول
+   557→// ============================================================
+   558→
+   559→function TeacherLogin({
+   560→  onLogin, schoolId, onBack,
+   561→}: {
+   562→  onLogin: (info: TeacherInfo) => void;
+   563→  schoolId?: string;
+   564→  onBack: () => void;
+   565→}) {
+   566→  const [teacherId, setTeacherId] = useState('');
+   567→  const [teacherName, setTeacherName] = useState('');
+   568→  const [schoolIdInput, setSchoolIdInput] = useState(schoolId || '');
+   569→  const [loading, setLoading] = useState(false);
+   570→  const [error, setError] = useState<string | null>(null);
+   571→
+   572→  const handleSubmit = async (e: React.FormEvent) => {
+   573→    e.preventDefault();
+   574→    setError(null);
+   575→    if (!teacherId.trim()) { setError('معرّف المعلم مطلوب'); return; }
+   576→    if (!teacherName.trim()) { setError('اسم المعلم مطلوب'); return; }
+   577→    if (!schoolIdInput.trim()) { setError('معرّف المدرسة مطلوب'); return; }
+   578→    setLoading(true);
+   579→    try {
+   580→      // تحقق سريع من قائمة الامتحانات (لا يلزم — فقط للتأكد من المعلم)
+   581→      const url = `/api/exams/teacher?schoolId=${encodeURIComponent(schoolIdInput)}&teacherId=${encodeURIComponent(teacherId)}&teacherName=${encodeURIComponent(teacherName)}`;
+   582→      const data = await teacherFetch<{ success?: boolean; error?: string }>(url);
+   583→      if (data && data.success) {
+   584→        onLogin({
+   585→          teacherId: teacherId.trim(),
+   586→          teacherName: teacherName.trim(),
+   587→          schoolId: schoolIdInput.trim(),
+   588→        });
+   589→      }
+   590→    } catch (err: unknown) {
+   591→      const msg = err instanceof Error ? err.message : 'فشل التحقق';
+   592→      // نسمح بالدخول حتى لو فشل الفحص في وضع الاختبار (قد لا توجد امتحانات بعد)
+   593→      if (teacherId.trim().startsWith('test-')) {
+   594→        onLogin({
+   595→          teacherId: teacherId.trim(),
+   596→          teacherName: teacherName.trim(),
+   597→          schoolId: schoolIdInput.trim(),
+   598→        });
+   599→      } else {
+   600→        setError(msg);
+   601→      }
+   602→    } finally {
+   603→      setLoading(false);
+   604→    }
+   605→  };
+   606→
+   607→  return (
+   608→    <div className="max-w-md mx-auto pt-6">
+   609→      <Card className="shadow-lg border-0">
+   610→        <CardHeader className="text-center pb-4">
+   611→          <div className="w-16 h-16 mx-auto rounded-2xl bg-[#610000]/10 flex items-center justify-center mb-3">
+   612→            <GraduationCap className="w-8 h-8 text-[#610000]" />
+   613→          </div>
+   614→          <CardTitle className="text-xl text-gray-900">دخول المعلم</CardTitle>
+   615→          <CardDescription className="text-gray-500">
+   616→            أدخل بياناتك للوصول إلى لوحة تحكّم الامتحانات
+   617→          </CardDescription>
+   618→        </CardHeader>
+   619→        <CardContent>
+   620→          <form onSubmit={handleSubmit} className="space-y-4">
+   621→            <div className="space-y-2">
+   622→              <Label htmlFor="teacherId" className="text-sm font-medium text-gray-700">
+   623→                معرّف المعلم <span className="text-red-500">*</span>
+   624→              </Label>
+   625→              <Input
+   626→                id="teacherId"
+   627→                value={teacherId}
+   628→                onChange={(e) => setTeacherId(e.target.value)}
+   629→                placeholder="مثال: test-teacher-001"
+   630→                className="text-right font-mono text-sm"
+   631→                autoComplete="off"
+   632→                dir="ltr"
+   633→              />
+   634→            </div>
+   635→            <div className="space-y-2">
+   636→              <Label htmlFor="teacherName" className="text-sm font-medium text-gray-700">
+   637→                الاسم الكامل <span className="text-red-500">*</span>
+   638→              </Label>
+   639→              <Input
+   640→                id="teacherName"
+   641→                value={teacherName}
+   642→                onChange={(e) => setTeacherName(e.target.value)}
+   643→                placeholder="الاسم كما هو مسجّل في المدرسة"
+   644→                className="text-right"
+   645→                autoComplete="off"
+   646→              />
+   647→            </div>
+   648→            <div className="space-y-2">
+   649→              <Label htmlFor="schoolIdLogin" className="text-sm font-medium text-gray-700">
+   650→                معرّف المدرسة <span className="text-red-500">*</span>
+   651→              </Label>
+   652→              <Input
+   653→                id="schoolIdLogin"
+   654→                value={schoolIdInput}
+   655→                onChange={(e) => setSchoolIdInput(e.target.value)}
+   656→                placeholder="معرّف المدرسة"
+   657→                className="text-right font-mono text-sm"
+   658→                autoComplete="off"
+   659→                disabled={!!schoolId}
+   660→              />
+   661→            </div>
+   662→
+   663→            <Alert className="bg-blue-50 border-blue-200">
+   664→              <Info className="w-4 h-4 text-blue-600" />
+   665→              <AlertDescription className="text-blue-800 text-sm">
+   666→                للتجربة استخدم: <span className="font-mono font-bold">test-teacher-001</span>
+   667→              </AlertDescription>
+   668→            </Alert>
+   669→
+   670→            {error && (
+   671→              <Alert variant="destructive">
+   672→                <AlertCircle className="w-4 h-4" />
+   673→                <AlertDescription>{error}</AlertDescription>
+   674→              </Alert>
+   675→            )}
+   676→
+   677→            <Button
+   678→              type="submit"
+   679→              className="w-full bg-[#610000] hover:bg-[#4a0000] text-white"
+   680→              disabled={loading}
+   681→            >
+   682→              {loading ? (
+   683→                <>
+   684→                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+   685→                  جارٍ التحقق...
+   686→                </>
+   687→              ) : (
+   688→                <>
+   689→                  <LogOut className="w-4 h-4 ml-2 rotate-180" />
+   690→                  دخول
+   691→                </>
+   692→              )}
+   693→            </Button>
+   694→
+   695→            <Button type="button" variant="ghost" className="w-full" onClick={onBack}>
+   696→              <ArrowRight className="w-4 h-4 ml-1" />
+   697→              العودة للصفحة الرئيسية
+   698→            </Button>
+   699→          </form>
+   700→        </CardContent>
+   701→      </Card>
+   702→    </div>
+   703→  );
+   704→}
+   705→
+   706→// ============================================================
+   707→//  ② TeacherDashboard — قائمة الامتحانات
+   708→// ============================================================
+   709→
+   710→function TeacherDashboard({
+   711→  teacher, onOpenExam, showToast,
+   712→}: {
+   713→  teacher: TeacherInfo;
+   714→  onOpenExam: (examId: string) => void;
+   715→  showToast: (type: ToastMessage['type'], text: string) => void;
+   716→}) {
+   717→  const [exams, setExams] = useState<ExamListItem[]>([]);
+   718→  const [loading, setLoading] = useState(true);
+   719→  const [error, setError] = useState<string | null>(null);
+   720→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   721→  const [search, setSearch] = useState('');
+   722→  const [showCreate, setShowCreate] = useState(false);
+   723→  const [confirmDelete, setConfirmDelete] = useState<ExamListItem | null>(null);
+   724→  const [actionLoading, setActionLoading] = useState<string | null>(null);
+   725→
+   726→  const fetchExams = useCallback(async () => {
+   727→    setLoading(true);
+   728→    setError(null);
+   729→    try {
+   730→      const extra: Record<string, string> = {};
+   731→      if (statusFilter !== 'all') extra.status = statusFilter;
+   732→      if (search.trim()) extra.search = search.trim();
+   733→      const url = buildUrl('/api/exams/teacher', teacher, extra);
+   734→      const data = await teacherFetch<{ success: boolean; exams: ExamListItem[] }>(url);
+   735→      setExams(data.exams || []);
+   736→    } catch (err: unknown) {
+   737→      setError(err instanceof Error ? err.message : 'فشل جلب الامتحانات');
+   738→    } finally {
+   739→      setLoading(false);
+   740→    }
+   741→  }, [teacher, statusFilter, search]);
+   742→
+   743→  useEffect(() => {
+   744→    const t = setTimeout(fetchExams, 350);
+   745→    return () => clearTimeout(t);
+   746→  }, [fetchExams]);
+   747→
+   748→  const handlePublish = async (exam: ExamListItem) => {
+   749→    setActionLoading(exam.id);
+   750→    try {
+   751→      const url = buildUrl(`/api/exams/teacher/${exam.id}/publish`, teacher);
+   752→      await teacherFetch<{ success: boolean }>(url, { method: 'POST' });
+   753→      showToast('success', 'تم نشر الامتحان بنجاح');
+   754→      fetchExams();
+   755→    } catch (err: unknown) {
+   756→      showToast('error', err instanceof Error ? err.message : 'فشل النشر');
+   757→    } finally {
+   758→      setActionLoading(null);
+   759→    }
+   760→  };
+   761→
+   762→  const handleClose = async (exam: ExamListItem) => {
+   763→    if (!confirm(`هل تريد إغلاق الامتحان "${exam.title}"؟ سيتم إغلاق جميع المحاولات الجارية.`)) {
+   764→      return;
+   765→    }
+   766→    setActionLoading(exam.id);
+   767→    try {
+   768→      const url = buildUrl(`/api/exams/teacher/${exam.id}/close`, teacher);
+   769→      const data = await teacherFetch<{ success: boolean; closedSubmissions: number }>(url, { method: 'POST' });
+   770→      showToast('success', `تم الإغلاق. أُغلق ${data.closedSubmissions || 0} محاولة جارية.`);
+   771→      fetchExams();
+   772→    } catch (err: unknown) {
+   773→      showToast('error', err instanceof Error ? err.message : 'فشل الإغلاق');
+   774→    } finally {
+   775→      setActionLoading(null);
+   776→    }
+   777→  };
+   778→
+   779→  const handleArchive = async (exam: ExamListItem) => {
+   780→    if (!confirm(`هل تريد أرشفة الامتحان "${exam.title}"؟`)) return;
+   781→    setActionLoading(exam.id);
+   782→    try {
+   783→      const url = buildUrl(`/api/exams/teacher/${exam.id}/archive`, teacher);
+   784→      await teacherFetch<{ success: boolean }>(url, { method: 'POST' });
+   785→      showToast('success', 'تمت الأرشفة بنجاح');
+   786→      fetchExams();
+   787→    } catch (err: unknown) {
+   788→      showToast('error', err instanceof Error ? err.message : 'فشل الأرشفة');
+   789→    } finally {
+   790→      setActionLoading(null);
+   791→    }
+   792→  };
+   793→
+   794→  const handleDelete = async () => {
+   795→    if (!confirmDelete) return;
+   796→    setActionLoading(confirmDelete.id);
+   797→    try {
+   798→      const url = buildUrl(`/api/exams/teacher/${confirmDelete.id}`, teacher);
+   799→      await teacherFetch<{ success: boolean }>(url, { method: 'DELETE' });
+   800→      showToast('success', 'تم حذف الامتحان');
+   801→      setConfirmDelete(null);
+   802→      fetchExams();
+   803→    } catch (err: unknown) {
+   804→      showToast('error', err instanceof Error ? err.message : 'فشل الحذف (قد يكون منشوراً وله تسليمات)');
+   805→    } finally {
+   806→      setActionLoading(null);
+   807→    }
+   808→  };
+   809→
+   810→  // KPI stats
+   811→  const kpis = {
+   812→    total: exams.length,
+   813→    published: exams.filter(e => e.status === 'PUBLISHED').length,
+   814→    draft: exams.filter(e => e.status === 'DRAFT').length,
+   815→    needsGrading: 0, // requires submissions fetch per exam — show submissionsCount summary instead
+   816→    submissionsTotal: exams.reduce((s, e) => s + e.submissionsCount, 0),
+   817→  };
+   818→
+   819→  return (
+   820→    <div className="space-y-5">
+   821→      {/* KPI Row */}
+   822→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   823→        <KpiCard
+   824→          icon={<FileText className="w-5 h-5" />}
+   825→          label="إجمالي الامتحانات"
+   826→          value={kpis.total}
+   827→          color="bg-gray-100 text-gray-700"
+   828→        />
+   829→        <KpiCard
+   830→          icon={<CheckCircle2 className="w-5 h-5" />}
+   831→          label="منشور"
+   832→          value={kpis.published}
+   833→          color="bg-emerald-100 text-emerald-700"
+   834→        />
+   835→        <KpiCard
+   836→          icon={<Edit3 className="w-5 h-5" />}
+   837→          label="مسودة"
+   838→          value={kpis.draft}
+   839→          color="bg-amber-100 text-amber-700"
+   840→        />
+   841→        <KpiCard
+   842→          icon={<ClipboardList className="w-5 h-5" />}
+   843→          label="إجمالي التسليمات"
+   844→          value={kpis.submissionsTotal}
+   845→          color="bg-purple-100 text-purple-700"
+   846→        />
+   847→      </div>
+   848→
+   849→      {/* Filter Bar */}
+   850→      <Card className="shadow-sm">
+   851→        <CardContent className="p-4">
+   852→          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+   853→            <div className="flex-1 relative">
+   854→              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   855→              <Input
+   856→                value={search}
+   857→                onChange={(e) => setSearch(e.target.value)}
+   858→                placeholder="ابحث بالعنوان أو الوصف..."
+   859→                className="pr-9"
+   860→              />
+   861→            </div>
+   862→            <div className="w-full sm:w-48">
+   863→              <Select value={statusFilter} onValueChange={setStatusFilter}>
+   864→                <SelectTrigger>
+   865→                  <SelectValue placeholder="كل الحالات" />
+   866→                </SelectTrigger>
+   867→                <SelectContent>
+   868→                  <SelectItem value="all">كل الحالات</SelectItem>
+   869→                  <SelectItem value="DRAFT">مسودة</SelectItem>
+   870→                  <SelectItem value="PUBLISHED">منشور</SelectItem>
+   871→                  <SelectItem value="CLOSED">مغلق</SelectItem>
+   872→                  <SelectItem value="ARCHIVED">مؤرشف</SelectItem>
+   873→                </SelectContent>
+   874→              </Select>
+   875→            </div>
+   876→            <Button
+   877→              variant="outline"
+   878→              onClick={fetchExams}
+   879→              disabled={loading}
+   880→              className="sm:w-auto"
+   881→            >
+   882→              <RefreshCw className={`w-4 h-4 ml-1 ${loading ? 'animate-spin' : ''}`} />
+   883→              تحديث
+   884→            </Button>
+   885→            <Button
+   886→              onClick={() => setShowCreate(true)}
+   887→              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   888→            >
+   889→              <Plus className="w-4 h-4 ml-1" />
+   890→              إنشاء امتحان جديد
+   891→            </Button>
+   892→          </div>
+   893→        </CardContent>
+   894→      </Card>
+   895→
+   896→      {/* Error */}
+   897→      {error && (
+   898→        <Alert variant="destructive">
+   899→          <AlertCircle className="w-4 h-4" />
+   900→          <AlertDescription className="flex items-center justify-between">
+   901→            <span>{error}</span>
+   902→            <Button size="sm" variant="outline" onClick={fetchExams}>إعادة المحاولة</Button>
+   903→          </AlertDescription>
+   904→        </Alert>
+   905→      )}
+   906→
+   907→      {/* Loading */}
+   908→      {loading && (
+   909→        <div className="grid gap-3">
+   910→          {[1, 2, 3].map(i => (
+   911→            <Card key={i} className="shadow-sm">
+   912→              <CardContent className="p-4">
+   913→                <div className="animate-pulse space-y-3">
+   914→                  <div className="h-4 bg-gray-200 rounded w-1/3" />
+   915→                  <div className="h-3 bg-gray-100 rounded w-1/2" />
+   916→                  <div className="h-8 bg-gray-100 rounded w-full" />
+   917→                </div>
+   918→              </CardContent>
+   919→            </Card>
+   920→          ))}
+   921→        </div>
+   922→      )}
+   923→
+   924→      {/* Empty state */}
+   925→      {!loading && !error && exams.length === 0 && (
+   926→        <Card className="shadow-sm">
+   927→          <CardContent className="p-12 text-center">
+   928→            <div className="w-16 h-16 mx-auto rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+   929→              <FileText className="w-8 h-8 text-gray-400" />
+   930→            </div>
+   931→            <h3 className="text-lg font-semibold text-gray-900 mb-1">لا توجد امتحانات بعد</h3>
+   932→            <p className="text-sm text-gray-500 mb-4">
+   933→              ابدأ بإنشاء أول امتحان إلكتروني لطلابك
+   934→            </p>
+   935→            <Button onClick={() => setShowCreate(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+   936→              <Plus className="w-4 h-4 ml-1" />
+   937→              إنشاء امتحان جديد
+   938→            </Button>
+   939→          </CardContent>
+   940→        </Card>
+   941→      )}
+   942→
+   943→      {/* Exam List */}
+   944→      {!loading && !error && exams.length > 0 && (
+   945→        <div className="grid gap-3">
+   946→          {exams.map((exam) => (
+   947→            <ExamCard
+   948→              key={exam.id}
+   949→              exam={exam}
+   950→              onOpen={() => onOpenExam(exam.id)}
+   951→              onPublish={() => handlePublish(exam)}
+   952→              onClose={() => handleClose(exam)}
+   953→              onArchive={() => handleArchive(exam)}
+   954→              onDelete={() => setConfirmDelete(exam)}
+   955→              actionLoading={actionLoading === exam.id}
+   956→            />
+   957→          ))}
+   958→        </div>
+   959→      )}
+   960→
+   961→      {/* Create Exam Dialog */}
+   962→      {showCreate && (
+   963→        <CreateExamDialog
+   964→          teacher={teacher}
+   965→          onClose={() => setShowCreate(false)}
+   966→          onCreated={(examId) => {
+   967→            setShowCreate(false);
+   968→            showToast('success', 'تم إنشاء الامتحان كمسودة. أضف الأسئلة ثم انشره.');
+   969→            fetchExams();
+   970→            onOpenExam(examId);
+   971→          }}
+   972→          showToast={showToast}
+   973→        />
+   974→      )}
+   975→
+   976→      {/* Delete Confirm */}
+   977→      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+   978→        <DialogContent>
+   979→          <DialogHeader>
+   980→            <DialogTitle className="text-right">تأكيد الحذف</DialogTitle>
+   981→            <DialogDescription className="text-right">
+   982→              هل أنت متأكد من حذف الامتحان &quot;{confirmDelete?.title}&quot;؟ لا يمكن التراجع.
+   983→            </DialogDescription>
+   984→          </DialogHeader>
+   985→          <Alert variant="destructive">
+   986→            <AlertTriangle className="w-4 h-4" />
+   987→            <AlertDescription>
+   988→              لا يمكن حذف امتحان منشور له تسليمات. في تلك الحالة استخدم &quot;أرشفة&quot; بدلاً من ذلك.
+   989→            </AlertDescription>
+   990→          </Alert>
+   991→          <DialogFooter>
+   992→            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={!!actionLoading}>
+   993→              إلغاء
+   994→            </Button>
+   995→            <Button variant="destructive" onClick={handleDelete} disabled={!!actionLoading}>
+   996→              {actionLoading ? <Loader2 className="w-4 h-4 ml-1 animate-spin" /> : <Trash2 className="w-4 h-4 ml-1" />}
+   997→              حذف نهائي
+   998→            </Button>
+   999→          </DialogFooter>
+  1000→        </DialogContent>
+  1001→      </Dialog>
+  1002→    </div>
+  1003→  );
+  1004→}
+  1005→
+  1006→function KpiCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string; }) {
+  1007→  return (
+  1008→    <Card className="shadow-sm">
+  1009→      <CardContent className="p-4 flex items-center gap-3">
+  1010→        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
+  1011→          {icon}
+  1012→        </div>
+  1013→        <div className="min-w-0">
+  1014→          <p className="text-xs text-gray-500 truncate">{label}</p>
+  1015→          <p className="text-xl font-bold text-gray-900">{value}</p>
+  1016→        </div>
+  1017→      </CardContent>
+  1018→    </Card>
+  1019→  );
+  1020→}
+  1021→
+  1022→function ExamCard({
+  1023→  exam, onOpen, onPublish, onClose, onArchive, onDelete, actionLoading,
+  1024→}: {
+  1025→  exam: ExamListItem;
+  1026→  onOpen: () => void;
+  1027→  onPublish: () => void;
+  1028→  onClose: () => void;
+  1029→  onArchive: () => void;
+  1030→  onDelete: () => void;
+  1031→  actionLoading: boolean;
+  1032→}) {
+  1033→  return (
+  1034→    <Card className="shadow-sm hover:shadow-md transition-shadow">
+  1035→      <CardContent className="p-4">
+  1036→        <div className="flex flex-col md:flex-row md:items-center gap-3">
+  1037→          {/* Main info */}
+  1038→          <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
+  1039→            <div className="flex items-center gap-2 mb-1 flex-wrap">
+  1040→              <h3 className="font-bold text-gray-900 truncate">{exam.title}</h3>
+  1041→              <Badge className={statusBadgeClass(exam.status)} variant="outline">
+  1042→                {EXAM_STATUS_LABELS[exam.status]}
+  1043→              </Badge>
+  1044→              <Badge className="bg-gray-100 text-gray-600 border-gray-200" variant="outline">
+  1045→                {TIME_STATUS_LABELS[exam.timeStatus]}
+  1046→              </Badge>
+  1047→              {exam.hasPassword && (
+  1048→                <Badge className="bg-orange-100 text-orange-700 border-orange-200" variant="outline">
+  1049→                  <Lock className="w-3 h-3 ml-1" />
+  1050→                  محمي
+  1051→                </Badge>
+  1052→              )}
+  1053→            </div>
+  1054→            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+  1055→              <span className="flex items-center gap-1">
+  1056→                <BookOpen className="w-3 h-3" />
+  1057→                {exam.subject}
+  1058→              </span>
+  1059→              {exam.classroomName && (
+  1060→                <span className="flex items-center gap-1">
+  1061→                  <Users className="w-3 h-3" />
+  1062→                  {exam.classroomName}
+  1063→                </span>
+  1064→              )}
+  1065→              <span className="flex items-center gap-1">
+  1066→                <Clock className="w-3 h-3" />
+  1067→                {exam.durationMinutes} دقيقة
+  1068→              </span>
+  1069→              <span className="flex items-center gap-1">
+  1070→                <ListChecks className="w-3 h-3" />
+  1071→                {exam.questionsCount} سؤال
+  1072→              </span>
+  1073→              <span className="flex items-center gap-1">
+  1074→                <ClipboardList className="w-3 h-3" />
+  1075→                {exam.submissionsCount} تسليم
+  1076→              </span>
+  1077→              <span className="flex items-center gap-1">
+  1078→                <Award className="w-3 h-3" />
+  1079→                {exam.totalPoints} نقطة
+  1080→              </span>
+  1081→            </div>
+  1082→            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
+  1083→              <span className="flex items-center gap-1">
+  1084→                <Calendar className="w-3 h-3" />
+  1085→                يبدأ: {formatDate(exam.startDate)}
+  1086→              </span>
+  1087→              <span className="flex items-center gap-1">
+  1088→                <Calendar className="w-3 h-3" />
+  1089→                ينتهي: {formatDate(exam.endDate)}
+  1090→              </span>
+  1091→            </div>
+  1092→          </div>
+  1093→
+  1094→          {/* Actions */}
+  1095→          <div className="flex flex-wrap gap-2 md:flex-col md:w-44">
+  1096→            <Button variant="outline" size="sm" onClick={onOpen} className="flex-1 md:flex-none">
+  1097→              <Eye className="w-4 h-4 ml-1" />
+  1098→              فتح
+  1099→            </Button>
+  1100→            {exam.status === 'DRAFT' && (
+  1101→              <>
+  1102→                <Button
+  1103→                  variant="outline"
+  1104→                  size="sm"
+  1105→                  onClick={onPublish}
+  1106→                  disabled={actionLoading || exam.questionsCount === 0}
+  1107→                  className="flex-1 md:flex-none text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+  1108→                  title={exam.questionsCount === 0 ? 'أضف أسئلة أولاً' : ''}
+  1109→                >
+  1110→                  <Send className="w-4 h-4 ml-1" />
+  1111→                  نشر
+  1112→                </Button>
+  1113→                <Button
+  1114→                  variant="outline"
+  1115→                  size="sm"
+  1116→                  onClick={onDelete}
+  1117→                  disabled={actionLoading}
+  1118→                  className="flex-1 md:flex-none text-red-600 border-red-200 hover:bg-red-50"
+  1119→                >
+  1120→                  <Trash2 className="w-4 h-4 ml-1" />
+  1121→                  حذف
+  1122→                </Button>
+  1123→              </>
+  1124→            )}
+  1125→            {exam.status === 'PUBLISHED' && (
+  1126→              <Button
+  1127→                variant="outline"
+  1128→                size="sm"
+  1129→                onClick={onClose}
+  1130→                disabled={actionLoading}
+  1131→                className="flex-1 md:flex-none text-orange-700 border-orange-200 hover:bg-orange-50"
+  1132→              >
+  1133→                <Ban className="w-4 h-4 ml-1" />
+  1134→                إغلاق
+  1135→              </Button>
+  1136→            )}
+  1137→            {exam.status === 'CLOSED' && (
+  1138→              <Button
+  1139→                variant="outline"
+  1140→                size="sm"
+  1141→                onClick={onArchive}
+  1142→                disabled={actionLoading}
+  1143→                className="flex-1 md:flex-none text-slate-600 border-slate-200 hover:bg-slate-50"
+  1144→              >
+  1145→                <ArchiveIcon />
+  1146→                أرشفة
+  1147→              </Button>
+  1148→            )}
+  1149→            {exam.status === 'ARCHIVED' && (
+  1150→              <Badge className="bg-slate-100 text-slate-500 border-slate-200" variant="outline">
+  1151→                مؤرشف — افتح للعرض
+  1152→              </Badge>
+  1153→            )}
+  1154→          </div>
+  1155→        </div>
+  1156→      </CardContent>
+  1157→    </Card>
+  1158→  );
+  1159→}
+  1160→
+  1161→function ArchiveIcon() {
+  1162→  return (
+  1163→    <svg className="w-4 h-4 ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  1164→      <rect x="2" y="3" width="20" height="5" rx="1" />
+  1165→      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  1166→      <line x1="10" y1="12" x2="14" y2="12" />
+  1167→    </svg>
+  1168→  );
+  1169→}
+  1170→
+  1171→// ============================================================
+  1172→//  ③ CreateExamDialog — إنشاء امتحان جديد
+  1173→// ============================================================
+  1174→
+  1175→interface ExamFormState {
+  1176→  title: string;
+  1177→  description: string;
+  1178→  subject: string;
+  1179→  classroomName: string;
+  1180→  startDate: string;
+  1181→  endDate: string;
+  1182→  durationMinutes: number;
+  1183→  maxAttempts: number;
+  1184→  passingScore: string;
+  1185→  password: string;
+  1186→  shuffleQuestions: boolean;
+  1187→  shuffleOptions: boolean;
+  1188→  allowReview: boolean;
+  1189→  showResultImmediately: boolean;
+  1190→  parentVisible: boolean;
+  1191→  antiCheatEnabled: boolean;
+  1192→  allowTextAnswers: boolean;
+  1193→  allowImageAnswers: boolean;
+  1194→  allowPdfAnswers: boolean;
+  1195→}
+  1196→
+  1197→function defaultExamForm(): ExamFormState {
+  1198→  return {
+  1199→    title: '',
+  1200→    description: '',
+  1201→    subject: '',
+  1202→    classroomName: '',
+  1203→    startDate: defaultDateTimeLocal(10),
+  1204→    endDate: defaultDateTimeLocal(70),
+  1205→    durationMinutes: 30,
+  1206→    maxAttempts: 1,
+  1207→    passingScore: '',
+  1208→    password: '',
+  1209→    shuffleQuestions: false,
+  1210→    shuffleOptions: false,
+  1211→    allowReview: true,
+  1212→    showResultImmediately: false,
+  1213→    parentVisible: false,
+  1214→    antiCheatEnabled: true,
+  1215→    allowTextAnswers: true,
+  1216→    allowImageAnswers: true,
+  1217→    allowPdfAnswers: false,
+  1218→  };
+  1219→}
+  1220→
+  1221→function CreateExamDialog({
+  1222→  teacher, onClose, onCreated, showToast,
+  1223→}: {
+  1224→  teacher: TeacherInfo;
+  1225→  onClose: () => void;
+  1226→  onCreated: (examId: string) => void;
+  1227→  showToast: (type: ToastMessage['type'], text: string) => void;
+  1228→}) {
+  1229→  const [form, setForm] = useState<ExamFormState>(defaultExamForm());
+  1230→  const [saving, setSaving] = useState(false);
+  1231→  const [error, setError] = useState<string | null>(null);
+  1232→
+  1233→  const set = <K extends keyof ExamFormState>(key: K, value: ExamFormState[K]) => {
+  1234→    setForm(prev => ({ ...prev, [key]: value }));
+  1235→  };
+  1236→
+  1237→  const handleSubmit = async (e: React.FormEvent) => {
+  1238→    e.preventDefault();
+  1239→    setError(null);
+  1240→    if (!form.title.trim()) { setError('عنوان الامتحان مطلوب'); return; }
+  1241→    if (!form.subject.trim()) { setError('المادة مطلوبة'); return; }
+  1242→    if (!form.startDate || !form.endDate) { setError('وقت البدء والانتهاء مطلوبان'); return; }
+  1243→    if (new Date(form.startDate) >= new Date(form.endDate)) {
+  1244→      setError('وقت البدء يجب أن يكون قبل وقت الانتهاء');
+  1245→      return;
+  1246→    }
+  1247→    if (!form.durationMinutes || form.durationMinutes < 1) {
+  1248→      setError('مدة الامتحان يجب أن تكون دقيقة على الأقل');
+  1249→      return;
+  1250→    }
+  1251→    setSaving(true);
+  1252→    try {
+  1253→      const body: Record<string, unknown> = {
+  1254→        title: form.title.trim(),
+  1255→        description: form.description.trim(),
+  1256→        subject: form.subject.trim(),
+  1257→        classroomName: form.classroomName.trim(),
+  1258→        startDate: new Date(form.startDate).toISOString(),
+  1259→        endDate: new Date(form.endDate).toISOString(),
+  1260→        durationMinutes: Number(form.durationMinutes),
+  1261→        maxAttempts: Number(form.maxAttempts),
+  1262→        shuffleQuestions: form.shuffleQuestions,
+  1263→        shuffleOptions: form.shuffleOptions,
+  1264→        allowReview: form.allowReview,
+  1265→        showResultImmediately: form.showResultImmediately,
+  1266→        parentVisible: form.parentVisible,
+  1267→        antiCheatEnabled: form.antiCheatEnabled,
+  1268→        allowTextAnswers: form.allowTextAnswers,
+  1269→        allowImageAnswers: form.allowImageAnswers,
+  1270→        allowPdfAnswers: form.allowPdfAnswers,
+  1271→      };
+  1272→      if (form.passingScore.trim()) body.passingScore = Number(form.passingScore);
+  1273→      if (form.password.trim()) body.password = form.password.trim();
+  1274→
+  1275→      const url = buildUrl('/api/exams/teacher', teacher);
+  1276→      const data = await teacherFetch<{ success: boolean; examId: string }>(url, {
+  1277→        method: 'POST',
+  1278→        body: JSON.stringify(body),
+  1279→      });
+  1280→      onCreated(data.examId);
+  1281→    } catch (err: unknown) {
+  1282→      const msg = err instanceof Error ? err.message : 'فشل إنشاء الامتحان';
+  1283→      setError(msg);
+  1284→      showToast('error', msg);
+  1285→    } finally {
+  1286→      setSaving(false);
+  1287→    }
+  1288→  };
+  1289→
+  1290→  return (
+  1291→    <Dialog open onOpenChange={(o) => !o && onClose()}>
+  1292→      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+  1293→        <DialogHeader>
+  1294→          <DialogTitle className="text-right">إنشاء امتحان جديد</DialogTitle>
+  1295→          <DialogDescription className="text-right">
+  1296→            سيُنشأ كمسودة. أضف الأسئلة ثم انشره ليصبح متاحاً للطلاب.
+  1297→          </DialogDescription>
+  1298→        </DialogHeader>
+  1299→
+  1300→        <form onSubmit={handleSubmit} className="space-y-4">
+  1301→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1302→            <div className="space-y-2 md:col-span-2">
+  1303→              <Label className="text-sm font-medium">عنوان الامتحان <span className="text-red-500">*</span></Label>
+  1304→              <Input
+  1305→                value={form.title}
+  1306→                onChange={(e) => set('title', e.target.value)}
+  1307→                placeholder="مثال: اختبار الفصل الأول - الرياضيات"
+  1308→              />
+  1309→            </div>
+  1310→            <div className="space-y-2">
+  1311→              <Label className="text-sm font-medium">المادة <span className="text-red-500">*</span></Label>
+  1312→              <Input
+  1313→                value={form.subject}
+  1314→                onChange={(e) => set('subject', e.target.value)}
+  1315→                placeholder="مثال: الرياضيات"
+  1316→              />
+  1317→            </div>
+  1318→            <div className="space-y-2">
+  1319→              <Label className="text-sm font-medium">الفصل / الصف</Label>
+  1320→              <Input
+  1321→                value={form.classroomName}
+  1322→                onChange={(e) => set('classroomName', e.target.value)}
+  1323→                placeholder="مثال: الصف العاشر - أ"
+  1324→              />
+  1325→            </div>
+  1326→            <div className="space-y-2 md:col-span-2">
+  1327→              <Label className="text-sm font-medium">الوصف (اختياري)</Label>
+  1328→              <Textarea
+  1329→                value={form.description}
+  1330→                onChange={(e) => set('description', e.target.value)}
+  1331→                placeholder="تعليمات إضافية للطلاب..."
+  1332→                rows={2}
+  1333→              />
+  1334→            </div>
+  1335→            <div className="space-y-2">
+  1336→              <Label className="text-sm font-medium">وقت بدء الامتحان <span className="text-red-500">*</span></Label>
+  1337→              <Input
+  1338→                type="datetime-local"
+  1339→                value={form.startDate}
+  1340→                onChange={(e) => set('startDate', e.target.value)}
+  1341→              />
+  1342→            </div>
+  1343→            <div className="space-y-2">
+  1344→              <Label className="text-sm font-medium">وقت انتهاء الامتحان <span className="text-red-500">*</span></Label>
+  1345→              <Input
+  1346→                type="datetime-local"
+  1347→                value={form.endDate}
+  1348→                onChange={(e) => set('endDate', e.target.value)}
+  1349→              />
+  1350→            </div>
+  1351→            <div className="space-y-2">
+  1352→              <Label className="text-sm font-medium">المدة بالدقائق <span className="text-red-500">*</span></Label>
+  1353→              <Input
+  1354→                type="number"
+  1355→                min={1}
+  1356→                max={600}
+  1357→                value={form.durationMinutes}
+  1358→                onChange={(e) => set('durationMinutes', Number(e.target.value))}
+  1359→              />
+  1360→            </div>
+  1361→            <div className="space-y-2">
+  1362→              <Label className="text-sm font-medium">الحد الأقصى للمحاولات</Label>
+  1363→              <Input
+  1364→                type="number"
+  1365→                min={1}
+  1366→                max={10}
+  1367→                value={form.maxAttempts}
+  1368→                onChange={(e) => set('maxAttempts', Number(e.target.value))}
+  1369→              />
+  1370→            </div>
+  1371→            <div className="space-y-2">
+  1372→              <Label className="text-sm font-medium">درجة النجاح (اختياري)</Label>
+  1373→              <Input
+  1374→                type="number"
+  1375→                min={0}
+  1376→                value={form.passingScore}
+  1377→                onChange={(e) => set('passingScore', e.target.value)}
+  1378→                placeholder="مثال: 50"
+  1379→              />
+  1380→            </div>
+  1381→            <div className="space-y-2">
+  1382→              <Label className="text-sm font-medium">كلمة سر الامتحان (اختياري)</Label>
+  1383→              <Input
+  1384→                type="text"
+  1385→                value={form.password}
+  1386→                onChange={(e) => set('password', e.target.value)}
+  1387→                placeholder="اتركها فارغة لعدم الحماية"
+  1388→                minLength={4}
+  1389→              />
+  1390→            </div>
+  1391→          </div>
+  1392→
+  1393→          <Separator />
+  1394→
+  1395→          <div className="space-y-2">
+  1396→            <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+  1397→              <Settings className="w-4 h-4" />
+  1398→              الإعدادات
+  1399→            </h4>
+  1400→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1401→              <ToggleRow label="خلط ترتيب الأسئلة" checked={form.shuffleQuestions} onChange={(v) => set('shuffleQuestions', v)} />
+  1402→              <ToggleRow label="خلط ترتيب الخيارات" checked={form.shuffleOptions} onChange={(v) => set('shuffleOptions', v)} />
+  1403→              <ToggleRow label="السماح بمراجعة الإجابات" checked={form.allowReview} onChange={(v) => set('allowReview', v)} />
+  1404→              <ToggleRow label="إظهار النتيجة فور التسليم" checked={form.showResultImmediately} onChange={(v) => set('showResultImmediately', v)} />
+  1405→              <ToggleRow label="مرئي لأولياء الأمور" checked={form.parentVisible} onChange={(v) => set('parentVisible', v)} />
+  1406→              <ToggleRow label="تفعيل مكافحة الغش" checked={form.antiCheatEnabled} onChange={(v) => set('antiCheatEnabled', v)} />
+  1407→              <ToggleRow label="السماح بإجابات نصية" checked={form.allowTextAnswers} onChange={(v) => set('allowTextAnswers', v)} />
+  1408→              <ToggleRow label="السماح بإجابات بالصور" checked={form.allowImageAnswers} onChange={(v) => set('allowImageAnswers', v)} />
+  1409→              <ToggleRow label="السماح بإجابات بملفات PDF" checked={form.allowPdfAnswers} onChange={(v) => set('allowPdfAnswers', v)} />
+  1410→            </div>
+  1411→          </div>
+  1412→
+  1413→          {error && (
+  1414→            <Alert variant="destructive">
+  1415→              <AlertCircle className="w-4 h-4" />
+  1416→              <AlertDescription>{error}</AlertDescription>
+  1417→            </Alert>
+  1418→          )}
+  1419→
+  1420→          <DialogFooter>
+  1421→            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+  1422→              إلغاء
+  1423→            </Button>
+  1424→            <Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1425→              {saving ? <Loader2 className="w-4 h-4 ml-1 animate-spin" /> : <Save className="w-4 h-4 ml-1" />}
+  1426→              إنشاء كمسودة
+  1427→            </Button>
+  1428→          </DialogFooter>
+  1429→        </form>
+  1430→      </DialogContent>
+  1431→    </Dialog>
+  1432→  );
+  1433→}
+  1434→
+  1435→function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void; }) {
+  1436→  return (
+  1437→    <label className="flex items-center justify-between gap-2 p-2 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer">
+  1438→      <span className="text-sm text-gray-700">{label}</span>
+  1439→      <Switch checked={checked} onCheckedChange={onChange} />
+  1440→    </label>
+  1441→  );
+  1442→}
+  1443→
+  1444→// ============================================================
+  1445→//  ④ ExamDetail — تفاصيل الامتحان بتبويبات
+  1446→// ============================================================
+  1447→
+  1448→function ExamDetail({
+  1449→  teacher, examId, onBack, onOpenSubmission, showToast,
+  1450→}: {
+  1451→  teacher: TeacherInfo;
+  1452→  examId: string;
+  1453→  onBack: () => void;
+  1454→  onOpenSubmission: (submissionId: string) => void;
+  1455→  showToast: (type: ToastMessage['type'], text: string) => void;
+  1456→}) {
+  1457→  const [exam, setExam] = useState<ExamDetail | null>(null);
+  1458→  const [loading, setLoading] = useState(true);
+  1459→  const [error, setError] = useState<string | null>(null);
+  1460→  const [tab, setTab] = useState('questions');
+  1461→  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  1462→  const [showQuestionEditor, setShowQuestionEditor] = useState(false);
+  1463→
+  1464→  const fetchExam = useCallback(async () => {
+  1465→    setLoading(true);
+  1466→    setError(null);
+  1467→    try {
+  1468→      const url = buildUrl(`/api/exams/teacher/${examId}`, teacher);
+  1469→      const data = await teacherFetch<{ success: boolean; exam: ExamDetail }>(url);
+  1470→      setExam(data.exam);
+  1471→    } catch (err: unknown) {
+  1472→      setError(err instanceof Error ? err.message : 'فشل جلب الامتحان');
+  1473→    } finally {
+  1474→      setLoading(false);
+  1475→    }
+  1476→  }, [teacher, examId]);
+  1477→
+  1478→  useEffect(() => {
+  1479→    const t = setTimeout(fetchExam, 0);
+  1480→    return () => clearTimeout(t);
+  1481→  }, [fetchExam]);
+  1482→
+  1483→  if (loading) {
+  1484→    return (
+  1485→      <Card className="shadow-sm">
+  1486→        <CardContent className="p-8 text-center">
+  1487→          <Loader2 className="w-6 h-6 mx-auto animate-spin text-gray-400" />
+  1488→          <p className="text-sm text-gray-500 mt-2">جارٍ تحميل الامتحان...</p>
+  1489→        </CardContent>
+  1490→      </Card>
+  1491→    );
+  1492→  }
+  1493→
+  1494→  if (error) {
+  1495→    return (
+  1496→      <Alert variant="destructive">
+  1497→        <AlertCircle className="w-4 h-4" />
+  1498→        <AlertDescription className="flex items-center justify-between">
+  1499→          <span>{error}</span>
+  1500→          <Button size="sm" variant="outline" onClick={fetchExam}>إعادة المحاولة</Button>
+  1501→        </AlertDescription>
+  1502→      </Alert>
+  1503→    );
+  1504→  }
+  1505→
+  1506→  if (!exam) return null;
+  1507→
+  1508→  return (
+  1509→    <div className="space-y-4">
+  1510→      {/* Header */}
+  1511→      <Card className="shadow-sm">
+  1512→        <CardContent className="p-4">
+  1513→          <div className="flex flex-col md:flex-row md:items-center gap-3">
+  1514→            <div className="flex-1 min-w-0">
+  1515→              <div className="flex items-center gap-2 flex-wrap mb-1">
+  1516→                <Button variant="ghost" size="sm" onClick={onBack} className="text-gray-500 -mr-2">
+  1517→                  <ArrowRight className="w-4 h-4" />
+  1518→                </Button>
+  1519→                <h2 className="text-lg font-bold text-gray-900 truncate">{exam.title}</h2>
+  1520→                <Badge className={statusBadgeClass(exam.status)} variant="outline">
+  1521→                  {EXAM_STATUS_LABELS[exam.status]}
+  1522→                </Badge>
+  1523→              </div>
+  1524→              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+  1525→                <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" />{exam.subject}</span>
+  1526→                {exam.classroomName && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{exam.classroomName}</span>}
+  1527→                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{exam.durationMinutes} دقيقة</span>
+  1528→                <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{exam.questionsCount} سؤال</span>
+  1529→                <span className="flex items-center gap-1"><Award className="w-3 h-3" />{exam.totalPoints} نقطة</span>
+  1530→                {exam.passingScore !== null && <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />نجاح: {exam.passingScore}</span>}
+  1531→                {exam.hasPassword && <span className="flex items-center gap-1"><Lock className="w-3 h-3" />محمي</span>}
+  1532→              </div>
+  1533→              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
+  1534→                <span>يبدأ: {formatDate(exam.startDate)}</span>
+  1535→                <span>ينتهي: {formatDate(exam.endDate)}</span>
+  1536→              </div>
+  1537→            </div>
+  1538→          </div>
+  1539→        </CardContent>
+  1540→      </Card>
+  1541→
+  1542→      {/* Tabs */}
+  1543→      <Tabs value={tab} onValueChange={setTab}>
+  1544→        <TabsList className="grid grid-cols-4 w-full">
+  1545→          <TabsTrigger value="questions" className="gap-1">
+  1546→            <ListChecks className="w-4 h-4" />
+  1547→            <span className="hidden sm:inline">الأسئلة</span>
+  1548→          </TabsTrigger>
+  1549→          <TabsTrigger value="submissions" className="gap-1">
+  1550→            <ClipboardList className="w-4 h-4" />
+  1551→            <span className="hidden sm:inline">التسليمات</span>
+  1552→          </TabsTrigger>
+  1553→          <TabsTrigger value="appeals" className="gap-1">
+  1554→            <Gavel className="w-4 h-4" />
+  1555→            <span className="hidden sm:inline">التظلّمات</span>
+  1556→          </TabsTrigger>
+  1557→          <TabsTrigger value="settings" className="gap-1">
+  1558→            <Settings className="w-4 h-4" />
+  1559→            <span className="hidden sm:inline">الإعدادات</span>
+  1560→          </TabsTrigger>
+  1561→        </TabsList>
+  1562→
+  1563→        <TabsContent value="questions" className="mt-4">
+  1564→          <QuestionsTab
+  1565→            teacher={teacher}
+  1566→            exam={exam}
+  1567→            onRefresh={fetchExam}
+  1568→            showToast={showToast}
+  1569→            onAddQuestion={() => { setEditingQuestion(null); setShowQuestionEditor(true); }}
+  1570→            onEditQuestion={(q) => { setEditingQuestion(q); setShowQuestionEditor(true); }}
+  1571→          />
+  1572→        </TabsContent>
+  1573→
+  1574→        <TabsContent value="submissions" className="mt-4">
+  1575→          <SubmissionsTab
+  1576→            teacher={teacher}
+  1577→            exam={exam}
+  1578→            onOpenSubmission={onOpenSubmission}
+  1579→            showToast={showToast}
+  1580→          />
+  1581→        </TabsContent>
+  1582→
+  1583→        <TabsContent value="appeals" className="mt-4">
+  1584→          <AppealsTab
+  1585→            teacher={teacher}
+  1586→            exam={exam}
+  1587→            onRefresh={fetchExam}
+  1588→            showToast={showToast}
+  1589→          />
+  1590→        </TabsContent>
+  1591→
+  1592→        <TabsContent value="settings" className="mt-4">
+  1593→          <SettingsTab
+  1594→            teacher={teacher}
+  1595→            exam={exam}
+  1596→            onRefresh={fetchExam}
+  1597→            onBack={onBack}
+  1598→            showToast={showToast}
+  1599→          />
+  1600→        </TabsContent>
+  1601→      </Tabs>
+  1602→
+  1603→      {/* Question Editor Dialog */}
+  1604→      {showQuestionEditor && (
+  1605→        <QuestionEditor
+  1606→          teacher={teacher}
+  1607→          examId={examId}
+  1608→          question={editingQuestion}
+  1609→          onClose={() => { setShowQuestionEditor(false); setEditingQuestion(null); }}
+  1610→          onSaved={() => {
+  1611→            setShowQuestionEditor(false);
+  1612→            setEditingQuestion(null);
+  1613→            fetchExam();
+  1614→          }}
+  1615→          showToast={showToast}
+  1616→        />
+  1617→      )}
+  1618→    </div>
+  1619→  );
+  1620→}
+  1621→
+  1622→// ============================================================
+  1623→//  QuestionsTab — قائمة الأسئلة
+  1624→// ============================================================
+  1625→
+  1626→function QuestionsTab({
+  1627→  teacher, exam, onRefresh, showToast, onAddQuestion, onEditQuestion,
+  1628→}: {
+  1629→  teacher: TeacherInfo;
+  1630→  exam: ExamDetail;
+  1631→  onRefresh: () => void;
+  1632→  showToast: (type: ToastMessage['type'], text: string) => void;
+  1633→  onAddQuestion: () => void;
+  1634→  onEditQuestion: (q: Question) => void;
+  1635→}) {
+  1636→  const [deletingId, setDeletingId] = useState<string | null>(null);
+  1637→  const [deleteLoading, setDeleteLoading] = useState(false);
+  1638→
+  1639→  const handleDelete = async (qid: string) => {
+  1640→    if (!confirm('هل تريد حذف هذا السؤال؟')) return;
+  1641→    setDeletingId(qid);
+  1642→    setDeleteLoading(true);
+  1643→    try {
+  1644→      const url = buildUrl(`/api/exams/teacher/${exam.id}/questions/${qid}`, teacher);
+  1645→      await teacherFetch<{ success: boolean }>(url, { method: 'DELETE' });
+  1646→      showToast('success', 'تم حذف السؤال');
+  1647→      onRefresh();
+  1648→    } catch (err: unknown) {
+  1649→      showToast('error', err instanceof Error ? err.message : 'فشل الحذف');
+  1650→    } finally {
+  1651→      setDeleteLoading(false);
+  1652→      setDeletingId(null);
+  1653→    }
+  1654→  };
+  1655→
+  1656→  return (
+  1657→    <Card className="shadow-sm">
+  1658→      <CardHeader className="pb-3">
+  1659→        <div className="flex items-center justify-between gap-2 flex-wrap">
+  1660→          <div>
+  1661→            <CardTitle className="text-base flex items-center gap-2">
+  1662→              <ListChecks className="w-4 h-4" />
+  1663→              أسئلة الامتحان
+  1664→            </CardTitle>
+  1665→            <CardDescription className="text-xs">
+  1666→              {exam.questions.length} سؤال • {exam.totalPoints} نقطة إجمالية
+  1667→            </CardDescription>
+  1668→          </div>
+  1669→          <Button onClick={onAddQuestion} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1670→            <Plus className="w-4 h-4 ml-1" />
+  1671→            إضافة سؤال
+  1672→          </Button>
+  1673→        </div>
+  1674→      </CardHeader>
+  1675→      <CardContent>
+  1676→        {exam.questions.length === 0 ? (
+  1677→          <div className="text-center py-8">
+  1678→            <div className="w-14 h-14 mx-auto rounded-xl bg-gray-100 flex items-center justify-center mb-2">
+  1679→              <HelpCircle className="w-7 h-7 text-gray-400" />
+  1680→            </div>
+  1681→            <p className="text-sm font-semibold text-gray-900">لا توجد أسئلة بعد</p>
+  1682→            <p className="text-xs text-gray-500 mb-3">أضف سؤالك الأول لينشر الامتحان</p>
+  1683→            <Button onClick={onAddQuestion} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1684→              <Plus className="w-4 h-4 ml-1" />
+  1685→              إضافة سؤال
+  1686→            </Button>
+  1687→          </div>
+  1688→        ) : (
+  1689→          <div className="space-y-2 max-h-[60vh] overflow-y-auto pl-1">
+  1690→            {exam.questions.map((q, i) => (
+  1691→              <div key={q.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+  1692→                <div className="flex items-start gap-3">
+  1693→                  <div className="w-8 h-8 rounded-lg bg-[#610000]/10 flex items-center justify-center flex-shrink-0">
+  1694→                    <span className="text-sm font-bold text-[#610000]">{i + 1}</span>
+  1695→                  </div>
+  1696→                  <div className="flex-1 min-w-0">
+  1697→                    <div className="flex items-center gap-2 flex-wrap mb-1">
+  1698→                      <Badge className="bg-blue-100 text-blue-700 border-blue-200" variant="outline">
+  1699→                        {QUESTION_TYPE_LABELS[q.type]}
+  1700→                      </Badge>
+  1701→                      <Badge className="bg-purple-100 text-purple-700 border-purple-200" variant="outline">
+  1702→                        <Award className="w-3 h-3 ml-1" />
+  1703→                        {q.points} نقطة
+  1704→                      </Badge>
+  1705→                      {q.textModeration === 'FLAGGED' && (
+  1706→                        <Badge className="bg-red-100 text-red-700 border-red-200" variant="outline">
+  1707→                          <ShieldAlert className="w-3 h-3 ml-1" />
+  1708→                          مُعلَّم للمراجعة
+  1709→                        </Badge>
+  1710→                      )}
+  1711→                    </div>
+  1712→                    <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{q.text}</p>
+  1713→
+  1714→                    {/* Type-specific preview */}
+  1715→                    {q.type === 'MCQ' && q.options && (
+  1716→                      <div className="mt-2 space-y-1">
+  1717→                        {q.options.map((opt, idx) => (
+  1718→                          <div key={idx} className={`text-xs px-2 py-1 rounded border ${String(q.correctAnswer) === String(idx) ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+  1719→                            {String.fromCharCode(1571 + (idx === 0 ? 0 : idx === 1 ? 1 : idx))}) {opt}
+  1720→                            {String(q.correctAnswer) === String(idx) && <CheckCircle2 className="w-3 h-3 inline ml-1" />}
+  1721→                          </div>
+  1722→                        ))}
+  1723→                      </div>
+  1724→                    )}
+  1725→                    {q.type === 'TRUE_FALSE' && q.correctAnswer && (
+  1726→                      <div className="mt-2 text-xs text-gray-600">
+  1727→                        الإجابة الصحيحة:{' '}
+  1728→                        <span className="font-medium text-emerald-700">
+  1729→                          {q.correctAnswer === 'true' ? 'صح' : 'خطأ'}
+  1730→                        </span>
+  1731→                      </div>
+  1732→                    )}
+  1733→                    {q.type === 'SHORT' && q.correctText && (
+  1734→                      <div className="mt-2 text-xs text-gray-600">
+  1735→                        الإجابة النموذجية: <span className="font-medium">{q.correctText}</span>
+  1736→                      </div>
+  1737→                    )}
+  1738→                    {q.explanation && (
+  1739→                      <div className="mt-2 text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded p-2">
+  1740→                        <Info className="w-3 h-3 inline ml-1" />
+  1741→                        {q.explanation}
+  1742→                      </div>
+  1743→                    )}
+  1744→                  </div>
+  1745→                  <div className="flex flex-col gap-1">
+  1746→                    <Button size="sm" variant="ghost" onClick={() => onEditQuestion(q)} className="h-8 w-8 p-0">
+  1747→                      <Edit3 className="w-4 h-4 text-gray-600" />
+  1748→                    </Button>
+  1749→                    <Button size="sm" variant="ghost" onClick={() => handleDelete(q.id)} disabled={deleteLoading && deletingId === q.id} className="h-8 w-8 p-0">
+  1750→                      {deleteLoading && deletingId === q.id ? (
+  1751→                        <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+  1752→                      ) : (
+  1753→                        <Trash2 className="w-4 h-4 text-red-500" />
+  1754→                      )}
+  1755→                    </Button>
+  1756→                  </div>
+  1757→                </div>
+  1758→              </div>
+  1759→            ))}
+  1760→          </div>
+  1761→        )}
+  1762→
+  1763→        {exam.status === 'DRAFT' && exam.questions.length === 0 && (
+  1764→          <Alert className="mt-4 bg-amber-50 border-amber-200">
+  1765→            <AlertTriangle className="w-4 h-4 text-amber-600" />
+  1766→            <AlertDescription className="text-amber-800">
+  1767→              يجب إضافة سؤال واحد على الأقل قبل نشر الامتحان.
+  1768→            </AlertDescription>
+  1769→          </Alert>
+  1770→        )}
+  1771→      </CardContent>
+  1772→    </Card>
+  1773→  );
+  1774→}
+  1775→
+  1776→// ============================================================
+  1777→//  ⑤ QuestionEditor — محرر الأسئلة (dialog)
+  1778→// ============================================================
+  1779→
+  1780→function QuestionEditor({
+  1781→  teacher, examId, question, onClose, onSaved, showToast,
+  1782→}: {
+  1783→  teacher: TeacherInfo;
+  1784→  examId: string;
+  1785→  question: Question | null;
+  1786→  onClose: () => void;
+  1787→  onSaved: () => void;
+  1788→  showToast: (type: ToastMessage['type'], text: string) => void;
+  1789→}) {
+  1790→  const [type, setType] = useState<QuestionType>(question?.type || 'MCQ');
+  1791→  const [text, setText] = useState(question?.text || '');
+  1792→  const [points, setPoints] = useState(question?.points || 1);
+  1793→  const [options, setOptions] = useState<string[]>(question?.options?.length ? question.options : ['', '']);
+  1794→  const [correctAnswer, setCorrectAnswer] = useState(question?.correctAnswer || '');
+  1795→  const [correctText, setCorrectText] = useState(question?.correctText || '');
+  1796→  const [rubric, setRubric] = useState<string>(
+  1797→    typeof question?.rubric === 'string' ? question.rubric : (question?.rubric ? JSON.stringify(question.rubric) : '')
+  1798→  );
+  1799→  const [explanation, setExplanation] = useState(question?.explanation || '');
+  1800→  const [saving, setSaving] = useState(false);
+  1801→  const [error, setError] = useState<string | null>(null);
+  1802→  const [moderation, setModeration] = useState<{ decision: string; reasons: string[] } | null>(null);
+  1803→
+  1804→  const isEdit = !!question;
+  1805→
+  1806→  const handleAddOption = () => {
+  1807→    if (options.length >= 8) return;
+  1808→    setOptions([...options, '']);
+  1809→  };
+  1810→  const handleRemoveOption = (idx: number) => {
+  1811→    if (options.length <= 2) return;
+  1812→    const next = options.filter((_, i) => i !== idx);
+  1813→    setOptions(next);
+  1814→    if (String(correctAnswer) === String(idx)) setCorrectAnswer('');
+  1815→    else if (Number(correctAnswer) > idx) setCorrectAnswer(String(Number(correctAnswer) - 1));
+  1816→  };
+  1817→  const handleOptionChange = (idx: number, value: string) => {
+  1818→    const next = [...options];
+  1819→    next[idx] = value;
+  1820→    setOptions(next);
+  1821→  };
+  1822→
+  1823→  const handleSubmit = async (e: React.FormEvent) => {
+  1824→    e.preventDefault();
+  1825→    setError(null);
+  1826→    setModeration(null);
+  1827→    if (!text.trim()) { setError('نص السؤال مطلوب'); return; }
+  1828→    if (type === 'MCQ') {
+  1829→      const filled = options.filter(o => o.trim());
+  1830→      if (filled.length < 2) { setError('خياران على الأقل مطلوبان للاختيار من متعدد'); return; }
+  1831→      if (correctAnswer === '' || Number(correctAnswer) < 0 || Number(correctAnswer) >= filled.length) {
+  1832→        setError('حدّد الإجابة الصحيحة'); return;
+  1833→      }
+  1834→    }
+  1835→    if (type === 'TRUE_FALSE' && !correctAnswer) {
+  1836→      setError('حدّد الإجابة الصحيحة (صح أو خطأ)'); return;
+  1837→    }
+  1838→
+  1839→    setSaving(true);
+  1840→    try {
+  1841→      const body: Record<string, unknown> = {
+  1842→        type,
+  1843→        text: text.trim(),
+  1844→        points: Number(points),
+  1845→        explanation: explanation.trim() || undefined,
+  1846→      };
+  1847→      if (type === 'MCQ') {
+  1848→        body.options = options.filter(o => o.trim());
+  1849→        body.correctAnswer = String(correctAnswer);
+  1850→      } else if (type === 'TRUE_FALSE') {
+  1851→        body.correctAnswer = correctAnswer;
+  1852→      } else if (type === 'SHORT') {
+  1853→        if (correctText.trim()) body.correctText = correctText.trim();
+  1854→      } else if (type === 'ESSAY') {
+  1855→        if (rubric.trim()) body.rubric = rubric.trim();
+  1856→      }
+  1857→
+  1858→      if (isEdit && question) {
+  1859→        const url = buildUrl(`/api/exams/teacher/${examId}/questions/${question.id}`, teacher);
+  1860→        await teacherFetch<{ success: boolean }>(url, {
+  1861→          method: 'PUT',
+  1862→          body: JSON.stringify(body),
+  1863→        });
+  1864→        showToast('success', 'تم تحديث السؤال');
+  1865→      } else {
+  1866→        const url = buildUrl(`/api/exams/teacher/${examId}/questions`, teacher);
+  1867→        const data = await teacherFetch<{ success: boolean; moderation?: { decision: string; reasons: string[] } }>(url, {
+  1868→          method: 'POST',
+  1869→          body: JSON.stringify(body),
+  1870→        });
+  1871→        showToast('success', 'تمت إضافة السؤال');
+  1872→        if (data.moderation && data.moderation.decision !== 'SAFE') {
+  1873→          setModeration(data.moderation);
+  1874→          setSaving(false);
+  1875→          return; // keep dialog open to show moderation warning
+  1876→        }
+  1877→      }
+  1878→      onSaved();
+  1879→    } catch (err: unknown) {
+  1880→      const msg = err instanceof Error ? err.message : 'فشل حفظ السؤال';
+  1881→      setError(msg);
+  1882→    } finally {
+  1883→      setSaving(false);
+  1884→    }
+  1885→  };
+  1886→
+  1887→  return (
+  1888→    <Dialog open onOpenChange={(o) => !o && onClose()}>
+  1889→      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+  1890→        <DialogHeader>
+  1891→          <DialogTitle className="text-right">
+  1892→            {isEdit ? 'تحرير السؤال' : 'إضافة سؤال جديد'}
+  1893→          </DialogTitle>
+  1894→          <DialogDescription className="text-right">
+  1895→            {isEdit ? 'عدّل بيانات السؤال ثم احفظ' : 'اختر نوع السؤال وأدخل بياناته'}
+  1896→          </DialogDescription>
+  1897→        </DialogHeader>
+  1898→
+  1899→        <form onSubmit={handleSubmit} className="space-y-4">
+  1900→          {/* Type */}
+  1901→          <div className="space-y-2">
+  1902→            <Label className="text-sm font-medium">نوع السؤال</Label>
+  1903→            <Select value={type} onValueChange={(v) => { setType(v as QuestionType); setCorrectAnswer(''); }} disabled={isEdit}>
+  1904→              <SelectTrigger>
+  1905→                <SelectValue />
+  1906→              </SelectTrigger>
+  1907→              <SelectContent>
+  1908→                {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map(t => (
+  1909→                  <SelectItem key={t} value={t}>{QUESTION_TYPE_LABELS[t]}</SelectItem>
+  1910→                ))}
+  1911→              </SelectContent>
+  1912→            </Select>
+  1913→          </div>
+  1914→
+  1915→          {/* Text */}
+  1916→          <div className="space-y-2">
+  1917→            <Label className="text-sm font-medium">نص السؤال <span className="text-red-500">*</span></Label>
+  1918→            <Textarea
+  1919→              value={text}
+  1920→              onChange={(e) => setText(e.target.value)}
+  1921→              placeholder="اكتب نص السؤال هنا..."
+  1922→              rows={3}
+  1923→            />
+  1924→          </div>
+  1925→
+  1926→          {/* Points */}
+  1927→          <div className="space-y-2 w-32">
+  1928→            <Label className="text-sm font-medium">الدرجة</Label>
+  1929→            <Input
+  1930→              type="number"
+  1931→              min={1}
+  1932→              value={points}
+  1933→              onChange={(e) => setPoints(Number(e.target.value))}
+  1934→            />
+  1935→          </div>
+  1936→
+  1937→          {/* Conditional fields */}
+  1938→          {type === 'MCQ' && (
+  1939→            <div className="space-y-2">
+  1940→              <Label className="text-sm font-medium">الخيارات (2 إلى 8) — حدّد الإجابة الصحيحة</Label>
+  1941→              <RadioGroup value={correctAnswer} onValueChange={setCorrectAnswer}>
+  1942→                <div className="space-y-2">
+  1943→                  {options.map((opt, idx) => (
+  1944→                    <div key={idx} className="flex items-center gap-2">
+  1945→                      <RadioGroupItem value={String(idx)} id={`opt-${idx}`} />
+  1946→                      <Input
+  1947→                        value={opt}
+  1948→                        onChange={(e) => handleOptionChange(idx, e.target.value)}
+  1949→                        placeholder={`الخيار ${idx + 1}`}
+  1950→                        className="flex-1"
+  1951→                      />
+  1952→                      <Button
+  1953→                        type="button"
+  1954→                        variant="ghost"
+  1955→                        size="sm"
+  1956→                        onClick={() => handleRemoveOption(idx)}
+  1957→                        disabled={options.length <= 2}
+  1958→                        className="h-9 w-9 p-0"
+  1959→                      >
+  1960→                        <X className="w-4 h-4 text-red-500" />
+  1961→                      </Button>
+  1962→                    </div>
+  1963→                  ))}
+  1964→                </div>
+  1965→              </RadioGroup>
+  1966→              {options.length < 8 && (
+  1967→                <Button type="button" variant="outline" size="sm" onClick={handleAddOption}>
+  1968→                  <Plus className="w-4 h-4 ml-1" />
+  1969→                  إضافة خيار
+  1970→                </Button>
+  1971→              )}
+  1972→            </div>
+  1973→          )}
+  1974→
+  1975→          {type === 'TRUE_FALSE' && (
+  1976→            <div className="space-y-2">
+  1977→              <Label className="text-sm font-medium">الإجابة الصحيحة</Label>
+  1978→              <RadioGroup value={correctAnswer} onValueChange={setCorrectAnswer} className="flex gap-4">
+  1979→                <label className="flex items-center gap-2 cursor-pointer">
+  1980→                  <RadioGroupItem value="true" id="tf-true" />
+  1981→                  <span className="text-sm">صح</span>
+  1982→                </label>
+  1983→                <label className="flex items-center gap-2 cursor-pointer">
+  1984→                  <RadioGroupItem value="false" id="tf-false" />
+  1985→                  <span className="text-sm">خطأ</span>
+  1986→                </label>
+  1987→              </RadioGroup>
+  1988→            </div>
+  1989→          )}
+  1990→
+  1991→          {type === 'SHORT' && (
+  1992→            <div className="space-y-2">
+  1993→              <Label className="text-sm font-medium">الإجابة النموذجية (اختياري)</Label>
+  1994→              <Input
+  1995→                value={correctText}
+  1996→                onChange={(e) => setCorrectText(e.target.value)}
+  1997→                placeholder="الإجابة المرجعية للتصحيح"
+  1998→              />
+  1999→            </div>
+  2000→          )}
+
+[showing lines 1-2000 of 3094; use offset=2001 with limit to continue reading]

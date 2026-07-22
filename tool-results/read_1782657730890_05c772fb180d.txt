@@ -1,0 +1,1079 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react'
+     4→import {
+     5→  Plus, Edit, Trash2, Search, Truck, AlertCircle, Loader2,
+     6→  Phone, Mail, MapPin, User, Building, Printer, FileText, X,
+     7→} from 'lucide-react'
+     8→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Input } from '@/components/ui/input'
+    11→import { Label } from '@/components/ui/label'
+    12→import { Badge } from '@/components/ui/badge'
+    13→import { Switch } from '@/components/ui/switch'
+    14→import { Textarea } from '@/components/ui/textarea'
+    15→import {
+    16→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    17→} from '@/components/ui/select'
+    18→import {
+    19→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+    20→} from '@/components/ui/dialog'
+    21→import {
+    22→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    23→  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    24→} from '@/components/ui/alert-dialog'
+    25→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    26→import {
+    27→  Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
+    28→} from '@/components/ui/table'
+    29→import { Skeleton } from '@/components/ui/skeleton'
+    30→import { toast } from 'sonner'
+    31→import { useAdminStore } from '@/lib/admin-store'
+    32→import {
+    33→  resolveSchool, formatCurrency, formatDate, getStatusColor,
+    34→  VENDOR_TYPES, VENDOR_TYPE_COLORS,
+    35→} from '@/lib/expense-utils'
+    36→
+    37→interface Vendor {
+    38→  id: string
+    39→  name: string
+    40→  type: string
+    41→  contactPerson: string | null
+    42→  phone: string | null
+    43→  email: string | null
+    44→  address: string | null
+    45→  taxNumber: string | null
+    46→  taxOffice: string | null
+    47→  bankName: string | null
+    48→  bankAccount: string | null
+    49→  openingBalance: number
+    50→  notes: string | null
+    51→  active: boolean
+    52→  _count?: { expenses: number; recurringExpenses: number }
+    53→}
+    54→
+    55→interface VendorWithExpenses extends Vendor {
+    56→  expenses?: Array<{
+    57→    id: string
+    58→    title: string
+    59→    amount: number
+    60→    expenseDate: string
+    61→    status: string
+    62→    paymentMethod: string
+    63→    category: { id: string; name: string } | null
+    64→  }>
+    65→}
+    66→
+    67→interface VendorForm {
+    68→  name: string
+    69→  type: string
+    70→  contactPerson: string
+    71→  phone: string
+    72→  email: string
+    73→  address: string
+    74→  taxNumber: string
+    75→  taxOffice: string
+    76→  bankName: string
+    77→  bankAccount: string
+    78→  openingBalance: string
+    79→  notes: string
+    80→  active: boolean
+    81→}
+    82→
+    83→const defaultForm: VendorForm = {
+    84→  name: '',
+    85→  type: 'مورد',
+    86→  contactPerson: '',
+    87→  phone: '',
+    88→  email: '',
+    89→  address: '',
+    90→  taxNumber: '',
+    91→  taxOffice: '',
+    92→  bankName: '',
+    93→  bankAccount: '',
+    94→  openingBalance: '0',
+    95→  notes: '',
+    96→  active: true,
+    97→}
+    98→
+    99→export function ExpenseVendorsManagement() {
+   100→  const { selectedSchoolId } = useAdminStore()
+   101→  const schoolId = resolveSchool(selectedSchoolId)
+   102→
+   103→  const [vendors, setVendors] = useState<Vendor[]>([])
+   104→  const [loading, setLoading] = useState(true)
+   105→  const [search, setSearch] = useState('')
+   106→  const [activeFilter, setActiveFilter] = useState('all')
+   107→  const [typeFilter, setTypeFilter] = useState('all')
+   108→
+   109→  const [form, setForm] = useState<VendorForm>(defaultForm)
+   110→  const [editId, setEditId] = useState<string | null>(null)
+   111→  const [dialogOpen, setDialogOpen] = useState(false)
+   112→  const [saving, setSaving] = useState(false)
+   113→
+   114→  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
+   115→  const [deleteOpen, setDeleteOpen] = useState(false)
+   116→  const [deleting, setDeleting] = useState(false)
+   117→
+   118→  const [activeTab, setActiveTab] = useState('list')
+   119→  const [selectedVendorId, setSelectedVendorId] = useState<string>('')
+   120→  const [vendorDetails, setVendorDetails] = useState<VendorWithExpenses | null>(null)
+   121→  const [detailsLoading, setDetailsLoading] = useState(false)
+   122→
+   123→  const fetchVendors = useCallback(() => {
+   124→    let cancelled = false
+   125→    const load = async () => {
+   126→      try {
+   127→        setLoading(true)
+   128→        const params = new URLSearchParams({ schoolId })
+   129→        if (search.trim()) params.set('search', search.trim())
+   130→        if (activeFilter === 'true') params.set('active', 'true')
+   131→        if (activeFilter === 'false') params.set('active', 'false')
+   132→        if (typeFilter !== 'all') params.set('type', typeFilter)
+   133→        const res = await fetch(`/api/expense-vendors?${params.toString()}`)
+   134→        if (!cancelled) {
+   135→          if (res.ok) {
+   136→            const data = await res.json()
+   137→            setVendors(Array.isArray(data.vendors) ? data.vendors : [])
+   138→          } else {
+   139→            toast.error('فشل في تحميل الموردين')
+   140→          }
+   141→        }
+   142→      } catch {
+   143→        if (!cancelled) toast.error('فشل في تحميل الموردين')
+   144→      } finally {
+   145→        if (!cancelled) setLoading(false)
+   146→      }
+   147→    }
+   148→    load()
+   149→    return () => { cancelled = true }
+   150→  }, [schoolId, search, activeFilter, typeFilter])
+   151→
+   152→  useEffect(() => fetchVendors(), [fetchVendors])
+   153→
+   154→  // Load vendor details when selected
+   155→  useEffect(() => {
+   156→    let cancelled = false
+   157→    const load = async () => {
+   158→      if (!selectedVendorId) {
+   159→        if (!cancelled) setVendorDetails(null)
+   160→        return
+   161→      }
+   162→      try {
+   163→        setDetailsLoading(true)
+   164→        const res = await fetch(
+   165→          `/api/expense-vendors/${selectedVendorId}?schoolId=${schoolId}`
+   166→        )
+   167→        if (!cancelled) {
+   168→          if (res.ok) {
+   169→            const data = await res.json()
+   170→            setVendorDetails(data)
+   171→          } else {
+   172→            toast.error('فشل في تحميل تفاصيل المورد')
+   173→            setVendorDetails(null)
+   174→          }
+   175→        }
+   176→      } catch {
+   177→        if (!cancelled) {
+   178→          toast.error('فشل في تحميل تفاصيل المورد')
+   179→          setVendorDetails(null)
+   180→        }
+   181→      } finally {
+   182→        if (!cancelled) setDetailsLoading(false)
+   183→      }
+   184→    }
+   185→    load()
+   186→    return () => { cancelled = true }
+   187→  }, [selectedVendorId, schoolId])
+   188→
+   189→  const openAdd = () => {
+   190→    setEditId(null)
+   191→    setForm(defaultForm)
+   192→    setDialogOpen(true)
+   193→  }
+   194→
+   195→  const openEdit = (v: Vendor) => {
+   196→    setEditId(v.id)
+   197→    setForm({
+   198→      name: v.name,
+   199→      type: v.type || 'مورد',
+   200→      contactPerson: v.contactPerson || '',
+   201→      phone: v.phone || '',
+   202→      email: v.email || '',
+   203→      address: v.address || '',
+   204→      taxNumber: v.taxNumber || '',
+   205→      taxOffice: v.taxOffice || '',
+   206→      bankName: v.bankName || '',
+   207→      bankAccount: v.bankAccount || '',
+   208→      openingBalance: String(v.openingBalance || 0),
+   209→      notes: v.notes || '',
+   210→      active: v.active,
+   211→    })
+   212→    setDialogOpen(true)
+   213→  }
+   214→
+   215→  const handleSave = async () => {
+   216→    if (!form.name.trim()) {
+   217→      toast.error('اسم المورد مطلوب')
+   218→      return
+   219→    }
+   220→    setSaving(true)
+   221→    try {
+   222→      const body = {
+   223→        name: form.name.trim(),
+   224→        type: form.type,
+   225→        contactPerson: form.contactPerson || null,
+   226→        phone: form.phone || null,
+   227→        email: form.email || null,
+   228→        address: form.address || null,
+   229→        taxNumber: form.taxNumber || null,
+   230→        taxOffice: form.taxOffice || null,
+   231→        bankName: form.bankName || null,
+   232→        bankAccount: form.bankAccount || null,
+   233→        openingBalance: Number(form.openingBalance) || 0,
+   234→        notes: form.notes || null,
+   235→        active: form.active,
+   236→      }
+   237→      const url = editId
+   238→        ? `/api/expense-vendors/${editId}?schoolId=${schoolId}`
+   239→        : `/api/expense-vendors?schoolId=${schoolId}`
+   240→      const res = await fetch(url, {
+   241→        method: editId ? 'PUT' : 'POST',
+   242→        headers: { 'Content-Type': 'application/json' },
+   243→        body: JSON.stringify(body),
+   244→      })
+   245→      const data = await res.json()
+   246→      if (res.ok) {
+   247→        toast.success(editId ? 'تم تحديث المورد' : 'تم إضافة المورد بنجاح')
+   248→        setDialogOpen(false)
+   249→        fetchVendors()
+   250→        if (!editId) {
+   251→          setForm(defaultForm)
+   252→          setActiveTab('list')
+   253→        }
+   254→      } else if (res.status === 409) {
+   255→        toast.error(data.error || 'اسم المورد مُستخدم بالفعل')
+   256→      } else {
+   257→        toast.error(data.error || 'فشل في حفظ البيانات')
+   258→      }
+   259→    } catch {
+   260→      toast.error('فشل في حفظ البيانات')
+   261→    } finally {
+   262→      setSaving(false)
+   263→    }
+   264→  }
+   265→
+   266→  const handleDelete = async () => {
+   267→    if (!deleteTarget) return
+   268→    setDeleting(true)
+   269→    try {
+   270→      const res = await fetch(
+   271→        `/api/expense-vendors/${deleteTarget.id}?schoolId=${schoolId}`,
+   272→        { method: 'DELETE' }
+   273→      )
+   274→      const data = await res.json()
+   275→      if (res.ok) {
+   276→        toast.success('تم حذف المورد')
+   277→        setDeleteOpen(false)
+   278→        setDeleteTarget(null)
+   279→        fetchVendors()
+   280→      } else if (res.status === 409) {
+   281→        toast.error(data.error || 'لا يمكن حذف المورد لوجود مصروفات مرتبطة')
+   282→      } else {
+   283→        toast.error(data.error || 'فشل في حذف المورد')
+   284→      }
+   285→    } catch {
+   286→      toast.error('فشل في حذف المورد')
+   287→    } finally {
+   288→      setDeleting(false)
+   289→    }
+   290→  }
+   291→
+   292→  const totalSpent = vendorDetails?.expenses?.reduce(
+   293→    (s, e) => s + (e.status !== 'مرفوض' ? e.amount : 0),
+   294→    0
+   295→  ) || 0
+   296→
+   297→  return (
+   298→    <div className="space-y-6">
+   299→      <div className="flex justify-between items-center flex-wrap gap-3">
+   300→        <h2 className="text-lg font-bold text-[#1a1a2e] flex items-center gap-2">
+   301→          <Truck className="w-5 h-5 text-[#610000]" />
+   302→          إدارة الموردين
+   303→        </h2>
+   304→      </div>
+   305→
+   306→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   307→        <TabsList className="bg-gray-100">
+   308→          <TabsTrigger value="list" className="data-[state=active]:bg-white">
+   309→            <Truck className="w-4 h-4 ml-1" /> القائمة
+   310→          </TabsTrigger>
+   311→          <TabsTrigger value="add" className="data-[state=active]:bg-white">
+   312→            <Plus className="w-4 h-4 ml-1" /> إضافة مورد
+   313→          </TabsTrigger>
+   314→          <TabsTrigger value="details" className="data-[state=active]:bg-white">
+   315→            <FileText className="w-4 h-4 ml-1" /> تفاصيل المورد
+   316→          </TabsTrigger>
+   317→        </TabsList>
+   318→
+   319→        {/* List Tab */}
+   320→        <TabsContent value="list" className="space-y-4">
+   321→          <Card>
+   322→            <CardContent className="p-4">
+   323→              <div className="flex flex-wrap gap-3 items-center">
+   324→                <div className="relative flex-1 min-w-[200px]">
+   325→                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   326→                  <Input
+   327→                    placeholder="بحث بالاسم أو المسؤول أو الهاتف..."
+   328→                    value={search}
+   329→                    onChange={(e) => setSearch(e.target.value)}
+   330→                    className="pr-10 h-11"
+   331→                  />
+   332→                </div>
+   333→                <Select value={typeFilter} onValueChange={setTypeFilter}>
+   334→                  <SelectTrigger className="w-[160px] h-11">
+   335→                    <SelectValue placeholder="النوع" />
+   336→                  </SelectTrigger>
+   337→                  <SelectContent>
+   338→                    <SelectItem value="all">كل الأنواع</SelectItem>
+   339→                    {VENDOR_TYPES.map((t) => (
+   340→                      <SelectItem key={t} value={t}>{t}</SelectItem>
+   341→                    ))}
+   342→                  </SelectContent>
+   343→                </Select>
+   344→                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+   345→                  {[
+   346→                    { value: 'all', label: 'الكل' },
+   347→                    { value: 'true', label: 'نشط' },
+   348→                    { value: 'false', label: 'متوقف' },
+   349→                  ].map((opt) => (
+   350→                    <button
+   351→                      key={opt.value}
+   352→                      onClick={() => setActiveFilter(opt.value)}
+   353→                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors min-h-[36px] ${
+   354→                        activeFilter === opt.value
+   355→                          ? 'bg-white text-[#610000] shadow-sm'
+   356→                          : 'text-gray-500 hover:text-gray-700'
+   357→                      }`}
+   358→                    >
+   359→                      {opt.label}
+   360→                    </button>
+   361→                  ))}
+   362→                </div>
+   363→                <Button
+   364→                  onClick={openAdd}
+   365→                  className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   366→                >
+   367→                  <Plus className="w-4 h-4 ml-1" />
+   368→                  إضافة مورد
+   369→                </Button>
+   370→              </div>
+   371→            </CardContent>
+   372→          </Card>
+   373→
+   374→          {loading ? (
+   375→            <div className="space-y-2">
+   376→              {Array.from({ length: 6 }).map((_, i) => (
+   377→                <Skeleton key={i} className="h-14 w-full rounded-lg" />
+   378→              ))}
+   379→            </div>
+   380→          ) : vendors.length === 0 ? (
+   381→            <Card>
+   382→              <CardContent className="p-12 text-center">
+   383→                <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+   384→                <p className="text-gray-400">لا يوجد موردون مسجلون.</p>
+   385→              </CardContent>
+   386→            </Card>
+   387→          ) : (
+   388→            <Card>
+   389→              <CardContent className="p-0">
+   390→                <div className="max-h-[600px] overflow-y-auto">
+   391→                  <Table>
+   392→                    <TableHeader>
+   393→                      <TableRow className="bg-gray-50">
+   394→                        <TableHead>المورد</TableHead>
+   395→                        <TableHead>النوع</TableHead>
+   396→                        <TableHead>المسؤول</TableHead>
+   397→                        <TableHead>الهاتف</TableHead>
+   398→                        <TableHead>الرقم الضريبي</TableHead>
+   399→                        <TableHead className="text-center">المصروفات</TableHead>
+   400→                        <TableHead className="text-center">إجراءات</TableHead>
+   401→                      </TableRow>
+   402→                    </TableHeader>
+   403→                    <TableBody>
+   404→                      {vendors.map((v) => (
+   405→                        <TableRow key={v.id} className="hover:bg-gray-50">
+   406→                          <TableCell>
+   407→                            <div className="flex items-center gap-2">
+   408→                              <div className="w-8 h-8 rounded-lg bg-[#610000]/10 flex items-center justify-center shrink-0">
+   409→                                <Building className="w-4 h-4 text-[#610000]" />
+   410→                              </div>
+   411→                              <div>
+   412→                                <p className="font-medium text-gray-800">{v.name}</p>
+   413→                                {!v.active && (
+   414→                                  <Badge variant="outline" className="text-xs">متوقف</Badge>
+   415→                                )}
+   416→                              </div>
+   417→                            </div>
+   418→                          </TableCell>
+   419→                          <TableCell>
+   420→                            <span
+   421→                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+   422→                                VENDOR_TYPE_COLORS[v.type] || 'bg-gray-100 text-gray-700 border-gray-200'
+   423→                              }`}
+   424→                            >
+   425→                              {v.type}
+   426→                            </span>
+   427→                          </TableCell>
+   428→                          <TableCell>
+   429→                            {v.contactPerson ? (
+   430→                              <span className="text-sm text-gray-600 inline-flex items-center gap-1">
+   431→                                <User className="w-3 h-3" />
+   432→                                {v.contactPerson}
+   433→                              </span>
+   434→                            ) : (
+   435→                              <span className="text-xs text-gray-400">—</span>
+   436→                            )}
+   437→                          </TableCell>
+   438→                          <TableCell>
+   439→                            {v.phone ? (
+   440→                              <span className="font-mono text-sm text-gray-700" dir="ltr">
+   441→                                {v.phone}
+   442→                              </span>
+   443→                            ) : (
+   444→                              <span className="text-xs text-gray-400">—</span>
+   445→                            )}
+   446→                          </TableCell>
+   447→                          <TableCell>
+   448→                            {v.taxNumber ? (
+   449→                              <span className="font-mono text-sm text-gray-700" dir="ltr">
+   450→                                {v.taxNumber}
+   451→                              </span>
+   452→                            ) : (
+   453→                              <span className="text-xs text-gray-400">—</span>
+   454→                            )}
+   455→                          </TableCell>
+   456→                          <TableCell className="text-center">
+   457→                            <span className="font-mono text-gray-700">
+   458→                              {v._count?.expenses || 0}
+   459→                            </span>
+   460→                          </TableCell>
+   461→                          <TableCell className="text-center">
+   462→                            <div className="flex items-center justify-center gap-1">
+   463→                              <Button
+   464→                                size="icon"
+   465→                                variant="ghost"
+   466→                                onClick={() => {
+   467→                                  setSelectedVendorId(v.id)
+   468→                                  setActiveTab('details')
+   469→                                }}
+   470→                                className="h-9 w-9 text-sky-600 hover:bg-sky-50"
+   471→                                title="عرض التفاصيل"
+   472→                              >
+   473→                                <FileText className="w-4 h-4" />
+   474→                              </Button>
+   475→                              <Button
+   476→                                size="icon"
+   477→                                variant="ghost"
+   478→                                onClick={() => openEdit(v)}
+   479→                                className="h-9 w-9 text-[#610000] hover:bg-[#610000]/10"
+   480→                              >
+   481→                                <Edit className="w-4 h-4" />
+   482→                              </Button>
+   483→                              <Button
+   484→                                size="icon"
+   485→                                variant="ghost"
+   486→                                onClick={() => {
+   487→                                  setDeleteTarget(v)
+   488→                                  setDeleteOpen(true)
+   489→                                }}
+   490→                                className="h-9 w-9 text-red-600 hover:bg-red-50"
+   491→                              >
+   492→                                <Trash2 className="w-4 h-4" />
+   493→                              </Button>
+   494→                            </div>
+   495→                          </TableCell>
+   496→                        </TableRow>
+   497→                      ))}
+   498→                    </TableBody>
+   499→                  </Table>
+   500→                </div>
+   501→              </CardContent>
+   502→            </Card>
+   503→          )}
+   504→        </TabsContent>
+   505→
+   506→        {/* Add Tab */}
+   507→        <TabsContent value="add">
+   508→          <Card>
+   509→            <CardHeader>
+   510→              <CardTitle className="text-base flex items-center gap-2">
+   511→                <Plus className="w-4 h-4 text-[#610000]" />
+   512→                إضافة مورد جديد
+   513→              </CardTitle>
+   514→            </CardHeader>
+   515→            <CardContent className="space-y-4">
+   516→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   517→                <div className="space-y-1.5">
+   518→                  <Label>اسم المورد <span className="text-red-500">*</span></Label>
+   519→                  <Input
+   520→                    value={form.name}
+   521→                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+   522→                    placeholder="مثال: شركة النور للأدوات المدرسية"
+   523→                    className="h-11"
+   524→                  />
+   525→                </div>
+   526→                <div className="space-y-1.5">
+   527→                  <Label>النوع</Label>
+   528→                  <Select
+   529→                    value={form.type}
+   530→                    onValueChange={(v) => setForm({ ...form, type: v })}
+   531→                  >
+   532→                    <SelectTrigger className="h-11">
+   533→                      <SelectValue />
+   534→                    </SelectTrigger>
+   535→                    <SelectContent>
+   536→                      {VENDOR_TYPES.map((t) => (
+   537→                        <SelectItem key={t} value={t}>{t}</SelectItem>
+   538→                      ))}
+   539→                    </SelectContent>
+   540→                  </Select>
+   541→                </div>
+   542→                <div className="space-y-1.5">
+   543→                  <Label>المسؤول</Label>
+   544→                  <Input
+   545→                    value={form.contactPerson}
+   546→                    onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+   547→                    placeholder="اسم الشخص المسؤول"
+   548→                    className="h-11"
+   549→                  />
+   550→                </div>
+   551→                <div className="space-y-1.5">
+   552→                  <Label>الهاتف</Label>
+   553→                  <Input
+   554→                    value={form.phone}
+   555→                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+   556→                    placeholder="01000000000"
+   557→                    className="h-11"
+   558→                    dir="ltr"
+   559→                  />
+   560→                </div>
+   561→                <div className="space-y-1.5">
+   562→                  <Label>البريد الإلكتروني</Label>
+   563→                  <Input
+   564→                    type="email"
+   565→                    value={form.email}
+   566→                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+   567→                    placeholder="info@example.com"
+   568→                    className="h-11"
+   569→                    dir="ltr"
+   570→                  />
+   571→                </div>
+   572→                <div className="space-y-1.5">
+   573→                  <Label>العنوان</Label>
+   574→                  <Input
+   575→                    value={form.address}
+   576→                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+   577→                    placeholder="العنوان"
+   578→                    className="h-11"
+   579→                  />
+   580→                </div>
+   581→                <div className="space-y-1.5">
+   582→                  <Label>الرقم الضريبي</Label>
+   583→                  <Input
+   584→                    value={form.taxNumber}
+   585→                    onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
+   586→                    placeholder="123-456-789"
+   587→                    className="h-11"
+   588→                    dir="ltr"
+   589→                  />
+   590→                </div>
+   591→                <div className="space-y-1.5">
+   592→                  <Label>ال مأمورية الضرائب</Label>
+   593→                  <Input
+   594→                    value={form.taxOffice}
+   595→                    onChange={(e) => setForm({ ...form, taxOffice: e.target.value })}
+   596→                    placeholder="ال مأمورية"
+   597→                    className="h-11"
+   598→                  />
+   599→                </div>
+   600→                <div className="space-y-1.5">
+   601→                  <Label>البنك</Label>
+   602→                  <Input
+   603→                    value={form.bankName}
+   604→                    onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+   605→                    placeholder="اسم البنك"
+   606→                    className="h-11"
+   607→                  />
+   608→                </div>
+   609→                <div className="space-y-1.5">
+   610→                  <Label>رقم الحساب البنكي</Label>
+   611→                  <Input
+   612→                    value={form.bankAccount}
+   613→                    onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
+   614→                    placeholder="000000000000"
+   615→                    className="h-11"
+   616→                    dir="ltr"
+   617→                  />
+   618→                </div>
+   619→                <div className="space-y-1.5">
+   620→                  <Label>رصيد افتتاحي</Label>
+   621→                  <Input
+   622→                    type="number"
+   623→                    value={form.openingBalance}
+   624→                    onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+   625→                    className="h-11"
+   626→                    dir="ltr"
+   627→                  />
+   628→                </div>
+   629→                <div className="space-y-1.5">
+   630→                  <Label>الحالة</Label>
+   631→                  <div className="flex items-center gap-3 h-11">
+   632→                    <Switch
+   633→                      checked={form.active}
+   634→                      onCheckedChange={(v) => setForm({ ...form, active: v })}
+   635→                    />
+   636→                    <span className="text-sm text-gray-600">
+   637→                      {form.active ? 'نشط' : 'متوقف'}
+   638→                    </span>
+   639→                  </div>
+   640→                </div>
+   641→              </div>
+   642→              <div className="space-y-1.5">
+   643→                <Label>ملاحظات</Label>
+   644→                <Textarea
+   645→                  value={form.notes}
+   646→                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+   647→                  placeholder="ملاحظات إضافية"
+   648→                  rows={3}
+   649→                />
+   650→              </div>
+   651→              <div className="flex justify-end gap-2 pt-2">
+   652→                <Button
+   653→                  variant="outline"
+   654→                  onClick={() => {
+   655→                    setForm(defaultForm)
+   656→                    setActiveTab('list')
+   657→                  }}
+   658→                  className="min-h-[44px]"
+   659→                >
+   660→                  إلغاء
+   661→                </Button>
+   662→                <Button
+   663→                  onClick={handleSave}
+   664→                  disabled={saving}
+   665→                  className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   666→                >
+   667→                  {saving ? (
+   668→                    <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+   669→                  ) : (
+   670→                    <Plus className="w-4 h-4 ml-1" />
+   671→                  )}
+   672→                  حفظ المورد
+   673→                </Button>
+   674→              </div>
+   675→            </CardContent>
+   676→          </Card>
+   677→        </TabsContent>
+   678→
+   679→        {/* Details Tab */}
+   680→        <TabsContent value="details" className="space-y-4">
+   681→          <Card>
+   682→            <CardContent className="p-4">
+   683→              <div className="flex flex-wrap gap-3 items-end">
+   684→                <div className="flex-1 min-w-[280px]">
+   685→                  <Label>اختر المورد</Label>
+   686→                  <Select
+   687→                    value={selectedVendorId}
+   688→                    onValueChange={setSelectedVendorId}
+   689→                  >
+   690→                    <SelectTrigger className="h-11 mt-1.5">
+   691→                      <SelectValue placeholder="اختر المورد..." />
+   692→                    </SelectTrigger>
+   693→                    <SelectContent>
+   694→                      {vendors.map((v) => (
+   695→                        <SelectItem key={v.id} value={v.id}>
+   696→                          {v.name} {v.type ? `(${v.type})` : ''}
+   697→                        </SelectItem>
+   698→                      ))}
+   699→                    </SelectContent>
+   700→                  </Select>
+   701→                </div>
+   702→                {vendorDetails && (
+   703→                  <Button
+   704→                    onClick={() => window.print()}
+   705→                    className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   706→                  >
+   707→                    <Printer className="w-4 h-4 ml-1" />
+   708→                    طباعة
+   709→                  </Button>
+   710→                )}
+   711→              </div>
+   712→            </CardContent>
+   713→          </Card>
+   714→
+   715→          {!selectedVendorId ? (
+   716→            <Card>
+   717→              <CardContent className="p-12 text-center">
+   718→                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+   719→                <p className="text-gray-400">اختر موردًا لعرض تفاصيله ومصروفاته.</p>
+   720→              </CardContent>
+   721→            </Card>
+   722→          ) : detailsLoading ? (
+   723→            <div className="space-y-3">
+   724→              <Skeleton className="h-40 rounded-xl" />
+   725→              <Skeleton className="h-64 rounded-xl" />
+   726→            </div>
+   727→          ) : vendorDetails ? (
+   728→            <div className="space-y-4">
+   729→              {/* Vendor Info Card */}
+   730→              <Card className="border-2 border-[#610000]/20 print:shadow-none print:border-2 print:border-[#610000]">
+   731→                <CardHeader className="bg-[#610000]/5 print:bg-[#610000]/5">
+   732→                  <CardTitle className="text-base flex items-center justify-between gap-2">
+   733→                    <span className="flex items-center gap-2">
+   734→                      <Building className="w-5 h-5 text-[#610000]" />
+   735→                      {vendorDetails.name}
+   736→                    </span>
+   737→                    <span
+   738→                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+   739→                        VENDOR_TYPE_COLORS[vendorDetails.type] || 'bg-gray-100 text-gray-700 border-gray-200'
+   740→                      }`}
+   741→                    >
+   742→                      {vendorDetails.type}
+   743→                    </span>
+   744→                  </CardTitle>
+   745→                </CardHeader>
+   746→                <CardContent className="p-4">
+   747→                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   748→                    {vendorDetails.contactPerson && (
+   749→                      <div className="flex items-center gap-2">
+   750→                        <User className="w-4 h-4 text-gray-400" />
+   751→                        <div>
+   752→                          <p className="text-xs text-gray-400">المسؤول</p>
+   753→                          <p className="text-sm font-medium">{vendorDetails.contactPerson}</p>
+   754→                        </div>
+   755→                      </div>
+   756→                    )}
+   757→                    {vendorDetails.phone && (
+   758→                      <div className="flex items-center gap-2">
+   759→                        <Phone className="w-4 h-4 text-gray-400" />
+   760→                        <div>
+   761→                          <p className="text-xs text-gray-400">الهاتف</p>
+   762→                          <p className="text-sm font-mono" dir="ltr">{vendorDetails.phone}</p>
+   763→                        </div>
+   764→                      </div>
+   765→                    )}
+   766→                    {vendorDetails.email && (
+   767→                      <div className="flex items-center gap-2">
+   768→                        <Mail className="w-4 h-4 text-gray-400" />
+   769→                        <div>
+   770→                          <p className="text-xs text-gray-400">البريد الإلكتروني</p>
+   771→                          <p className="text-sm font-mono" dir="ltr">{vendorDetails.email}</p>
+   772→                        </div>
+   773→                      </div>
+   774→                    )}
+   775→                    {vendorDetails.address && (
+   776→                      <div className="flex items-center gap-2">
+   777→                        <MapPin className="w-4 h-4 text-gray-400" />
+   778→                        <div>
+   779→                          <p className="text-xs text-gray-400">العنوان</p>
+   780→                          <p className="text-sm">{vendorDetails.address}</p>
+   781→                        </div>
+   782→                      </div>
+   783→                    )}
+   784→                    {vendorDetails.taxNumber && (
+   785→                      <div className="flex items-center gap-2">
+   786→                        <FileText className="w-4 h-4 text-gray-400" />
+   787→                        <div>
+   788→                          <p className="text-xs text-gray-400">الرقم الضريبي</p>
+   789→                          <p className="text-sm font-mono" dir="ltr">{vendorDetails.taxNumber}</p>
+   790→                        </div>
+   791→                      </div>
+   792→                    )}
+   793→                    {vendorDetails.bankName && (
+   794→                      <div className="flex items-center gap-2">
+   795→                        <Building className="w-4 h-4 text-gray-400" />
+   796→                        <div>
+   797→                          <p className="text-xs text-gray-400">البنك</p>
+   798→                          <p className="text-sm">{vendorDetails.bankName}</p>
+   799→                        </div>
+   800→                      </div>
+   801→                    )}
+   802→                  </div>
+   803→                  {vendorDetails.notes && (
+   804→                    <div className="mt-4 pt-3 border-t border-gray-100">
+   805→                      <p className="text-xs text-gray-400 mb-1">ملاحظات</p>
+   806→                      <p className="text-sm text-gray-700">{vendorDetails.notes}</p>
+   807→                    </div>
+   808→                  )}
+   809→                </CardContent>
+   810→              </Card>
+   811→
+   812→              {/* Summary */}
+   813→              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   814→                <Card>
+   815→                  <CardContent className="p-4">
+   816→                    <p className="text-xs text-gray-500">إجمالي المصروفات</p>
+   817→                    <p className="text-xl font-bold text-[#610000] font-mono">
+   818→                      {formatCurrency(totalSpent)}
+   819→                    </p>
+   820→                  </CardContent>
+   821→                </Card>
+   822→                <Card>
+   823→                  <CardContent className="p-4">
+   824→                    <p className="text-xs text-gray-500">عدد المصروفات</p>
+   825→                    <p className="text-xl font-bold text-gray-800 font-mono">
+   826→                      {vendorDetails._count?.expenses || 0}
+   827→                    </p>
+   828→                  </CardContent>
+   829→                </Card>
+   830→                <Card>
+   831→                  <CardContent className="p-4">
+   832→                    <p className="text-xs text-gray-500">رصيد افتتاحي</p>
+   833→                    <p className="text-xl font-bold text-gray-800 font-mono">
+   834→                      {formatCurrency(vendorDetails.openingBalance)}
+   835→                    </p>
+   836→                  </CardContent>
+   837→                </Card>
+   838→              </div>
+   839→
+   840→              {/* Recent expenses */}
+   841→              <Card>
+   842→                <CardHeader>
+   843→                  <CardTitle className="text-base">آخر المصروفات</CardTitle>
+   844→                </CardHeader>
+   845→                <CardContent className="p-0">
+   846→                  {vendorDetails.expenses && vendorDetails.expenses.length > 0 ? (
+   847→                    <Table>
+   848→                      <TableHeader>
+   849→                        <TableRow className="bg-gray-50">
+   850→                          <TableHead>التاريخ</TableHead>
+   851→                          <TableHead>العنوان</TableHead>
+   852→                          <TableHead>التصنيف</TableHead>
+   853→                          <TableHead>المبلغ</TableHead>
+   854→                          <TableHead className="text-center">الحالة</TableHead>
+   855→                        </TableRow>
+   856→                      </TableHeader>
+   857→                      <TableBody>
+   858→                        {vendorDetails.expenses.map((e) => {
+   859→                          const sc = getStatusColor(e.status)
+   860→                          return (
+   861→                            <TableRow key={e.id} className="hover:bg-gray-50">
+   862→                              <TableCell>
+   863→                                <span className="font-mono text-sm text-gray-700">
+   864→                                  {formatDate(e.expenseDate)}
+   865→                                </span>
+   866→                              </TableCell>
+   867→                              <TableCell>
+   868→                                <span className="font-medium text-gray-800">{e.title}</span>
+   869→                              </TableCell>
+   870→                              <TableCell>
+   871→                                {e.category ? (
+   872→                                  <span className="text-sm text-gray-600">{e.category.name}</span>
+   873→                                ) : (
+   874→                                  <span className="text-xs text-gray-400">—</span>
+   875→                                )}
+   876→                              </TableCell>
+   877→                              <TableCell>
+   878→                                <span className="font-mono text-sm font-bold text-[#610000]">
+   879→                                  {formatCurrency(e.amount)}
+   880→                                </span>
+   881→                              </TableCell>
+   882→                              <TableCell className="text-center">
+   883→                                <span
+   884→                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${sc.bg} ${sc.text} ${sc.border}`}
+   885→                                >
+   886→                                  <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+   887→                                  {e.status}
+   888→                                </span>
+   889→                              </TableCell>
+   890→                            </TableRow>
+   891→                          )
+   892→                        })}
+   893→                      </TableBody>
+   894→                    </Table>
+   895→                  ) : (
+   896→                    <div className="p-8 text-center text-gray-400">
+   897→                      لا توجد مصروفات مسجلة لهذا المورد.
+   898→                    </div>
+   899→                  )}
+   900→                </CardContent>
+   901→              </Card>
+   902→            </div>
+   903→          ) : null}
+   904→        </TabsContent>
+   905→      </Tabs>
+   906→
+   907→      {/* Edit/Add Dialog */}
+   908→      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+   909→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+   910→          <DialogHeader>
+   911→            <DialogTitle>
+   912→              {editId ? 'تعديل المورد' : 'إضافة مورد جديد'}
+   913→            </DialogTitle>
+   914→          </DialogHeader>
+   915→          <div className="space-y-4">
+   916→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   917→              <div className="space-y-1.5">
+   918→                <Label>اسم المورد <span className="text-red-500">*</span></Label>
+   919→                <Input
+   920→                  value={form.name}
+   921→                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+   922→                  className="h-11"
+   923→                />
+   924→              </div>
+   925→              <div className="space-y-1.5">
+   926→                <Label>النوع</Label>
+   927→                <Select
+   928→                  value={form.type}
+   929→                  onValueChange={(v) => setForm({ ...form, type: v })}
+   930→                >
+   931→                  <SelectTrigger className="h-11">
+   932→                    <SelectValue />
+   933→                  </SelectTrigger>
+   934→                  <SelectContent>
+   935→                    {VENDOR_TYPES.map((t) => (
+   936→                      <SelectItem key={t} value={t}>{t}</SelectItem>
+   937→                    ))}
+   938→                  </SelectContent>
+   939→                </Select>
+   940→              </div>
+   941→              <div className="space-y-1.5">
+   942→                <Label>المسؤول</Label>
+   943→                <Input
+   944→                  value={form.contactPerson}
+   945→                  onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+   946→                  className="h-11"
+   947→                />
+   948→              </div>
+   949→              <div className="space-y-1.5">
+   950→                <Label>الهاتف</Label>
+   951→                <Input
+   952→                  value={form.phone}
+   953→                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+   954→                  className="h-11"
+   955→                  dir="ltr"
+   956→                />
+   957→              </div>
+   958→              <div className="space-y-1.5">
+   959→                <Label>البريد الإلكتروني</Label>
+   960→                <Input
+   961→                  type="email"
+   962→                  value={form.email}
+   963→                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+   964→                  className="h-11"
+   965→                  dir="ltr"
+   966→                />
+   967→              </div>
+   968→              <div className="space-y-1.5">
+   969→                <Label>الرقم الضريبي</Label>
+   970→                <Input
+   971→                  value={form.taxNumber}
+   972→                  onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
+   973→                  className="h-11"
+   974→                  dir="ltr"
+   975→                />
+   976→              </div>
+   977→              <div className="space-y-1.5">
+   978→                <Label>البنك</Label>
+   979→                <Input
+   980→                  value={form.bankName}
+   981→                  onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+   982→                  className="h-11"
+   983→                />
+   984→              </div>
+   985→              <div className="space-y-1.5">
+   986→                <Label>رقم الحساب</Label>
+   987→                <Input
+   988→                  value={form.bankAccount}
+   989→                  onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
+   990→                  className="h-11"
+   991→                  dir="ltr"
+   992→                />
+   993→              </div>
+   994→              <div className="space-y-1.5">
+   995→                <Label>رصيد افتتاحي</Label>
+   996→                <Input
+   997→                  type="number"
+   998→                  value={form.openingBalance}
+   999→                  onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
+  1000→                  className="h-11"
+  1001→                  dir="ltr"
+  1002→                />
+  1003→              </div>
+  1004→              <div className="space-y-1.5">
+  1005→                <Label>الحالة</Label>
+  1006→                <div className="flex items-center gap-3 h-11">
+  1007→                  <Switch
+  1008→                    checked={form.active}
+  1009→                    onCheckedChange={(v) => setForm({ ...form, active: v })}
+  1010→                  />
+  1011→                  <span className="text-sm text-gray-600">
+  1012→                    {form.active ? 'نشط' : 'متوقف'}
+  1013→                  </span>
+  1014→                </div>
+  1015→              </div>
+  1016→            </div>
+  1017→            <div className="space-y-1.5">
+  1018→              <Label>العنوان</Label>
+  1019→              <Input
+  1020→                value={form.address}
+  1021→                onChange={(e) => setForm({ ...form, address: e.target.value })}
+  1022→                className="h-11"
+  1023→              />
+  1024→            </div>
+  1025→            <div className="space-y-1.5">
+  1026→              <Label>ملاحظات</Label>
+  1027→              <Textarea
+  1028→                value={form.notes}
+  1029→                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+  1030→                rows={2}
+  1031→              />
+  1032→            </div>
+  1033→          </div>
+  1034→          <DialogFooter>
+  1035→            <Button
+  1036→              variant="outline"
+  1037→              onClick={() => setDialogOpen(false)}
+  1038→              className="min-h-[44px]"
+  1039→            >
+  1040→              إلغاء
+  1041→            </Button>
+  1042→            <Button
+  1043→              onClick={handleSave}
+  1044→              disabled={saving}
+  1045→              className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+  1046→            >
+  1047→              {saving && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
+  1048→              حفظ
+  1049→            </Button>
+  1050→          </DialogFooter>
+  1051→        </DialogContent>
+  1052→      </Dialog>
+  1053→
+  1054→      {/* Delete Confirmation */}
+  1055→      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+  1056→        <AlertDialogContent>
+  1057→          <AlertDialogHeader>
+  1058→            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+  1059→            <AlertDialogDescription>
+  1060→              هل أنت متأكد من حذف المورد «{deleteTarget?.name}»؟
+  1061→            </AlertDialogDescription>
+  1062→          </AlertDialogHeader>
+  1063→          <AlertDialogFooter>
+  1064→            <AlertDialogCancel className="min-h-[44px]">إلغاء</AlertDialogCancel>
+  1065→            <AlertDialogAction
+  1066→              onClick={handleDelete}
+  1067→              disabled={deleting}
+  1068→              className="bg-red-600 hover:bg-red-700 text-white min-h-[44px]"
+  1069→            >
+  1070→              {deleting && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}
+  1071→              حذف
+  1072→            </AlertDialogAction>
+  1073→          </AlertDialogFooter>
+  1074→        </AlertDialogContent>
+  1075→      </AlertDialog>
+  1076→    </div>
+  1077→  )
+  1078→}
+  1079→

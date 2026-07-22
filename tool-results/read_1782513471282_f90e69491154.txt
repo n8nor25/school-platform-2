@@ -1,0 +1,756 @@
+     1→<?php
+     2→if(!isset($_SERVER['HTTP_REFERER'])){
+     3→    // redirect them to your desired location
+     4→    header('location:../index.php');
+     5→    exit;
+     6→}
+     7→?>
+     8→<?php include_once('head.php'); ?>
+     9→<?php include_once('header_admin.php'); ?>
+    10→<?php include_once('sidebar.php'); ?>
+    11→
+    12→<style>
+    13→
+    14→body { 
+    15→        overflow-y:scroll;
+    16→}
+    17→
+    18→.msk-modal-content {
+    19→        
+    20→   position: absolute;
+    21→   left: 125px; 
+    22→}
+    23→
+    24→
+    25→.modal-content1 {
+    26→        
+    27→   position: absolute;
+    28→   left: 125px; 
+    29→   
+    30→}
+    31→
+    32→@media only screen and (max-width: 500px) {
+    33→
+    34→        .modal-content1 {
+    35→                
+    36→                position:static;
+    37→   
+    38→        }
+    39→}
+    40→
+    41→.form-control-feedback {
+    42→  
+    43→   pointer-events: auto;
+    44→  
+    45→}
+    46→
+    47→.set-width-tooltip + .tooltip > .tooltip-inner { 
+    48→  
+    49→     min-width:180px;
+    50→}
+    51→.set-color-tooltip + .tooltip > .tooltip-inner { 
+    52→  
+    53→     min-width:180px;
+    54→         background-color:red;
+    55→}
+    56→.image-error{
+    57→        border:1px solid #f44336;
+    58→        
+    59→}
+    60→
+    61→.image-success{
+    62→        border:1px solid #009900;
+    63→        
+    64→}
+    65→
+    66→.msk-fade {  
+    67→      
+    68→    -webkit-animation-name: animatetop;
+    69→    -webkit-animation-duration: 0.4s;
+    70→    animation-name: animatetop;
+    71→    animation-duration: 0.4s
+    72→
+    73→}
+    74→
+    75→body.modal-open-noscroll1
+    76→{
+    77→    overflow:hidden;
+    78→        
+    79→ 
+    80→}
+    81→/* Add Animation */
+    82→@-webkit-keyframes animatetop {
+    83→    from {top:-300px; opacity:0} 
+    84→    to {top:0; opacity:1}
+    85→}
+    86→
+    87→@keyframes animatetop {
+    88→    from {top:-300px; opacity:0}
+    89→    to {top:0; opacity:1}
+    90→}
+    91→
+    92→
+    93→.cal-table{
+    94→        
+    95→        width:100%;
+    96→        padding:0;
+    97→        margin:0;       
+    98→
+    99→}
+   100→
+   101→#calendar_dates{
+   102→        
+   103→        padding:10px;
+   104→        margin-left:10px;
+   105→        width:95%;      
+   106→        
+   107→}
+   108→
+   109→.tHead{
+   110→        
+   111→        height:40px;
+   112→        background-color:#8e1c82;
+   113→        color:#FFF;
+   114→        text-align:center;
+   115→        border:1px solid #FFF;
+   116→        width:70px;
+   117→}
+   118→
+   119→.cal-tr{
+   120→        height:50px;
+   121→        
+   122→}
+   123→
+   124→.td_no_number{
+   125→        border:1px solid white;
+   126→        width:70px;
+   127→        background-color:#979045;
+   128→        padding:0;
+   129→}
+   130→
+   131→.cal-number-td{
+   132→        
+   133→        border:1px solid white;
+   134→        width:70px;
+   135→        background-color:#677be2;
+   136→        color:white;
+   137→                        
+   138→}
+   139→
+   140→.h5{
+   141→        color:#FFF;
+   142→        display: inline-block;
+   143→        background:#636;
+   144→        width:25px;
+   145→        height:25px;    
+   146→        font-size:14px;
+   147→        font-weight:bold;
+   148→        font-family:Cambria, "Hoefler Text", "Liberation Serif", Times, "Times New Roman", serif;
+   149→        text-align:center;
+   150→        float:right;
+   151→        padding-top:5px;
+   152→        margin-bottom:20px;
+   153→        
+   154→}
+   155→.div-event-c{
+   156→        margin-top:65%;
+   157→        height:17px;
+   158→        
+   159→}
+   160→
+   161→#cal_month{
+   162→        width:20%;
+   163→        border-radius:5%;
+   164→        
+   165→        padding:0;
+   166→}
+   167→#cal_year{
+   168→        width:15%;
+   169→        border-radius:5%;
+   170→        margin-left:5px;
+   171→        padding:0;
+   172→}
+   173→
+   174→.present{
+   175→        background-color:#00FF66;
+   176→        
+   177→}
+   178→
+   179→.absent{
+   180→        background-color:#FF0033;
+   181→        
+   182→}
+   183→
+   184→.not_held{
+   185→        background-color:#FFCC33;
+   186→        
+   187→}
+   188→
+   189→</style>
+   190→
+   191→<!-- Content Wrapper. Contains page content -->
+   192→<div class="content-wrapper">
+   193→        <!-- Content Header (Page header) -->
+   194→    <section class="content-header">
+   195→        <h1>
+   196→                Student Attendance
+   197→            <small>Preview</small>
+   198→        </h1>
+   199→        <ol class="breadcrumb">
+   200→                <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
+   201→            <li><a href="#">Exam</a></li>
+   202→            <li><a href="#">Student Attendance History</a></li>
+   203→        </ol>
+   204→        </section>
+   205→
+   206→        <!-- Main content -->
+   207→    <section class="content">
+   208→        <div class="row">
+   209→                <!-- left column -->
+   210→            <div class="col-md-5">
+   211→                <!-- general form elements -->
+   212→                <div class="box box-primary">
+   213→                        <div class="box-header with-border">
+   214→                                <h3 class="box-title">Student Attendance History</h3>
+   215→                        </div><!-- /.box-header -->
+   216→                        <div class="box-body">
+   217→                        <div class="form-group" id="divYear">
+   218→                            <div class="col-md-3">
+   219→                                        <label>Year</label>
+   220→                                </div>
+   221→                                <div class="col-md-7" id="divYear1">
+   222→                                <select name="year" class="form-control" id="year" style="width:105%;" ><!--MSK-000107-->
+   223→                                    <option>Select Year</option>
+   224→<?php
+   225→include_once('../controller/config.php');
+   226→
+   227→    
+   228→$sql="SELECT 
+   229→      DISTINCT year
+   230→      FROM
+   231→         student_attendance
+   232→      ORDER BY
+   233→         year";
+   234→$result=mysqli_query($conn,$sql);
+   235→if(mysqli_num_rows($result) > 0){
+   236→        while($row=mysqli_fetch_assoc($result)){
+   237→?> 
+   238→                                    <option value="<?php echo $row["year"]; ?>"><?php echo $row['year']; ?></option>
+   239→<?php }} ?>
+   240→                                </select>
+   241→                                </div>
+   242→                        </div> 
+   243→                        <br><br>
+   244→                        <div class="form-group" id="divGrade">
+   245→                                <div class="col-md-3">
+   246→                                        <label>Grade</label>
+   247→                                </div>
+   248→                                <div class="col-md-7" id="divGrade1">
+   249→                                <select name="grade" class="form-control" id="grade" style="width:105%;" ><!--MSK-000107-->
+   250→                                    <option>Select Grade</option>
+   251→<?php
+   252→include_once('../controller/config.php');
+   253→$index=$_SESSION["index_number"];
+   254→$current_year=date('Y');
+   255→    
+   256→$sql="SELECT * FROM grade";
+   257→$result=mysqli_query($conn,$sql);
+   258→if(mysqli_num_rows($result) > 0){
+   259→        while($row=mysqli_fetch_assoc($result)){
+   260→?> 
+   261→                                    <option value="<?php echo $row["id"]; ?>"><?php echo $row['name']; ?></option>
+   262→<?php }} ?>
+   263→                                </select>
+   264→                                </div>
+   265→                        </div>   
+   266→                        <br><br>
+   267→                         <div class="form-group " id="divMonth">
+   268→                            <div class="col-md-3">
+   269→                                <label>Month</label>
+   270→                            </div>
+   271→                                <div class="col-md-7" id="divMonth1">
+   272→                                <select name="month" class="form-control " id="month" style="width:105%;"><!--MSK-000107-->
+   273→                                    <option>Select Month</option>
+   274→                                    <option value="0">January</option>
+   275→                                    <option value="1">February</option>
+   276→                                    <option value="2">March</option>
+   277→                                    <option value="3">April</option>
+   278→                                    <option value="4">May</option>
+   279→                                    <option value="5">June</option>
+   280→                                    <option value="6">July</option>
+   281→                                    <option value="7">August</option>
+   282→                                    <option value="8">September</option>
+   283→                                    <option value="9">October</option>
+   284→                                    <option value="10">November</option>
+   285→                                    <option value="11">December</option>
+   286→                                </select>
+   287→                                </div>
+   288→                        </div>   
+   289→                        </div><!-- /.box-body -->
+   290→                        <div class="box-footer">
+   291→                                <input type="hidden" id="my_index" value="<?php echo $my_index; ?>">
+   292→                        <button type="button" id="btnSubmit" class="btn btn-primary"  onClick="showStudent(this)">Submit</button><!--MSK-000108-->
+   293→                        </div>
+   294→                </div><!-- /.box -->
+   295→                </div>
+   296→        </div>
+   297→        </section><!-- End of form section -->
+   298→
+   299→        <!-- table for view all records-->
+   300→    <section class="content" > <!-- Start of table section -->
+   301→        <div class="row" id="table1"><!--MSK-000112--> 
+   302→           
+   303→        </div>
+   304→    </section> <!-- End of table section --> 
+   305→        
+   306→<script>
+   307→function showStudent(){
+   308→//MSK-000109
+   309→        var year = document.getElementById("year").value;
+   310→        var month = document.getElementById("month").value;
+   311→        var grade = document.getElementById("grade").value;
+   312→        
+   313→        if(year == 'Select Year'){
+   314→                
+   315→                $("#btnSubmit").attr("disabled", true);
+   316→                $('#divYear').addClass('has-error');
+   317→                $('#divYear1').addClass('has-feedback');
+   318→                $('#divYear1').append('<span id="spanYear" class="glyphicon glyphicon-remove form-control-feedback set-width-tooltip" data-toggle="tooltip"    title="The year is required" ></span>'); 
+   319→                                        
+   320→                $("#year").change(function(){
+   321→                        
+   322→                        //MSK-00128-classroom
+   323→                        $("#btnSubmit").attr("disabled", false);        
+   324→                        $('#divYear').removeClass('has-error has-feedback');
+   325→                        $('#spanYear').remove();
+   326→                                                
+   327→                });
+   328→                
+   329→        }
+   330→        
+   331→        if(month == 'Select Month'){
+   332→                
+   333→                $("#btnSubmit").attr("disabled", true);
+   334→                $('#divMonth').addClass('has-error');
+   335→                $('#divMonth1').addClass('has-feedback');
+   336→                $('#divMonth1').append('<span id="spanMonth" class="glyphicon glyphicon-remove form-control-feedback set-width-tooltip" data-toggle="tooltip"    title="The month is required" ></span>');      
+   337→                                        
+   338→                $("#month").change(function(){
+   339→                        
+   340→                        //MSK-00128-classroom
+   341→                        $("#btnSubmit").attr("disabled", false);        
+   342→                        $('#divMonth').removeClass('has-error has-feedback');
+   343→                        $('#spanMonth').remove();
+   344→                                                
+   345→                });
+   346→                
+   347→        }
+   348→        
+   349→        if(grade == 'Select Grade'){
+   350→                
+   351→                $("#btnSubmit").attr("disabled", true);
+   352→                $('#divGrade').addClass('has-error');
+   353→                $('#divGrade1').addClass('has-feedback');
+   354→                $('#divGrade1').append('<span id="spanGrade" class="glyphicon glyphicon-remove form-control-feedback set-width-tooltip" data-toggle="tooltip"    title="The grade is required" ></span>');      
+   355→                                        
+   356→                $("#grade").change(function(){
+   357→                        
+   358→                        //MSK-00128-classroom
+   359→                        $("#btnSubmit").attr("disabled", false);        
+   360→                        $('#divGrade').removeClass('has-error has-feedback');
+   361→                        $('#spanGrade').remove();
+   362→                                                
+   363→                });
+   364→                
+   365→        }
+   366→        
+   367→        if(year == 'Select Year' || month == 'Select Month' || grade == 'Select Grade'){
+   368→        
+   369→        }else{
+   370→                var xhttp = new XMLHttpRequest();//MSK-000110-Start Ajax  
+   371→                xhttp.onreadystatechange = function() {
+   372→                        
+   373→                if (this.readyState == 4 && this.status == 200) {       
+   374→                                        
+   375→                                document.getElementById('table1').innerHTML = this.responseText;//MSK-000111
+   376→                                
+   377→                                $(function () {
+   378→                                        $("#example1").DataTable();
+   379→                                });
+   380→                                                                                                
+   381→                }
+   382→                        
+   383→                };
+   384→                        
+   385→        xhttp.open("GET", "show_student2.php?year="+year  +  "&grade="+grade +  "&month="+month, true);                                                                                         
+   386→                xhttp.send();//MSK-000110-End Ajax
+   387→                
+   388→        }
+   389→                
+   390→};
+   391→
+   392→</script>
+   393→
+   394→        <section class="content" > <!-- Start of table section -->
+   395→        <div class="row" id="table2"><!--MSK-000112--> 
+   396→           
+   397→        </div>
+   398→    </section> <!-- End of table section --> 
+   399→    
+   400→    <div id="stdProfile">
+   401→    
+   402→    </div>
+   403→
+   404→
+   405→<script>
+   406→
+   407→function studentProfile(std_index){
+   408→        
+   409→        var xhttp = new XMLHttpRequest();//MSK-00149-Start Ajax  
+   410→                xhttp.onreadystatechange = function() {
+   411→                                                                                                                                        
+   412→                        if (this.readyState == 4 && this.status == 200) {
+   413→                                                                                                                                                
+   414→                                document.getElementById('stdProfile').innerHTML = this.responseText;
+   415→                                $('#modalviewStudent').modal('show');                                                                                                           
+   416→                        }
+   417→                };
+   418→                                                                                                                                
+   419→                xhttp.open("GET", "student_profile.php?std_index=" + std_index , true);                                                                                         
+   420→                xhttp.send();   
+   421→        
+   422→        
+   423→};
+   424→
+   425→function show_calendar(year1,month1){
+   426→        
+   427→        var status = $('#status5').val().split(',');
+   428→        var date_no2 = $('#date_no2').val().split(',');
+   429→        
+   430→        var y1 = Number(year1);
+   431→        var m1 = Number(month1);
+   432→        
+   433→        var count5 = date_no2.length;
+   434→        
+   435→        var d = new Date();    //new Date('2017','08','25');
+   436→        var month_name = ['January','February','March','April','May','June','July','August','September','Octomber','November','December'];      
+   437→                
+   438→        var month = m1; //0-11
+   439→        var year = y1; //2017 
+   440→        var first_date = month_name[month] + " " + 1 + " " + year;
+   441→                
+   442→        // August 31 2017
+   443→                
+   444→        var tmp = new Date(first_date).toDateString();
+   445→        // Tue Aug 01 2017...
+   446→                
+   447→        var first_day = tmp.substring(0,3); //Thu
+   448→        var day_name = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+   449→        var day_no = day_name.indexOf(first_day);  //4
+   450→        var days = new Date(year, month+1, 0).getDate(); //31
+   451→        // Thu Aug 31 2017...
+   452→                
+   453→        var calendar = get_calendar(day_no,days);
+   454→                
+   455→        document.getElementById("calendar_month_year").innerHTML = month_name[month]+" "+year;
+   456→        document.getElementById("calendar_dates").appendChild(calendar);
+   457→                        
+   458→        for(var i=0; i<count5; i++){
+   459→                
+   460→                var d_no = parseInt(date_no2[i], 10);
+   461→                        
+   462→                if(status[i] == 'Present'){
+   463→                        $("#td_"+d_no).css("background-color", "#00FF66");
+   464→                }
+   465→                        
+   466→                if(status[i] == 'Absent'){
+   467→                        $("#td_"+d_no).css("background-color", "#FF0033");
+   468→                }
+   469→        
+   470→        }
+   471→                                
+   472→};
+   473→
+   474→function get_calendar(day_no,days){
+   475→        
+   476→        var table = document.createElement('table');
+   477→        var tr = document.createElement('tr');
+   478→
+   479→        table.className = 'cal-table';
+   480→        
+   481→        // row for the day letters
+   482→        for(var c=0; c<=6; c++){
+   483→                
+   484→                var th = document.createElement('th');
+   485→                th.innerHTML =  ['S','M','T','W','T','F','S'][c];
+   486→                tr.appendChild(th);
+   487→                th.className = "tHead";
+   488→                
+   489→        }
+   490→        
+   491→        table.appendChild(tr);
+   492→        
+   493→        //create 2nd row
+   494→        
+   495→        tr = document.createElement('tr');
+   496→        
+   497→        var c;
+   498→        for(c=0; c<=6; c++){
+   499→                if(c== day_no){
+   500→                        break;
+   501→                }
+   502→                var td = document.createElement('td');
+   503→                td.innerHTML = "";
+   504→                tr.appendChild(td);
+   505→                td.className = "td_no_number";
+   506→                tr.className = 'cal-tr';
+   507→        }
+   508→        
+   509→        var count = 1;
+   510→        for(; c<=6; c++){
+   511→                
+   512→                var td = document.createElement('td');
+   513→                td.id = "td_"+count;
+   514→                td.className = 'cal-number-td';
+   515→                tr.appendChild(td);
+   516→                tr.className = 'cal-tr';
+   517→                
+   518→                var h5 = document.createElement('h5');
+   519→                h5.id="h5_"+count;
+   520→                h5.className = 'h5';
+   521→                td.appendChild(h5);
+   522→                h5.innerHTML = count;
+   523→                count++;
+   524→                
+   525→        }
+   526→        table.appendChild(tr);
+   527→        
+   528→        //rest of the date rows
+   529→        ;
+   530→        for(var r=3; r<=7; r++){
+   531→                tr = document.createElement('tr');
+   532→                for(var c=0; c<=6; c++){
+   533→                        if(count > days){
+   534→                                
+   535→                                for(; c<=6; c++){
+   536→                                        
+   537→                                        var td = document.createElement('td');
+   538→                                        td.innerHTML = "";
+   539→                                        tr.appendChild(td);
+   540→                                        td.className = "td_no_number";
+   541→                                        tr.className = 'cal-tr';
+   542→                                
+   543→                                }
+   544→                                table.appendChild(tr);
+   545→                                return table;
+   546→                        }
+   547→                        
+   548→                        var td = document.createElement('td');
+   549→                        td.id = "td_"+count;
+   550→                        td.className = 'cal-number-td';
+   551→                        
+   552→                        tr.appendChild(td);
+   553→                        
+   554→                        var h5 = document.createElement('h5');
+   555→                        h5.className = 'h5';
+   556→                        td.appendChild(h5);
+   557→                        h5.innerHTML = count;
+   558→                        count++;
+   559→                        tr.className = 'cal-tr';
+   560→                        
+   561→                }
+   562→                table.appendChild(tr);
+   563→                
+   564→        }
+   565→        
+   566→};      
+   567→
+   568→function showAttendance(year,month,index){
+   569→        
+   570→        var xhttp = new XMLHttpRequest();//MSK-000110-Start Ajax  
+   571→                xhttp.onreadystatechange = function() {
+   572→                        
+   573→                if (this.readyState == 4 && this.status == 200) {       
+   574→                                        
+   575→                                document.getElementById('table2').innerHTML = this.responseText;//MSK-000111
+   576→                                $(function () {
+   577→                                        $("#example3").DataTable();
+   578→                                });
+   579→                                show_calendar(year,month);
+   580→                                window.scrollTo(0,document.body.scrollHeight);
+   581→                                
+   582→                                
+   583→                }
+   584→                        
+   585→                };
+   586→                        
+   587→        xhttp.open("GET", "student_attendance_history1.php?year="+year +  "&month="+month +  "&index="+index, true);                                                                                            
+   588→                xhttp.send();//MSK-000110-End Ajax
+   589→};
+   590→
+   591→function showBarChart(subject,marks){
+   592→        
+   593→        $("#barChart").show();  
+   594→        $("#lineChart").hide();
+   595→        $("#pieChart").hide();
+   596→        $("#doughnutChart").hide();
+   597→ 
+   598→        var subject1 = JSON.parse("[" + subject + "]");
+   599→        var marks1 = JSON.parse("[" + marks + "]");
+   600→
+   601→        new Chart(document.getElementById("barChart"), {
+   602→                type: 'bar',
+   603→                data: {
+   604→                  labels: subject1,
+   605→                  datasets: [
+   606→                        {
+   607→                          label: "Number of Days",
+   608→                          backgroundColor: ["#3e95cd", "#8e5ea2","#3cba9f","#e8c3b9","#c45850"],
+   609→                          data: marks1
+   610→                        }
+   611→                  ]
+   612→                },
+   613→                options: {
+   614→                  legend: { display: false },
+   615→                  title: {
+   616→                        display: true,
+   617→                        text: ''
+   618→                  },
+   619→                  scales: {
+   620→                                yAxes: [{
+   621→                                        ticks: {
+   622→                                                beginAtZero:true
+   623→                                        }
+   624→                                }]
+   625→                        }
+   626→                }
+   627→        });
+   628→
+   629→};
+   630→
+   631→function showLineChart(subject,marks){
+   632→        
+   633→         $("#lineChart").show();        
+   634→         $("#barChart").hide();
+   635→         $("#pieChart").hide();
+   636→         $("#doughnutChart").hide();
+   637→ 
+   638→        var subject1 = JSON.parse("[" + subject + "]");
+   639→        var marks1 = JSON.parse("[" + marks + "]");
+   640→
+   641→        new Chart(document.getElementById("lineChart"), {
+   642→                type: 'line',
+   643→                data: {
+   644→                  labels: subject1,
+   645→                  datasets: [
+   646→                        {
+   647→                          label: "Number of Days",
+   648→                          borderColor: "#3e95cd",
+   649→                          fill: false,
+   650→                          data: marks1
+   651→                         
+   652→                        }
+   653→                  ]
+   654→                },
+   655→                options: {
+   656→                  legend: { display: false },
+   657→                  title: {
+   658→                        display: true,
+   659→                        text: ''
+   660→                  },
+   661→                  scales: {
+   662→                                yAxes: [{
+   663→                                        ticks: {
+   664→                                                beginAtZero:true
+   665→                                        }
+   666→                                }]
+   667→                        }
+   668→                }
+   669→        });
+   670→
+   671→};
+   672→
+   673→function showPieChart(subject,marks){
+   674→        
+   675→        $("#pieChart").show();  
+   676→        $("#barChart").hide();
+   677→        $("#lineChart").hide();
+   678→        $("#doughnutChart").hide();
+   679→        
+   680→        var subject1 = JSON.parse("[" + subject + "]");
+   681→        var marks1 = JSON.parse("[" + marks + "]");
+   682→
+   683→        new Chart(document.getElementById("pieChart"), {
+   684→                type: 'pie',
+   685→                data: {
+   686→                  labels: subject1,
+   687→                  datasets: [{
+   688→                        label: "Population (millions)",
+   689→                        backgroundColor: ["#3e95cd", "#8e5ea2","#3cba9f","#e8c3b9","#c45850"],
+   690→                        data: marks1
+   691→                  }]
+   692→                },
+   693→                options: {
+   694→                  title: {
+   695→                        display: true,
+   696→                        text: ''
+   697→                  }
+   698→                }
+   699→        });
+   700→        
+   701→};
+   702→
+   703→function showDoughnutChart(subject,marks){
+   704→
+   705→        $("#doughnutChart").show();     
+   706→        $("#barChart").hide();
+   707→        $("#lineChart").hide();
+   708→        $("#pieChart").hide();
+   709→        
+   710→        var subject1 = JSON.parse("[" + subject + "]");
+   711→        var marks1 = JSON.parse("[" + marks + "]");
+   712→
+   713→        new Chart(document.getElementById("doughnutChart"), {
+   714→                type: 'doughnut',
+   715→                data: {
+   716→                  labels: subject1,
+   717→                  datasets: [
+   718→                        {
+   719→                          label: "Population (millions)",
+   720→                          backgroundColor: ["#3e95cd", "#8e5ea2","#3cba9f","#e8c3b9","#c45850"],
+   721→                          data: marks1
+   722→                        }
+   723→                  ]
+   724→                },
+   725→                options: {
+   726→                  title: {
+   727→                        display: true,
+   728→                        text: ''
+   729→                  }
+   730→                }
+   731→        });
+   732→
+   733→};
+   734→
+   735→</script>
+   736→
+   737→<!--redirect your own url when clicking browser back button -->
+   738→<script>
+   739→(function(window, location) {
+   740→history.replaceState(null, document.title, location.pathname+"#!/history");
+   741→history.pushState(null, document.title, location.pathname);
+   742→
+   743→window.addEventListener("popstate", function() {
+   744→  if(location.hash === "#!/history") {
+   745→    history.replaceState(null, document.title, location.pathname);
+   746→    setTimeout(function(){
+   747→      location.replace("../index.php");//path to when click back button
+   748→    },0);
+   749→  }
+   750→}, false);
+   751→}(window, location));
+   752→</script>
+   753→                
+   754→</div><!-- /.content-wrapper -->  
+   755→                          
+   756→<?php include_once('footer.php');?>

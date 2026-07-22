@@ -1,0 +1,1243 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import React, { useState, useEffect } from 'react'
+     4→     4→import {
+     5→     5→  Plus, Edit, Trash2, Bus, MapPin, Clock, DollarSign,
+     6→     6→  Search, ChevronDown, ChevronUp, X, Route, Users,
+     7→     7→  AlertCircle, CheckCircle2, XCircle, Timer, MapPinned
+     8→     8→} from 'lucide-react'
+     9→     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    10→    10→import { Button } from '@/components/ui/button'
+    11→    11→import { Input } from '@/components/ui/input'
+    12→    12→import { Label } from '@/components/ui/label'
+    13→    13→import { Badge } from '@/components/ui/badge'
+    14→    14→import {
+    15→    15→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+    16→    16→} from '@/components/ui/dialog'
+    17→    17→import {
+    18→    18→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+    19→    19→} from '@/components/ui/select'
+    20→    20→import { Textarea } from '@/components/ui/textarea'
+    21→    21→import { Skeleton } from '@/components/ui/skeleton'
+    22→    22→import { toast } from 'sonner'
+    23→    23→import { useAdminStore } from '@/lib/admin-store'
+    24→    24→
+    25→    25→// ===== Types =====
+    26→    26→interface Stop {
+    27→    27→  name: string
+    28→    28→  time: string
+    29→    29→}
+    30→    30→
+    31→    31→interface BusData {
+    32→    32→  id: string
+    33→    33→  plateNumber: string
+    34→    34→  driverName: string
+    35→    35→  color: string | null
+    36→    36→  capacity: number
+    37→    37→  active: boolean
+    38→    38→}
+    39→    39→
+    40→    40→interface BusRoute {
+    41→    41→  id: string
+    42→    42→  schoolId: string
+    43→    43→  busId: string
+    44→    44→  name: string
+    45→    45→  area: string
+    46→    46→  morningTime: string | null
+    47→    47→  afternoonTime: string | null
+    48→    48→  stops: string
+    49→    49→  monthlyFee: number
+    50→    50→  active: boolean
+    51→    51→  createdAt: string
+    52→    52→  updatedAt: string
+    53→    53→  bus?: {
+    54→    54→    id: string
+    55→    55→    plateNumber: string
+    56→    56→    driverName: string
+    57→    57→    color: string | null
+    58→    58→  }
+    59→    59→  _count?: { subscriptions: number }
+    60→    60→}
+    61→    61→
+    62→    62→interface RouteForm {
+    63→    63→  name: string
+    64→    64→  area: string
+    65→    65→  busId: string
+    66→    66→  morningTime: string
+    67→    67→  afternoonTime: string
+    68→    68→  monthlyFee: string
+    69→    69→  stops: Stop[]
+    70→    70→  active: boolean
+    71→    71→}
+    72→    72→
+    73→    73→const defaultForm: RouteForm = {
+    74→    74→  name: '',
+    75→    75→  area: '',
+    76→    76→  busId: '',
+    77→    77→  morningTime: '',
+    78→    78→  afternoonTime: '',
+    79→    79→  monthlyFee: '0',
+    80→    80→  stops: [],
+    81→    81→  active: true,
+    82→    82→}
+    83→    83→
+    84→    84→// ===== Helper: Parse stops JSON =====
+    85→    85→function parseStops(stopsJson: string): Stop[] {
+    86→    86→  try {
+    87→    87→    const parsed = JSON.parse(stopsJson)
+    88→    88→    if (Array.isArray(parsed)) {
+    89→    89→      return parsed.map((s: Record<string, string>) => ({
+    90→    90→        name: s.name || '',
+    91→    91→        time: s.time || '',
+    92→    92→      }))
+    93→    93→    }
+    94→    94→    return []
+    95→    95→  } catch {
+    96→    96→    return []
+    97→    97→  }
+    98→    98→}
+    99→    99→
+   100→   100→// ===== Helper: Stringify stops =====
+   101→   101→function stringifyStops(stops: Stop[]): string {
+   102→   102→  return JSON.stringify(stops)
+   103→   103→}
+   104→   104→
+   105→   105→// ===== Stops Timeline Component =====
+   106→   106→function StopsTimeline({ stops }: { stops: Stop[] }) {
+   107→   107→  if (stops.length === 0) {
+   108→   108→    return (
+   109→   109→      <p className="text-sm text-gray-400 italic">لا توجد محطات</p>
+   110→   110→    )
+   111→   111→  }
+   112→   112→
+   113→   113→  return (
+   114→   114→    <div className="flex flex-row-reverse items-start gap-0">
+   115→   115→      {stops.map((stop, index) => (
+   116→   116→        <div key={index} className="flex flex-col items-center flex-1 min-w-0">
+   117→   117→          {/* Stop circle */}
+   118→   118→          <div className="relative flex items-center w-full">
+   119→   119→            {/* Line before (right side in RTL) */}
+   120→   120→            {index < stops.length - 1 && (
+   121→   121→              <div className="flex-1 h-0.5 bg-teal-300" />
+   122→   122→            )}
+   123→   123→            {/* Circle */}
+   124→   124→            <div
+   125→   125→              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 ${
+   126→   126→                index === 0
+   127→   127→                  ? 'bg-teal-600 border-teal-600 text-white'
+   128→   128→                  : index === stops.length - 1
+   129→   129→                    ? 'bg-red-500 border-red-500 text-white'
+   130→   130→                    : 'bg-white border-teal-400 text-teal-600'
+   131→   131→              }`}
+   132→   132→            >
+   133→   133→              <span className="text-[10px] font-bold">
+   134→   134→                {index === 0 ? '●' : index === stops.length - 1 ? '■' : index}
+   135→   135→              </span>
+   136→   136→            </div>
+   137→   137→            {/* Line after (left side in RTL) */}
+   138→   138→            {index > 0 && (
+   139→   139→              <div className="flex-1 h-0.5 bg-teal-300" />
+   140→   140→            )}
+   141→   141→          </div>
+   142→   142→          {/* Stop info */}
+   143→   143→          <div className="mt-1.5 text-center px-0.5">
+   144→   144→            <p className="text-xs font-medium text-gray-700 truncate max-w-[80px]">
+   145→   145→              {stop.name}
+   146→   146→            </p>
+   147→   147→            {stop.time && (
+   148→   148→              <p className="text-[10px] text-teal-600 font-medium">{stop.time}</p>
+   149→   149→            )}
+   150→   150→          </div>
+   151→   151→        </div>
+   152→   152→      ))}
+   153→   153→    </div>
+   154→   154→  )
+   155→   155→}
+   156→   156→
+   157→   157→// ===== Stops Editor Component =====
+   158→   158→function StopsEditor({
+   159→   159→  stops,
+   160→   160→  onChange,
+   161→   161→}: {
+   162→   162→  stops: Stop[]
+   163→   163→  onChange: (stops: Stop[]) => void
+   164→   164→}) {
+   165→   165→  const addStop = () => {
+   166→   166→    onChange([...stops, { name: '', time: '' }])
+   167→   167→  }
+   168→   168→
+   169→   169→  const removeStop = (index: number) => {
+   170→   170→    onChange(stops.filter((_, i) => i !== index))
+   171→   171→  }
+   172→   172→
+   173→   173→  const updateStop = (index: number, field: keyof Stop, value: string) => {
+   174→   174→    const updated = [...stops]
+   175→   175→    updated[index] = { ...updated[index], [field]: value }
+   176→   176→    onChange(updated)
+   177→   177→  }
+   178→   178→
+   179→   179→  return (
+   180→   180→    <div className="space-y-3">
+   181→   181→      <div className="flex items-center justify-between">
+   182→   182→        <Label className="text-sm font-semibold text-gray-700">المحطات</Label>
+   183→   183→        <Button
+   184→   184→          type="button"
+   185→   185→          variant="outline"
+   186→   186→          size="sm"
+   187→   187→          onClick={addStop}
+   188→   188→          className="min-h-[44px] text-teal-700 border-teal-300 hover:bg-teal-50"
+   189→   189→        >
+   190→   190→          <Plus className="w-4 h-4 ml-1" />
+   191→   191→          إضافة محطة
+   192→   192→        </Button>
+   193→   193→      </div>
+   194→   194→
+   195→   195→      {stops.length === 0 && (
+   196→   196→        <p className="text-sm text-gray-400 italic text-center py-3">
+   197→   197→          لم يتم إضافة محطات بعد. اضغط &quot;إضافة محطة&quot; للبدء.
+   198→   198→        </p>
+   199→   199→      )}
+   200→   200→
+   201→   201→      <div className="space-y-2">
+   202→   202→        {stops.map((stop, index) => (
+   203→   203→          <div
+   204→   204→            key={index}
+   205→   205→            className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-100"
+   206→   206→          >
+   207→   207→            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-100 text-teal-700 text-xs font-bold shrink-0">
+   208→   208→              {index + 1}
+   209→   209→            </div>
+   210→   210→            <Input
+   211→   211→              placeholder="اسم المحطة"
+   212→   212→              value={stop.name}
+   213→   213→              onChange={(e) => updateStop(index, 'name', e.target.value)}
+   214→   214→              className="flex-1 min-h-[44px] text-sm"
+   215→   215→            />
+   216→   216→            <Input
+   217→   217→              placeholder="الوقت"
+   218→   218→              value={stop.time}
+   219→   219→              onChange={(e) => updateStop(index, 'time', e.target.value)}
+   220→   220→              className="w-24 min-h-[44px] text-sm"
+   221→   221→              type="time"
+   222→   222→            />
+   223→   223→            <Button
+   224→   224→              type="button"
+   225→   225→              variant="ghost"
+   226→   226→              size="icon"
+   227→   227→              onClick={() => removeStop(index)}
+   228→   228→              className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0 min-h-[44px] min-w-[44px]"
+   229→   229→            >
+   230→   230→              <X className="w-4 h-4" />
+   231→   231→            </Button>
+   232→   232→          </div>
+   233→   233→        ))}
+   234→   234→      </div>
+   235→   235→    </div>
+   236→   236→  )
+   237→   237→}
+   238→   238→
+   239→   239→// ===== Main Component =====
+   240→   240→export function BusRoutesManagement() {
+   241→   241→  const { selectedSchoolId } = useAdminStore()
+   242→   242→
+   243→   243→  // Data state
+   244→   244→  const [routes, setRoutes] = useState<BusRoute[]>([])
+   245→   245→  const [buses, setBuses] = useState<BusData[]>([])
+   246→   246→  const [loading, setLoading] = useState(true)
+   247→   247→  const [saving, setSaving] = useState(false)
+   248→   248→
+   249→   249→  // Tab state
+   250→   250→  const [activeTab, setActiveTab] = useState<'list' | 'add'>('list')
+   251→   251→
+   252→   252→  // Filter state
+   253→   253→  const [searchQuery, setSearchQuery] = useState('')
+   254→   254→  const [filterBusId, setFilterBusId] = useState('all')
+   255→   255→  const [filterArea, setFilterArea] = useState('')
+   256→   256→
+   257→   257→  // Edit dialog state
+   258→   258→  const [editDialogOpen, setEditDialogOpen] = useState(false)
+   259→   259→  const [editingRoute, setEditingRoute] = useState<BusRoute | null>(null)
+   260→   260→  const [editForm, setEditForm] = useState<RouteForm>(defaultForm)
+   261→   261→
+   262→   262→  // Delete dialog state
+   263→   263→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   264→   264→  const [deletingRoute, setDeletingRoute] = useState<BusRoute | null>(null)
+   265→   265→
+   266→   266→  // Add form state
+   267→   267→  const [addForm, setAddForm] = useState<RouteForm>(defaultForm)
+   268→   268→
+   269→   269→  // Expanded stops state
+   270→   270→  const [expandedStops, setExpandedStops] = useState<Record<string, boolean>>({})
+   271→   271→
+   272→   272→  // ===== Load routes =====
+   273→   273→  useEffect(() => {
+   274→   274→    let cancelled = false
+   275→   275→    async function loadRoutes() {
+   276→   276→      if (!selectedSchoolId) return
+   277→   277→      setLoading(true)
+   278→   278→      try {
+   279→   279→        const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   280→   280→        if (filterBusId && filterBusId !== 'all') params.set('busId', filterBusId)
+   281→   281→        if (filterArea) params.set('area', filterArea)
+   282→   282→
+   283→   283→        const res = await fetch(`/api/bus-routes?${params.toString()}`)
+   284→   284→        if (res.ok) {
+   285→   285→          const data = await res.json()
+   286→   286→          if (!cancelled) setRoutes(data)
+   287→   287→        }
+   288→   288→      } catch (error) {
+   289→   289→        console.error('Error loading routes:', error)
+   290→   290→        if (!cancelled) toast.error('خطأ في تحميل خطوط السير')
+   291→   291→      } finally {
+   292→   292→        if (!cancelled) setLoading(false)
+   293→   293→      }
+   294→   294→    }
+   295→   295→    loadRoutes()
+   296→   296→    return () => { cancelled = true }
+   297→   297→  }, [selectedSchoolId, filterBusId, filterArea])
+   298→   298→
+   299→   299→  // ===== Load buses =====
+   300→   300→  useEffect(() => {
+   301→   301→    let cancelled = false
+   302→   302→    async function loadBuses() {
+   303→   303→      if (!selectedSchoolId) return
+   304→   304→      try {
+   305→   305→        const res = await fetch(`/api/buses?schoolId=${selectedSchoolId}&active=true`)
+   306→   306→        if (res.ok) {
+   307→   307→          const data = await res.json()
+   308→   308→          if (!cancelled) setBuses(data)
+   309→   309→        }
+   310→   310→      } catch (error) {
+   311→   311→        console.error('Error loading buses:', error)
+   312→   312→      }
+   313→   313→    }
+   314→   314→    loadBuses()
+   315→   315→    return () => { cancelled = true }
+   316→   316→  }, [selectedSchoolId])
+   317→   317→
+   318→   318→  // ===== Filter routes by search =====
+   319→   319→  const filteredRoutes = routes.filter((route) => {
+   320→   320→    if (!searchQuery) return true
+   321→   321→    const q = searchQuery.toLowerCase()
+   322→   322→    return (
+   323→   323→      route.name.toLowerCase().includes(q) ||
+   324→   324→      route.area.toLowerCase().includes(q) ||
+   325→   325→      (route.bus?.plateNumber?.toLowerCase().includes(q) ?? false) ||
+   326→   326→      (route.bus?.driverName?.toLowerCase().includes(q) ?? false)
+   327→   327→    )
+   328→   328→  })
+   329→   329→
+   330→   330→  // ===== Get unique areas for display =====
+   331→   331→  const uniqueAreas = Array.from(new Set(routes.map((r) => r.area))).sort()
+   332→   332→
+   333→   333→  // ===== Toggle stops expansion =====
+   334→   334→  const toggleStops = (routeId: string) => {
+   335→   335→    setExpandedStops((prev) => ({ ...prev, [routeId]: !prev[routeId] }))
+   336→   336→  }
+   337→   337→
+   338→   338→  // ===== Open edit dialog =====
+   339→   339→  const openEdit = (route: BusRoute) => {
+   340→   340→    setEditingRoute(route)
+   341→   341→    setEditForm({
+   342→   342→      name: route.name,
+   343→   343→      area: route.area,
+   344→   344→      busId: route.busId,
+   345→   345→      morningTime: route.morningTime || '',
+   346→   346→      afternoonTime: route.afternoonTime || '',
+   347→   347→      monthlyFee: String(route.monthlyFee),
+   348→   348→      stops: parseStops(route.stops),
+   349→   349→      active: route.active,
+   350→   350→    })
+   351→   351→    setEditDialogOpen(true)
+   352→   352→  }
+   353→   353→
+   354→   354→  // ===== Save edit =====
+   355→   355→  const saveEdit = async () => {
+   356→   356→    if (!editingRoute) return
+   357→   357→    if (!editForm.name.trim() || !editForm.area.trim() || !editForm.busId) {
+   358→   358→      toast.error('يرجى ملء جميع الحقول المطلوبة')
+   359→   359→      return
+   360→   360→    }
+   361→   361→    setSaving(true)
+   362→   362→    try {
+   363→   363→      const res = await fetch(`/api/bus-routes/${editingRoute.id}`, {
+   364→   364→        method: 'PUT',
+   365→   365→        headers: { 'Content-Type': 'application/json' },
+   366→   366→        body: JSON.stringify({
+   367→   367→          schoolId: selectedSchoolId,
+   368→   368→          ...editForm,
+   369→   369→          monthlyFee: parseFloat(editForm.monthlyFee) || 0,
+   370→   370→          stops: stringifyStops(editForm.stops),
+   371→   371→        }),
+   372→   372→      })
+   373→   373→      if (res.ok) {
+   374→   374→        toast.success('تم تحديث خط السير بنجاح')
+   375→   375→        setEditDialogOpen(false)
+   376→   376→        setEditingRoute(null)
+   377→   377→        // Refresh list
+   378→   378→        const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   379→   379→        if (filterBusId && filterBusId !== 'all') params.set('busId', filterBusId)
+   380→   380→        if (filterArea) params.set('area', filterArea)
+   381→   381→        const refreshRes = await fetch(`/api/bus-routes?${params.toString()}`)
+   382→   382→        if (refreshRes.ok) {
+   383→   383→          const data = await refreshRes.json()
+   384→   384→          setRoutes(data)
+   385→   385→        }
+   386→   386→      } else {
+   387→   387→        const data = await res.json()
+   388→   388→        toast.error(data.error || 'خطأ في تحديث خط السير')
+   389→   389→      }
+   390→   390→    } catch {
+   391→   391→      toast.error('خطأ في الاتصال بالخادم')
+   392→   392→    } finally {
+   393→   393→      setSaving(false)
+   394→   394→    }
+   395→   395→  }
+   396→   396→
+   397→   397→  // ===== Delete route =====
+   398→   398→  const confirmDelete = async () => {
+   399→   399→    if (!deletingRoute) return
+   400→   400→    setSaving(true)
+   401→   401→    try {
+   402→   402→      const res = await fetch(
+   403→   403→        `/api/bus-routes/${deletingRoute.id}?schoolId=${selectedSchoolId}`,
+   404→   404→        { method: 'DELETE' }
+   405→   405→      )
+   406→   406→      if (res.ok) {
+   407→   407→        toast.success('تم حذف خط السير بنجاح')
+   408→   408→        setDeleteDialogOpen(false)
+   409→   409→        setDeletingRoute(null)
+   410→   410→        setRoutes((prev) => prev.filter((r) => r.id !== deletingRoute.id))
+   411→   411→      } else {
+   412→   412→        const data = await res.json()
+   413→   413→        toast.error(data.error || 'خطأ في حذف خط السير')
+   414→   414→      }
+   415→   415→    } catch {
+   416→   416→      toast.error('خطأ في الاتصال بالخادم')
+   417→   417→    } finally {
+   418→   418→      setSaving(false)
+   419→   419→    }
+   420→   420→  }
+   421→   421→
+   422→   422→  // ===== Add new route =====
+   423→   423→  const addRoute = async () => {
+   424→   424→    if (!addForm.name.trim() || !addForm.area.trim() || !addForm.busId) {
+   425→   425→      toast.error('يرجى ملء جميع الحقول المطلوبة')
+   426→   426→      return
+   427→   427→    }
+   428→   428→    setSaving(true)
+   429→   429→    try {
+   430→   430→      const res = await fetch('/api/bus-routes', {
+   431→   431→        method: 'POST',
+   432→   432→        headers: { 'Content-Type': 'application/json' },
+   433→   433→        body: JSON.stringify({
+   434→   434→          schoolId: selectedSchoolId,
+   435→   435→          ...addForm,
+   436→   436→          monthlyFee: parseFloat(addForm.monthlyFee) || 0,
+   437→   437→          stops: stringifyStops(addForm.stops),
+   438→   438→        }),
+   439→   439→      })
+   440→   440→      if (res.ok) {
+   441→   441→        toast.success('تم إضافة خط السير بنجاح')
+   442→   442→        setAddForm(defaultForm)
+   443→   443→        setActiveTab('list')
+   444→   444→        // Refresh list
+   445→   445→        const params = new URLSearchParams({ schoolId: selectedSchoolId })
+   446→   446→        const refreshRes = await fetch(`/api/bus-routes?${params.toString()}`)
+   447→   447→        if (refreshRes.ok) {
+   448→   448→          const data = await refreshRes.json()
+   449→   449→          setRoutes(data)
+   450→   450→        }
+   451→   451→      } else {
+   452→   452→        const data = await res.json()
+   453→   453→        toast.error(data.error || 'خطأ في إضافة خط السير')
+   454→   454→      }
+   455→   455→    } catch {
+   456→   456→      toast.error('خطأ في الاتصال بالخادم')
+   457→   457→    } finally {
+   458→   458→      setSaving(false)
+   459→   459→    }
+   460→   460→  }
+   461→   461→
+   462→   462→  // ===== Toggle route active status =====
+   463→   463→  const toggleActive = async (route: BusRoute) => {
+   464→   464→    try {
+   465→   465→      const res = await fetch(`/api/bus-routes/${route.id}`, {
+   466→   466→        method: 'PUT',
+   467→   467→        headers: { 'Content-Type': 'application/json' },
+   468→   468→        body: JSON.stringify({
+   469→   469→          schoolId: selectedSchoolId,
+   470→   470→          active: !route.active,
+   471→   471→        }),
+   472→   472→      })
+   473→   473→      if (res.ok) {
+   474→   474→        toast.success(route.active ? 'تم تعطيل خط السير' : 'تم تفعيل خط السير')
+   475→   475→        setRoutes((prev) =>
+   476→   476→          prev.map((r) => (r.id === route.id ? { ...r, active: !r.active } : r))
+   477→   477→        )
+   478→   478→      } else {
+   479→   479→        toast.error('خطأ في تحديث حالة خط السير')
+   480→   480→      }
+   481→   481→    } catch {
+   482→   482→      toast.error('خطأ في الاتصال بالخادم')
+   483→   483→    }
+   484→   484→  }
+   485→   485→
+   486→   486→  // ===== Render loading skeleton =====
+   487→   487→  if (loading && routes.length === 0) {
+   488→   488→    return (
+   489→   489→      <div className="space-y-4" dir="rtl">
+   490→   490→        <div className="flex items-center gap-3">
+   491→   491→          <Skeleton className="h-10 w-48" />
+   492→   492→          <Skeleton className="h-10 w-32" />
+   493→   493→        </div>
+   494→   494→        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   495→   495→          {[1, 2, 3, 4].map((i) => (
+   496→   496→            <Skeleton key={i} className="h-64 rounded-xl" />
+   497→   497→          ))}
+   498→   498→        </div>
+   499→   499→      </div>
+   500→   500→    )
+   501→   501→  }
+   502→   502→
+   503→   503→  return (
+   504→   504→    <div className="space-y-4" dir="rtl">
+   505→   505→      {/* ===== Tabs ===== */}
+   506→   506→      <div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg w-fit">
+   507→   507→        <button
+   508→   508→          onClick={() => setActiveTab('list')}
+   509→   509→          className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all min-h-[44px] ${
+   510→   510→            activeTab === 'list'
+   511→   511→              ? 'bg-white text-[#610000] shadow-sm'
+   512→   512→              : 'text-gray-500 hover:text-gray-700'
+   513→   513→          }`}
+   514→   514→        >
+   515→   515→          <Route className="w-4 h-4" />
+   516→   516→          خطوط السير
+   517→   517→        </button>
+   518→   518→        <button
+   519→   519→          onClick={() => setActiveTab('add')}
+   520→   520→          className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all min-h-[44px] ${
+   521→   521→            activeTab === 'add'
+   522→   522→              ? 'bg-white text-[#610000] shadow-sm'
+   523→   523→              : 'text-gray-500 hover:text-gray-700'
+   524→   524→          }`}
+   525→   525→        >
+   526→   526→          <Plus className="w-4 h-4" />
+   527→   527→          إضافة خط
+   528→   528→        </button>
+   529→   529→      </div>
+   530→   530→
+   531→   531→      {/* ===== Tab 1: Routes List ===== */}
+   532→   532→      {activeTab === 'list' && (
+   533→   533→        <div className="space-y-4">
+   534→   534→          {/* Search & Filters */}
+   535→   535→          <Card className="border-0 shadow-sm">
+   536→   536→            <CardContent className="p-4">
+   537→   537→              <div className="flex flex-col sm:flex-row gap-3">
+   538→   538→                {/* Search */}
+   539→   539→                <div className="relative flex-1">
+   540→   540→                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+   541→   541→                  <Input
+   542→   542→                    placeholder="بحث بالاسم أو المنطقة..."
+   543→   543→                    value={searchQuery}
+   544→   544→                    onChange={(e) => setSearchQuery(e.target.value)}
+   545→   545→                    className="pr-9 min-h-[44px]"
+   546→   546→                  />
+   547→   547→                </div>
+   548→   548→
+   549→   549→                {/* Filter by bus */}
+   550→   550→                <Select
+   551→   551→                  value={filterBusId}
+   552→   552→                  onValueChange={setFilterBusId}
+   553→   553→                >
+   554→   554→                  <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]">
+   555→   555→                    <Bus className="w-4 h-4 ml-1.5 text-gray-400" />
+   556→   556→                    <SelectValue placeholder="كل الباصات" />
+   557→   557→                  </SelectTrigger>
+   558→   558→                  <SelectContent>
+   559→   559→                    <SelectItem value="all">كل الباصات</SelectItem>
+   560→   560→                    {buses.map((bus) => (
+   561→   561→                      <SelectItem key={bus.id} value={bus.id}>
+   562→   562→                        {bus.plateNumber} - {bus.driverName}
+   563→   563→                      </SelectItem>
+   564→   564→                    ))}
+   565→   565→                  </SelectContent>
+   566→   566→                </Select>
+   567→   567→
+   568→   568→                {/* Filter by area */}
+   569→   569→                <Select
+   570→   570→                  value={filterArea}
+   571→   571→                  onValueChange={setFilterArea}
+   572→   572→                >
+   573→   573→                  <SelectTrigger className="w-full sm:w-[160px] min-h-[44px]">
+   574→   574→                    <MapPin className="w-4 h-4 ml-1.5 text-gray-400" />
+   575→   575→                    <SelectValue placeholder="كل المناطق" />
+   576→   576→                  </SelectTrigger>
+   577→   577→                  <SelectContent>
+   578→   578→                    <SelectItem value="">كل المناطق</SelectItem>
+   579→   579→                    {uniqueAreas.map((area) => (
+   580→   580→                      <SelectItem key={area} value={area}>
+   581→   581→                        {area}
+   582→   582→                      </SelectItem>
+   583→   583→                    ))}
+   584→   584→                  </SelectContent>
+   585→   585→                </Select>
+   586→   586→              </div>
+   587→   587→            </CardContent>
+   588→   588→          </Card>
+   589→   589→
+   590→   590→          {/* Stats Summary */}
+   591→   591→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   592→   592→            <Card className="border-0 shadow-sm bg-gradient-to-br from-teal-50 to-teal-100/50">
+   593→   593→              <CardContent className="p-3 text-center">
+   594→   594→                <p className="text-2xl font-bold text-teal-700">{routes.length}</p>
+   595→   595→                <p className="text-xs text-teal-600">إجمالي الخطوط</p>
+   596→   596→              </CardContent>
+   597→   597→            </Card>
+   598→   598→            <Card className="border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100/50">
+   599→   599→              <CardContent className="p-3 text-center">
+   600→   600→                <p className="text-2xl font-bold text-green-700">
+   601→   601→                  {routes.filter((r) => r.active).length}
+   602→   602→                </p>
+   603→   603→                <p className="text-xs text-green-600">خطوط نشطة</p>
+   604→   604→              </CardContent>
+   605→   605→            </Card>
+   606→   606→            <Card className="border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50">
+   607→   607→              <CardContent className="p-3 text-center">
+   608→   608→                <p className="text-2xl font-bold text-amber-700">
+   609→   609→                  {routes.reduce((sum, r) => sum + (r._count?.subscriptions || 0), 0)}
+   610→   610→                </p>
+   611→   611→                <p className="text-xs text-amber-600">إجمالي المشتركين</p>
+   612→   612→              </CardContent>
+   613→   613→            </Card>
+   614→   614→            <Card className="border-0 shadow-sm bg-gradient-to-br from-purple-50 to-purple-100/50">
+   615→   615→              <CardContent className="p-3 text-center">
+   616→   616→                <p className="text-2xl font-bold text-purple-700">
+   617→   617→                  {buses.length}
+   618→   618→                </p>
+   619→   619→                <p className="text-xs text-purple-600">باصات نشطة</p>
+   620→   620→              </CardContent>
+   621→   621→            </Card>
+   622→   622→          </div>
+   623→   623→
+   624→   624→          {/* Routes Grid */}
+   625→   625→          {filteredRoutes.length === 0 ? (
+   626→   626→            <Card className="border-0 shadow-sm">
+   627→   627→              <CardContent className="py-16 text-center">
+   628→   628→                <Route className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+   629→   629→                <h3 className="text-lg font-semibold text-gray-500 mb-1">
+   630→   630→                  لا توجد خطوط سير
+   631→   631→                </h3>
+   632→   632→                <p className="text-sm text-gray-400 mb-4">
+   633→   633→                  {searchQuery || filterBusId !== 'all' || filterArea
+   634→   634→                    ? 'لا توجد نتائج مطابقة للبحث'
+   635→   635→                    : 'ابدأ بإضافة خط سير جديد'}
+   636→   636→                </p>
+   637→   637→                <Button
+   638→   638→                  onClick={() => setActiveTab('add')}
+   639→   639→                  className="min-h-[44px] bg-[#610000] hover:bg-[#7a0000]"
+   640→   640→                >
+   641→   641→                  <Plus className="w-4 h-4 ml-1" />
+   642→   642→                  إضافة خط سير
+   643→   643→                </Button>
+   644→   644→              </CardContent>
+   645→   645→            </Card>
+   646→   646→          ) : (
+   647→   647→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   648→   648→              {filteredRoutes.map((route) => {
+   649→   649→                const stops = parseStops(route.stops)
+   650→   650→                const isExpanded = expandedStops[route.id] || false
+   651→   651→
+   652→   652→                return (
+   653→   653→                  <Card
+   654→   654→                    key={route.id}
+   655→   655→                    className={`border-0 shadow-sm overflow-hidden transition-all duration-200 ${
+   656→   656→                      !route.active ? 'opacity-60' : ''
+   657→   657→                    }`}
+   658→   658→                  >
+   659→   659→                    {/* Card Header with bus color indicator */}
+   660→   660→                    <CardHeader className="pb-3 pt-4 px-4">
+   661→   661→                      <div className="flex items-start justify-between">
+   662→   662→                        <div className="flex items-center gap-2 flex-1 min-w-0">
+   663→   663→                          {/* Bus color indicator */}
+   664→   664→                          <div
+   665→   665→                            className="w-3 h-3 rounded-full shrink-0 border border-gray-200"
+   666→   666→                            style={{ backgroundColor: route.bus?.color || '#0D9488' }}
+   667→   667→                          />
+   668→   668→                          <CardTitle className="text-lg font-bold text-gray-800 truncate">
+   669→   669→                            {route.name}
+   670→   670→                          </CardTitle>
+   671→   671→                        </div>
+   672→   672→                        <div className="flex items-center gap-1 shrink-0">
+   673→   673→                          <Badge
+   674→   674→                            variant={route.active ? 'default' : 'secondary'}
+   675→   675→                            className={`text-xs cursor-pointer min-h-[28px] ${
+   676→   676→                              route.active
+   677→   677→                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+   678→   678→                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+   679→   679→                            }`}
+   680→   680→                            onClick={() => toggleActive(route)}
+   681→   681→                          >
+   682→   682→                            {route.active ? (
+   683→   683→                              <CheckCircle2 className="w-3 h-3 ml-1" />
+   684→   684→                            ) : (
+   685→   685→                              <XCircle className="w-3 h-3 ml-1" />
+   686→   686→                            )}
+   687→   687→                            {route.active ? 'نشط' : 'معطل'}
+   688→   688→                          </Badge>
+   689→   689→                        </div>
+   690→   690→                      </div>
+   691→   691→                    </CardHeader>
+   692→   692→
+   693→   693→                    <CardContent className="px-4 pb-4 space-y-3">
+   694→   694→                      {/* Bus info */}
+   695→   695→                      <div className="flex items-center gap-2 text-sm text-gray-600">
+   696→   696→                        <Bus className="w-4 h-4 text-teal-500 shrink-0" />
+   697→   697→                        <span className="font-medium">
+   698→   698→                          {route.bus?.plateNumber || '—'}
+   699→   699→                        </span>
+   700→   700→                        <span className="text-gray-300">|</span>
+   701→   701→                        <span>{route.bus?.driverName || '—'}</span>
+   702→   702→                      </div>
+   703→   703→
+   704→   704→                      {/* Area */}
+   705→   705→                      <div className="flex items-center gap-2 text-sm text-gray-600">
+   706→   706→                        <MapPin className="w-4 h-4 text-teal-500 shrink-0" />
+   707→   707→                        <span>{route.area}</span>
+   708→   708→                      </div>
+   709→   709→
+   710→   710→                      {/* Times */}
+   711→   711→                      <div className="flex items-center gap-4">
+   712→   712→                        {route.morningTime && (
+   713→   713→                          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+   714→   714→                            <Timer className="w-4 h-4 text-amber-500" />
+   715→   715→                            <span className="text-xs text-gray-400">صباحاً</span>
+   716→   716→                            <span className="font-medium">{route.morningTime}</span>
+   717→   717→                          </div>
+   718→   718→                        )}
+   719→   719→                        {route.afternoonTime && (
+   720→   720→                          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+   721→   721→                            <Timer className="w-4 h-4 text-orange-500" />
+   722→   722→                            <span className="text-xs text-gray-400">ظهيراً</span>
+   723→   723→                            <span className="font-medium">{route.afternoonTime}</span>
+   724→   724→                          </div>
+   725→   725→                        )}
+   726→   726→                        {!route.morningTime && !route.afternoonTime && (
+   727→   727→                          <span className="text-xs text-gray-400">لا يوجد مواعيد محددة</span>
+   728→   728→                        )}
+   729→   729→                      </div>
+   730→   730→
+   731→   731→                      {/* Monthly Fee */}
+   732→   732→                      <div className="flex items-center gap-2 text-sm">
+   733→   733→                        <DollarSign className="w-4 h-4 text-green-500 shrink-0" />
+   734→   734→                        <span className="font-bold text-green-700">
+   735→   735→                          {route.monthlyFee} جنيه
+   736→   736→                        </span>
+   737→   737→                        <span className="text-gray-400">/ شهرياً</span>
+   738→   738→                      </div>
+   739→   739→
+   740→   740→                      {/* Subscribers count */}
+   741→   741→                      <div className="flex items-center gap-2 text-sm text-gray-600">
+   742→   742→                        <Users className="w-4 h-4 text-blue-500 shrink-0" />
+   743→   743→                        <span>
+   744→   744→                          {route._count?.subscriptions || 0} مشترك
+   745→   745→                        </span>
+   746→   746→                      </div>
+   747→   747→
+   748→   748→                      {/* Stops - collapsible */}
+   749→   749→                      {stops.length > 0 && (
+   750→   750→                        <div className="border-t border-gray-100 pt-3">
+   751→   751→                          <button
+   752→   752→                            onClick={() => toggleStops(route.id)}
+   753→   753→                            className="flex items-center gap-2 text-sm font-medium text-teal-700 hover:text-teal-800 transition-colors min-h-[44px]"
+   754→   754→                          >
+   755→   755→                            <MapPinned className="w-4 h-4" />
+   756→   756→                            <span>المحطات ({stops.length})</span>
+   757→   757→                            {isExpanded ? (
+   758→   758→                              <ChevronUp className="w-4 h-4" />
+   759→   759→                            ) : (
+   760→   760→                              <ChevronDown className="w-4 h-4" />
+   761→   761→                            )}
+   762→   762→                          </button>
+   763→   763→
+   764→   764→                          {isExpanded && (
+   765→   765→                            <div className="mt-3 bg-teal-50/50 rounded-lg p-3 border border-teal-100">
+   766→   766→                              <StopsTimeline stops={stops} />
+   767→   767→                            </div>
+   768→   768→                          )}
+   769→   769→                        </div>
+   770→   770→                      )}
+   771→   771→
+   772→   772→                      {/* Actions */}
+   773→   773→                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+   774→   774→                        <Button
+   775→   775→                          variant="outline"
+   776→   776→                          size="sm"
+   777→   777→                          onClick={() => openEdit(route)}
+   778→   778→                          className="min-h-[44px] flex-1 text-[#610000] border-[#610000]/20 hover:bg-[#610000]/5"
+   779→   779→                        >
+   780→   780→                          <Edit className="w-4 h-4 ml-1" />
+   781→   781→                          تعديل
+   782→   782→                        </Button>
+   783→   783→                        <Button
+   784→   784→                          variant="outline"
+   785→   785→                          size="sm"
+   786→   786→                          onClick={() => {
+   787→   787→                            setDeletingRoute(route)
+   788→   788→                            setDeleteDialogOpen(true)
+   789→   789→                          }}
+   790→   790→                          className="min-h-[44px] flex-1 text-red-600 border-red-200 hover:bg-red-50"
+   791→   791→                        >
+   792→   792→                          <Trash2 className="w-4 h-4 ml-1" />
+   793→   793→                          حذف
+   794→   794→                        </Button>
+   795→   795→                      </div>
+   796→   796→                    </CardContent>
+   797→   797→                  </Card>
+   798→   798→                )
+   799→   799→              })}
+   800→   800→            </div>
+   801→   801→          )}
+   802→   802→        </div>
+   803→   803→      )}
+   804→   804→
+   805→   805→      {/* ===== Tab 2: Add Route ===== */}
+   806→   806→      {activeTab === 'add' && (
+   807→   807→        <Card className="border-0 shadow-sm">
+   808→   808→          <CardHeader className="pb-4">
+   809→   809→            <CardTitle className="text-lg font-bold text-[#610000] flex items-center gap-2">
+   810→   810→              <Plus className="w-5 h-5" />
+   811→   811→              إضافة خط سير جديد
+   812→   812→            </CardTitle>
+   813→   813→          </CardHeader>
+   814→   814→          <CardContent className="space-y-6">
+   815→   815→            {/* Section 1: Route Info */}
+   816→   816→            <div className="space-y-4">
+   817→   817→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+   818→   818→                بيانات الخط
+   819→   819→              </h3>
+   820→   820→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   821→   821→                <div className="space-y-2">
+   822→   822→                  <Label htmlFor="add-name" className="text-sm font-medium">
+   823→   823→                    اسم الخط <span className="text-red-500">*</span>
+   824→   824→                  </Label>
+   825→   825→                  <Input
+   826→   826→                    id="add-name"
+   827→   827→                    placeholder="مثال: خط المعادي"
+   828→   828→                    value={addForm.name}
+   829→   829→                    onChange={(e) =>
+   830→   830→                      setAddForm((prev) => ({ ...prev, name: e.target.value }))
+   831→   831→                    }
+   832→   832→                    className="min-h-[44px]"
+   833→   833→                  />
+   834→   834→                </div>
+   835→   835→                <div className="space-y-2">
+   836→   836→                  <Label htmlFor="add-area" className="text-sm font-medium">
+   837→   837→                    المنطقة <span className="text-red-500">*</span>
+   838→   838→                  </Label>
+   839→   839→                  <Input
+   840→   840→                    id="add-area"
+   841→   841→                    placeholder="مثال: المعادي"
+   842→   842→                    value={addForm.area}
+   843→   843→                    onChange={(e) =>
+   844→   844→                      setAddForm((prev) => ({ ...prev, area: e.target.value }))
+   845→   845→                    }
+   846→   846→                    className="min-h-[44px]"
+   847→   847→                  />
+   848→   848→                </div>
+   849→   849→                <div className="space-y-2">
+   850→   850→                  <Label className="text-sm font-medium">
+   851→   851→                    الباص <span className="text-red-500">*</span>
+   852→   852→                  </Label>
+   853→   853→                  <Select
+   854→   854→                    value={addForm.busId}
+   855→   855→                    onValueChange={(value) =>
+   856→   856→                      setAddForm((prev) => ({ ...prev, busId: value }))
+   857→   857→                    }
+   858→   858→                  >
+   859→   859→                    <SelectTrigger className="min-h-[44px]">
+   860→   860→                      <Bus className="w-4 h-4 ml-1.5 text-gray-400" />
+   861→   861→                      <SelectValue placeholder="اختر الباص" />
+   862→   862→                    </SelectTrigger>
+   863→   863→                    <SelectContent>
+   864→   864→                      {buses.map((bus) => (
+   865→   865→                        <SelectItem key={bus.id} value={bus.id}>
+   866→   866→                          <div className="flex items-center gap-2">
+   867→   867→                            <div
+   868→   868→                              className="w-2.5 h-2.5 rounded-full border border-gray-200"
+   869→   869→                              style={{ backgroundColor: bus.color || '#0D9488' }}
+   870→   870→                            />
+   871→   871→                            {bus.plateNumber} - {bus.driverName}
+   872→   872→                          </div>
+   873→   873→                        </SelectItem>
+   874→   874→                      ))}
+   875→   875→                    </SelectContent>
+   876→   876→                  </Select>
+   877→   877→                </div>
+   878→   878→                <div className="space-y-2">
+   879→   879→                  <Label htmlFor="add-fee" className="text-sm font-medium">
+   880→   880→                    الاشتراك الشهري (جنيه)
+   881→   881→                  </Label>
+   882→   882→                  <Input
+   883→   883→                    id="add-fee"
+   884→   884→                    type="number"
+   885→   885→                    placeholder="0"
+   886→   886→                    value={addForm.monthlyFee}
+   887→   887→                    onChange={(e) =>
+   888→   888→                      setAddForm((prev) => ({ ...prev, monthlyFee: e.target.value }))
+   889→   889→                    }
+   890→   890→                    className="min-h-[44px]"
+   891→   891→                    min="0"
+   892→   892→                  />
+   893→   893→                </div>
+   894→   894→              </div>
+   895→   895→            </div>
+   896→   896→
+   897→   897→            {/* Section 2: Schedule */}
+   898→   898→            <div className="space-y-4">
+   899→   899→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+   900→   900→                المواعيد
+   901→   901→              </h3>
+   902→   902→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   903→   903→                <div className="space-y-2">
+   904→   904→                  <Label htmlFor="add-morning" className="text-sm font-medium">
+   905→   905→                    موعد الصباح
+   906→   906→                  </Label>
+   907→   907→                  <Input
+   908→   908→                    id="add-morning"
+   909→   909→                    type="time"
+   910→   910→                    value={addForm.morningTime}
+   911→   911→                    onChange={(e) =>
+   912→   912→                      setAddForm((prev) => ({ ...prev, morningTime: e.target.value }))
+   913→   913→                    }
+   914→   914→                    className="min-h-[44px]"
+   915→   915→                  />
+   916→   916→                </div>
+   917→   917→                <div className="space-y-2">
+   918→   918→                  <Label htmlFor="add-afternoon" className="text-sm font-medium">
+   919→   919→                    موعد الظهيرة
+   920→   920→                  </Label>
+   921→   921→                  <Input
+   922→   922→                    id="add-afternoon"
+   923→   923→                    type="time"
+   924→   924→                    value={addForm.afternoonTime}
+   925→   925→                    onChange={(e) =>
+   926→   926→                      setAddForm((prev) => ({ ...prev, afternoonTime: e.target.value }))
+   927→   927→                    }
+   928→   928→                    className="min-h-[44px]"
+   929→   929→                  />
+   930→   930→                </div>
+   931→   931→              </div>
+   932→   932→            </div>
+   933→   933→
+   934→   934→            {/* Section 3: Stops */}
+   935→   935→            <div className="space-y-4">
+   936→   936→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+   937→   937→                المحطات
+   938→   938→              </h3>
+   939→   939→              <StopsEditor
+   940→   940→                stops={addForm.stops}
+   941→   941→                onChange={(stops) =>
+   942→   942→                  setAddForm((prev) => ({ ...prev, stops }))
+   943→   943→                }
+   944→   944→              />
+   945→   945→            </div>
+   946→   946→
+   947→   947→            {/* Section 4: Active */}
+   948→   948→            <div className="space-y-4">
+   949→   949→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+   950→   950→                أخرى
+   951→   951→              </h3>
+   952→   952→              <div className="flex items-center gap-3">
+   953→   953→                <button
+   954→   954→                  type="button"
+   955→   955→                  onClick={() =>
+   956→   956→                    setAddForm((prev) => ({ ...prev, active: !prev.active }))
+   957→   957→                  }
+   958→   958→                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+   959→   959→                    addForm.active ? 'bg-teal-500' : 'bg-gray-300'
+   960→   960→                  }`}
+   961→   961→                >
+   962→   962→                  <span
+   963→   963→                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+   964→   964→                      addForm.active ? '-translate-x-6' : '-translate-x-1'
+   965→   965→                    }`}
+   966→   966→                  />
+   967→   967→                </button>
+   968→   968→                <Label className="text-sm font-medium">
+   969→   969→                  {addForm.active ? 'خط سير نشط' : 'خط سير معطل'}
+   970→   970→                </Label>
+   971→   971→              </div>
+   972→   972→            </div>
+   973→   973→
+   974→   974→            {/* Submit */}
+   975→   975→            <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+   976→   976→              <Button
+   977→   977→                onClick={addRoute}
+   978→   978→                disabled={saving}
+   979→   979→                className="min-h-[44px] bg-[#610000] hover:bg-[#7a0000] flex-1"
+   980→   980→              >
+   981→   981→                {saving ? (
+   982→   982→                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2" />
+   983→   983→                ) : (
+   984→   984→                  <Plus className="w-4 h-4 ml-1" />
+   985→   985→                )}
+   986→   986→                إضافة خط السير
+   987→   987→              </Button>
+   988→   988→              <Button
+   989→   989→                variant="outline"
+   990→   990→                onClick={() => {
+   991→   991→                  setAddForm(defaultForm)
+   992→   992→                  setActiveTab('list')
+   993→   993→                }}
+   994→   994→                className="min-h-[44px]"
+   995→   995→                disabled={saving}
+   996→   996→              >
+   997→   997→                إلغاء
+   998→   998→              </Button>
+   999→   999→            </div>
+  1000→  1000→          </CardContent>
+  1001→  1001→        </Card>
+  1002→  1002→      )}
+  1003→  1003→
+  1004→  1004→      {/* ===== Edit Dialog ===== */}
+  1005→  1005→      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+  1006→  1006→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+  1007→  1007→          <DialogHeader>
+  1008→  1008→            <DialogTitle className="text-[#610000] flex items-center gap-2">
+  1009→  1009→              <Edit className="w-5 h-5" />
+  1010→  1010→              تعديل خط السير
+  1011→  1011→            </DialogTitle>
+  1012→  1012→            <DialogDescription>
+  1013→  1013→              تعديل بيانات خط السير والمحطات والمواعيد
+  1014→  1014→            </DialogDescription>
+  1015→  1015→          </DialogHeader>
+  1016→  1016→
+  1017→  1017→          <div className="space-y-6 py-4">
+  1018→  1018→            {/* Section 1: Route Info */}
+  1019→  1019→            <div className="space-y-4">
+  1020→  1020→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+  1021→  1021→                بيانات الخط
+  1022→  1022→              </h3>
+  1023→  1023→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1024→  1024→                <div className="space-y-2">
+  1025→  1025→                  <Label className="text-sm font-medium">
+  1026→  1026→                    اسم الخط <span className="text-red-500">*</span>
+  1027→  1027→                  </Label>
+  1028→  1028→                  <Input
+  1029→  1029→                    placeholder="مثال: خط المعادي"
+  1030→  1030→                    value={editForm.name}
+  1031→  1031→                    onChange={(e) =>
+  1032→  1032→                      setEditForm((prev) => ({ ...prev, name: e.target.value }))
+  1033→  1033→                    }
+  1034→  1034→                    className="min-h-[44px]"
+  1035→  1035→                  />
+  1036→  1036→                </div>
+  1037→  1037→                <div className="space-y-2">
+  1038→  1038→                  <Label className="text-sm font-medium">
+  1039→  1039→                    المنطقة <span className="text-red-500">*</span>
+  1040→  1040→                  </Label>
+  1041→  1041→                  <Input
+  1042→  1042→                    placeholder="مثال: المعادي"
+  1043→  1043→                    value={editForm.area}
+  1044→  1044→                    onChange={(e) =>
+  1045→  1045→                      setEditForm((prev) => ({ ...prev, area: e.target.value }))
+  1046→  1046→                    }
+  1047→  1047→                    className="min-h-[44px]"
+  1048→  1048→                  />
+  1049→  1049→                </div>
+  1050→  1050→                <div className="space-y-2">
+  1051→  1051→                  <Label className="text-sm font-medium">
+  1052→  1052→                    الباص <span className="text-red-500">*</span>
+  1053→  1053→                  </Label>
+  1054→  1054→                  <Select
+  1055→  1055→                    value={editForm.busId}
+  1056→  1056→                    onValueChange={(value) =>
+  1057→  1057→                      setEditForm((prev) => ({ ...prev, busId: value }))
+  1058→  1058→                    }
+  1059→  1059→                  >
+  1060→  1060→                    <SelectTrigger className="min-h-[44px]">
+  1061→  1061→                      <Bus className="w-4 h-4 ml-1.5 text-gray-400" />
+  1062→  1062→                      <SelectValue placeholder="اختر الباص" />
+  1063→  1063→                    </SelectTrigger>
+  1064→  1064→                    <SelectContent>
+  1065→  1065→                      {buses.map((bus) => (
+  1066→  1066→                        <SelectItem key={bus.id} value={bus.id}>
+  1067→  1067→                          <div className="flex items-center gap-2">
+  1068→  1068→                            <div
+  1069→  1069→                              className="w-2.5 h-2.5 rounded-full border border-gray-200"
+  1070→  1070→                              style={{ backgroundColor: bus.color || '#0D9488' }}
+  1071→  1071→                            />
+  1072→  1072→                            {bus.plateNumber} - {bus.driverName}
+  1073→  1073→                          </div>
+  1074→  1074→                        </SelectItem>
+  1075→  1075→                      ))}
+  1076→  1076→                    </SelectContent>
+  1077→  1077→                  </Select>
+  1078→  1078→                </div>
+  1079→  1079→                <div className="space-y-2">
+  1080→  1080→                  <Label className="text-sm font-medium">
+  1081→  1081→                    الاشتراك الشهري (جنيه)
+  1082→  1082→                  </Label>
+  1083→  1083→                  <Input
+  1084→  1084→                    type="number"
+  1085→  1085→                    placeholder="0"
+  1086→  1086→                    value={editForm.monthlyFee}
+  1087→  1087→                    onChange={(e) =>
+  1088→  1088→                      setEditForm((prev) => ({ ...prev, monthlyFee: e.target.value }))
+  1089→  1089→                    }
+  1090→  1090→                    className="min-h-[44px]"
+  1091→  1091→                    min="0"
+  1092→  1092→                  />
+  1093→  1093→                </div>
+  1094→  1094→              </div>
+  1095→  1095→            </div>
+  1096→  1096→
+  1097→  1097→            {/* Section 2: Schedule */}
+  1098→  1098→            <div className="space-y-4">
+  1099→  1099→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+  1100→  1100→                المواعيد
+  1101→  1101→              </h3>
+  1102→  1102→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1103→  1103→                <div className="space-y-2">
+  1104→  1104→                  <Label className="text-sm font-medium">موعد الصباح</Label>
+  1105→  1105→                  <Input
+  1106→  1106→                    type="time"
+  1107→  1107→                    value={editForm.morningTime}
+  1108→  1108→                    onChange={(e) =>
+  1109→  1109→                      setEditForm((prev) => ({ ...prev, morningTime: e.target.value }))
+  1110→  1110→                    }
+  1111→  1111→                    className="min-h-[44px]"
+  1112→  1112→                  />
+  1113→  1113→                </div>
+  1114→  1114→                <div className="space-y-2">
+  1115→  1115→                  <Label className="text-sm font-medium">موعد الظهيرة</Label>
+  1116→  1116→                  <Input
+  1117→  1117→                    type="time"
+  1118→  1118→                    value={editForm.afternoonTime}
+  1119→  1119→                    onChange={(e) =>
+  1120→  1120→                      setEditForm((prev) => ({ ...prev, afternoonTime: e.target.value }))
+  1121→  1121→                    }
+  1122→  1122→                    className="min-h-[44px]"
+  1123→  1123→                  />
+  1124→  1124→                </div>
+  1125→  1125→              </div>
+  1126→  1126→            </div>
+  1127→  1127→
+  1128→  1128→            {/* Section 3: Stops */}
+  1129→  1129→            <div className="space-y-4">
+  1130→  1130→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+  1131→  1131→                المحطات
+  1132→  1132→              </h3>
+  1133→  1133→              <StopsEditor
+  1134→  1134→                stops={editForm.stops}
+  1135→  1135→                onChange={(stops) =>
+  1136→  1136→                  setEditForm((prev) => ({ ...prev, stops }))
+  1137→  1137→                }
+  1138→  1138→              />
+  1139→  1139→            </div>
+  1140→  1140→
+  1141→  1141→            {/* Section 4: Active */}
+  1142→  1142→            <div className="space-y-4">
+  1143→  1143→              <h3 className="text-sm font-semibold text-gray-500 border-b border-gray-100 pb-2">
+  1144→  1144→                أخرى
+  1145→  1145→              </h3>
+  1146→  1146→              <div className="flex items-center gap-3">
+  1147→  1147→                <button
+  1148→  1148→                  type="button"
+  1149→  1149→                  onClick={() =>
+  1150→  1150→                    setEditForm((prev) => ({ ...prev, active: !prev.active }))
+  1151→  1151→                  }
+  1152→  1152→                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+  1153→  1153→                    editForm.active ? 'bg-teal-500' : 'bg-gray-300'
+  1154→  1154→                  }`}
+  1155→  1155→                >
+  1156→  1156→                  <span
+  1157→  1157→                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+  1158→  1158→                      editForm.active ? '-translate-x-6' : '-translate-x-1'
+  1159→  1159→                    }`}
+  1160→  1160→                  />
+  1161→  1161→                </button>
+  1162→  1162→                <Label className="text-sm font-medium">
+  1163→  1163→                  {editForm.active ? 'خط سير نشط' : 'خط سير معطل'}
+  1164→  1164→                </Label>
+  1165→  1165→              </div>
+  1166→  1166→            </div>
+  1167→  1167→          </div>
+  1168→  1168→
+  1169→  1169→          {/* Dialog Footer */}
+  1170→  1170→          <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+  1171→  1171→            <Button
+  1172→  1172→              onClick={saveEdit}
+  1173→  1173→              disabled={saving}
+  1174→  1174→              className="min-h-[44px] bg-[#610000] hover:bg-[#7a0000] flex-1"
+  1175→  1175→            >
+  1176→  1176→              {saving ? (
+  1177→  1177→                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2" />
+  1178→  1178→              ) : (
+  1179→  1179→                <CheckCircle2 className="w-4 h-4 ml-1" />
+  1180→  1180→              )}
+  1181→  1181→              حفظ التعديلات
+  1182→  1182→            </Button>
+  1183→  1183→            <Button
+  1184→  1184→              variant="outline"
+  1185→  1185→              onClick={() => setEditDialogOpen(false)}
+  1186→  1186→              className="min-h-[44px]"
+  1187→  1187→              disabled={saving}
+  1188→  1188→            >
+  1189→  1189→              إلغاء
+  1190→  1190→            </Button>
+  1191→  1191→          </div>
+  1192→  1192→        </DialogContent>
+  1193→  1193→      </Dialog>
+  1194→  1194→
+  1195→  1195→      {/* ===== Delete Confirmation Dialog ===== */}
+  1196→  1196→      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+  1197→  1197→        <DialogContent className="max-w-md" dir="rtl">
+  1198→  1198→          <DialogHeader>
+  1199→  1199→            <DialogTitle className="text-red-600 flex items-center gap-2">
+  1200→  1200→              <AlertCircle className="w-5 h-5" />
+  1201→  1201→              تأكيد الحذف
+  1202→  1202→            </DialogTitle>
+  1203→  1203→            <DialogDescription>
+  1204→  1204→              هل أنت متأكد من حذف خط السير &quot;{deletingRoute?.name}&quot;؟
+  1205→  1205→              لا يمكن التراجع عن هذا الإجراء.
+  1206→  1206→            </DialogDescription>
+  1207→  1207→          </DialogHeader>
+  1208→  1208→          {(deletingRoute?._count?.subscriptions || 0) > 0 && (
+  1209→  1209→            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+  1210→  1210→              <AlertCircle className="w-4 h-4 inline ml-1" />
+  1211→  1211→              هذا الخط لديه {deletingRoute?._count?.subscriptions} مشترك. لا يمكن حذفه.
+  1212→  1212→              يمكنك تعطيله بدلاً من ذلك.
+  1213→  1213→            </div>
+  1214→  1214→          )}
+  1215→  1215→          <div className="flex items-center gap-3 pt-4">
+  1216→  1216→            <Button
+  1217→  1217→              onClick={confirmDelete}
+  1218→  1218→              disabled={saving || (deletingRoute?._count?.subscriptions || 0) > 0}
+  1219→  1219→              variant="destructive"
+  1220→  1220→              className="min-h-[44px] flex-1"
+  1221→  1221→            >
+  1222→  1222→              {saving ? (
+  1223→  1223→                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin ml-2" />
+  1224→  1224→              ) : (
+  1225→  1225→                <Trash2 className="w-4 h-4 ml-1" />
+  1226→  1226→              )}
+  1227→  1227→              حذف
+  1228→  1228→            </Button>
+  1229→  1229→            <Button
+  1230→  1230→              variant="outline"
+  1231→  1231→              onClick={() => setDeleteDialogOpen(false)}
+  1232→  1232→              className="min-h-[44px]"
+  1233→  1233→              disabled={saving}
+  1234→  1234→            >
+  1235→  1235→              إلغاء
+  1236→  1236→            </Button>
+  1237→  1237→          </div>
+  1238→  1238→        </DialogContent>
+  1239→  1239→      </Dialog>
+  1240→  1240→    </div>
+  1241→  1241→  )
+  1242→  1242→}
+  1243→  1243→

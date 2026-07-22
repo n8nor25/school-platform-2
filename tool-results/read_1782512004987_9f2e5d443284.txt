@@ -1,0 +1,777 @@
+     1→<?php
+     2→if(!isset($_SERVER['HTTP_REFERER'])){
+     3→    // redirect them to your desired location
+     4→    header('location:../index.php');
+     5→    exit;
+     6→}
+     7→?>
+     8→<?php include_once('head.php'); ?>
+     9→<?php include_once('header_admin.php'); ?>
+    10→<?php include_once('sidebar.php'); ?>
+    11→<?php include_once('alert.php'); ?>
+    12→
+    13→<style>
+    14→
+    15→.form-control-feedback {
+    16→  
+    17→   pointer-events: auto;
+    18→  
+    19→}
+    20→
+    21→.set-width-tooltip + .tooltip > .tooltip-inner { 
+    22→     min-width:180px;
+    23→}
+    24→
+    25→.msk-fade {  
+    26→      
+    27→    -webkit-animation-name: animatetop;
+    28→    -webkit-animation-duration: 0.5s;
+    29→    animation-name: animatetop;
+    30→    animation-duration: 0.5s
+    31→
+    32→}
+    33→
+    34→/* Add Animation */
+    35→@-webkit-keyframes animatetop {
+    36→    from {top:-300px; opacity:0} 
+    37→    to {top:0; opacity:1}
+    38→}
+    39→
+    40→@keyframes animatetop {
+    41→    from {top:-300px; opacity:0}
+    42→    to {top:0; opacity:1}
+    43→}
+    44→
+    45→/* #modalInsertform css  */
+    46→
+    47→#modalInsertform .div-logo {
+    48→        float: left;
+    49→        height: 130px;
+    50→}
+    51→
+    52→#modalInsertform .logo{
+    53→        float: left;
+    54→        width: 90px;
+    55→        height: 90px;
+    56→        margin-right: 10px;
+    57→        border-radius: 50%;
+    58→        text-align: center;
+    59→        background-color:#8860a7;
+    60→}
+    61→
+    62→#modalInsertform .class-name{
+    63→        float: left;            
+    64→        margin-top:0;
+    65→        padding-top:0;                  
+    66→}
+    67→
+    68→#modalInsertform h1,#modalInsertform h2,#modalInsertform h3{
+    69→        margin-top:0;
+    70→        color:#8860a7;
+    71→
+    72→}
+    73→
+    74→#modalInsertform .class-address {
+    75→        float: left;
+    76→                        
+    77→}
+    78→
+    79→#modalInsertform .class-email {
+    80→        float: right;
+    81→        margin-right:15px;
+    82→        padding-right:0;
+    83→        color:white;
+    84→        background-color:#8860a7;
+    85→}
+    86→
+    87→#modalInsertform th{                    
+    88→        background-color:#8860a7;
+    89→        color:white;
+    90→}
+    91→
+    92→#modalInsertform #h1{
+    93→display:none;   
+    94→}
+    95→
+    96→
+    97→@media print{
+    98→        
+    99→        body{
+   100→                
+   101→                visibility: hidden;
+   102→        
+   103→        }
+   104→
+   105→        #modalInsertform{
+   106→                
+   107→           visibility: visible;
+   108→        
+   109→        }
+   110→
+   111→        #divPhoto{
+   112→                display:none;   
+   113→        }       
+   114→
+   115→#modalInsertform .logo{
+   116→                background-color:#8860a7 !important;    
+   117→        }
+   118→
+   119→#modalInsertform h1,#modalInsertform h2,#modalInsertform h3,#modalInsertform .std-name{
+   120→                color:#8860a7 !important;       
+   121→        }
+   122→        
+   123→        
+   124→#modalInsertform .table-bordered th{
+   125→                        
+   126→                color:white!important;
+   127→                background-color:#8860a7 !important;            
+   128→                                
+   129→        }
+   130→#modalInsertform .class-email {
+   131→                color:white!important;
+   132→                background-color:#8860a7 !important;
+   133→                
+   134→} 
+   135→        
+   136→#modalInsertform .panel{
+   137→                border:hidden!important;
+   138→}
+   139→#modalInsertform #btn1,#modalInsertform .panel-footer ,#modalInsertform .msk-heading {
+   140→                display:none;
+   141→                        
+   142→}
+   143→        
+   144→#modalInsertform #h1{
+   145→                display:inline; 
+   146→}
+   147→
+   148→#modalInsertform .close{
+   149→                display:none;   
+   150→}
+   151→        
+   152→@-moz-document url-prefix() {
+   153→                
+   154→        .panel{
+   155→                
+   156→                margin:0;
+   157→                padding:0;
+   158→        }
+   159→        #modalInsertform{
+   160→                
+   161→                margin:0!important;
+   162→                padding:0!important;
+   163→                position:absolute;
+   164→                left:-150px;
+   165→        }
+   166→        @page{
+   167→                margin:0;
+   168→                padding:0;      
+   169→        }
+   170→}
+   171→}
+   172→
+   173→/* #modalViewPettyCash css  */
+   174→
+   175→#modalViewPettyCash .div-logo {
+   176→        float: left;
+   177→        height: 130px;
+   178→}
+   179→
+   180→#modalViewPettyCash .logo{
+   181→        float: left;
+   182→        width: 90px;
+   183→        height: 90px;
+   184→        margin-right: 10px;
+   185→        border-radius: 50%;
+   186→        text-align: center;
+   187→        background-color:#8860a7;
+   188→}
+   189→
+   190→#modalViewPettyCash .class-name{
+   191→        float: left;            
+   192→        margin-top:0;
+   193→        padding-top:0;                  
+   194→}
+   195→
+   196→#modalViewPettyCash h1,#modalViewPettyCash h2,#modalViewPettyCash h3{
+   197→        margin-top:0;
+   198→        color:#8860a7;
+   199→
+   200→}
+   201→
+   202→#modalViewPettyCash .class-address {
+   203→        float: left;
+   204→                        
+   205→}
+   206→
+   207→#modalViewPettyCash .class-email {
+   208→        float: right;
+   209→        margin-right:15px;
+   210→        padding-right:0;
+   211→        color:white;
+   212→        background-color:#8860a7;
+   213→}
+   214→
+   215→#modalViewPettyCash th{                 
+   216→        background-color:#8860a7;
+   217→        color:white;
+   218→}
+   219→
+   220→#modalViewPettyCash #h1{
+   221→display:none;   
+   222→}
+   223→
+   224→
+   225→@media print{
+   226→        
+   227→        body{
+   228→                
+   229→                visibility: hidden;
+   230→        
+   231→        }
+   232→
+   233→        #modalViewPettyCash{
+   234→                
+   235→           visibility: visible;
+   236→        
+   237→        }
+   238→
+   239→        #divPhoto{
+   240→                display:none;   
+   241→        }
+   242→
+   243→
+   244→#modalViewPettyCash .logo{
+   245→                background-color:#8860a7 !important;    
+   246→        }
+   247→
+   248→#modalViewPettyCash h1,#modalViewPettyCash h2,#modalViewPettyCash h3,#modalViewPettyCash .std-name{
+   249→                color:#8860a7 !important;       
+   250→        }
+   251→        
+   252→        
+   253→#modalViewPettyCash .table-bordered th{
+   254→                        
+   255→                color:white!important;
+   256→                background-color:#8860a7 !important;            
+   257→                                
+   258→        }
+   259→#modalViewPettyCash .class-email {
+   260→                color:white!important;
+   261→                background-color:#8860a7 !important;
+   262→                
+   263→} 
+   264→        
+   265→#modalViewPettyCash .panel{
+   266→                border:hidden!important;
+   267→}
+   268→#modalViewPettyCash #btn1,#modalViewPettyCash .panel-footer ,#modalViewPettyCash .msk-heading {
+   269→                display:none;
+   270→                        
+   271→}
+   272→        
+   273→#modalViewPettyCash #h1{
+   274→                display:inline; 
+   275→}
+   276→
+   277→#modalViewPettyCash .close{
+   278→                display:none;   
+   279→}
+   280→#pettyCashDetails{
+   281→        height:550px;
+   282→        
+   283→}
+   284→        
+   285→@-moz-document url-prefix() {
+   286→                
+   287→        .panel{
+   288→                
+   289→                margin:0;
+   290→                padding:0;
+   291→        }
+   292→        #modalViewPettyCash{
+   293→                
+   294→                margin:0!important;
+   295→                padding:0!important;
+   296→                position:absolute;
+   297→                left:-150px;
+   298→        }
+   299→        @page{
+   300→                margin:0;
+   301→                padding:0;      
+   302→        }
+   303→}
+   304→}
+   305→
+   306→</style>
+   307→
+   308→<!-- Content Wrapper. Contains page content -->
+   309→<div class="content-wrapper">
+   310→        <!-- Content Header (Page header) -->
+   311→    <section class="content-header">
+   312→        <h1>
+   313→                Petty Cash
+   314→                <small>Preview</small>
+   315→        </h1>
+   316→        <ol class="breadcrumb">
+   317→                <li><a href="#"><i class="fa fa-dashboard"></i> Home</a></li>
+   318→            <li><a href="#">Petty Cash</a></li>
+   319→        </ol>
+   320→        </section>
+   321→           
+   322→        <!-- table for view all records -->
+   323→        <section class="content" > <!-- Start of table section -->
+   324→        <div class="row" id="table1"><!--MSK-000132-1-->
+   325→                <div class="col-md-10">
+   326→                <div class="box">
+   327→                        <div class="box-header">
+   328→                                <a href="#modalInsertform" onClick="showModal()" class="btn btn-success btn-sm pull-right" data-id="" data-toggle="modal">Add <span class="glyphicon glyphicon-plus"></span></a><!-- MSK-00094-->
+   329→                                <h3 class="box-title">Petty Cash History </h3>
+   330→                        </div><!-- /.box-header -->
+   331→                        <div class="box-body table-responsive">
+   332→                        <!-- MSK-00093-->
+   333→                                <table id="example1" class="table table-bordered table-striped">
+   334→                            <thead>
+   335→                                <th class="col-md-1">ID</th>
+   336→                                <th class="col-md-2">Received By</th>
+   337→                                <th class="col-md-1">Year</th>
+   338→                                <th class="col-md-1">Month</th>
+   339→                                <th class="col-md-1">Date</th>
+   340→                                <th class="col-md-1">Paid($)</th>
+   341→                                <th class="col-md-2">Action</th>
+   342→                            </thead>
+   343→                                <tbody class="tBody1">
+   344→                                                    
+   345→<?php
+   346→include_once('../controller/config.php');
+   347→$index=$_SESSION["index_number"];
+   348→
+   349→$sql="select * from petty_cash";
+   350→$result=mysqli_query($conn,$sql);
+   351→$count = 0;
+   352→$name='';
+   353→if(mysqli_num_rows($result) > 0) {
+   354→        while($row=mysqli_fetch_assoc($result)){
+   355→                $count++;
+   356→                $received_type=$row['received_type'];
+   357→                $received_index=$row['received_by'];
+   358→                //echo $user_type;
+   359→                if($received_type=="Teacher"){
+   360→                        
+   361→                        $sql1="SELECT * FROM teacher WHERE index_number='$received_index'";
+   362→                        
+   363→                        $result1=mysqli_query($conn,$sql1);
+   364→                        $row1=mysqli_fetch_assoc($result1);
+   365→                        $name=$row1['i_name'];
+   366→                }
+   367→                
+   368→                if($received_type=="Admin"){
+   369→                        
+   370→                        $sql1="SELECT * FROM admin WHERE index_number='$received_index'";
+   371→                        
+   372→                        $result1=mysqli_query($conn,$sql1);
+   373→                        $row1=mysqli_fetch_assoc($result1);
+   374→                        $name=$row1['i_name'];
+   375→                }
+   376→                
+   377→                
+   378→                $status=$row['_status'];
+   379→                $paid=$row['paid'];
+   380→                
+   381→                if($status=="Pending"){
+   382→                        $paid="Pending";
+   383→                        
+   384→                }
+   385→        
+   386→                
+   387→?>   
+   388→                                <tr>
+   389→                                    <td><?php echo $count; ?></td>
+   390→                                    <td id="td_year_<?php echo $count; ?>"><?php echo $name; ?></td>
+   391→               <!--MSK-000115-td1--><td id="td_year_<?php echo $count; ?>"><?php echo $row['year']; ?></td>
+   392→               <!--MSK-000115-td2--><td id="td_month_<?php echo $count; ?>"><?php echo $row['month']; ?></td>
+   393→                                    <td id="td_date_<?php echo $count; ?>"><?php echo $row['date']; ?></td>
+   394→               <!--MSK-000115-td4--><td id="td_paid_<?php echo $count; ?>"><?php echo $paid; ?></td>
+   395→                                    <td> 
+   396→<a href="#" onClick="showModal2(this)" class="btn btn-info btn-xs" data-id="<?php echo $row['id']; ?>,<?php echo $index; ?>" >View Details</a>
+   397→<a href="#" id="aApprove_<?php echo $count; ?>" onClick="" class="confirm-approve btn btn-warning btn-xs" data-id="<?php echo $row['id']; ?>,<?php echo $index; ?>" >Approve</a>
+   398→                                        </td>
+   399→                                </tr>
+   400→<?php } }  ?>
+   401→                                </tbody>
+   402→                        </table>
+   403→                        </div><!-- ./box-body -->
+   404→                </div><!-- ./box -->
+   405→                </div> 
+   406→        </div>
+   407→     </section>   
+   408→      
+   409→    
+   410→   <div id="salaryDetails">
+   411→    
+   412→    </div>
+   413→    
+   414→    <div id="viewInvoice">
+   415→    
+   416→    </div>
+   417→    
+   418→    <div class="modal msk-fade" id="modalInsertform" tabindex="-1" role="dialog" aria-labelledby="insert_alert1" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+   419→                <div class="modal-dialog"><!--modal-dialog -->  
+   420→                        <div class="container col-lg-12 "><!--modal-content --> 
+   421→                        <div class="row">
+   422→                                <div class="panel panel-info"><!--panel -->
+   423→                        <div class="msk-heading">
+   424→                       
+   425→                        <button type="button" onClick="scrollDown()" class="close" data-dismiss="modal" aria-hidden="true"><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></button> 
+   426→                        <br>
+   427→                        </div>
+   428→                                <div class="panel-body"><!--panel-body -->
+   429→                                <div class="row " id="msk12345">
+   430→                                <div class="col-xs-2">
+   431→                                        <div class="div-logo">
+   432→                                        <img class="logo" src="../uploads/logo2.png">
+   433→                                    </div>
+   434→                                </div>
+   435→                                <div class="col-xs-5 class-name">
+   436→                                        <h2>ILovePrograming</h2>
+   437→                                        <div class="class-address">
+   438→                                        455 Foggy Heights,<br>
+   439→                                                                            AZ 85004, US
+   440→                                    </div>
+   441→                                </div>
+   442→                                <div class="col-xs-4 class-email text-right ">
+   443→                                        Email: msk.ms4@gmail.com<br>
+   444→                                        Phone: 111-111-1111 <br> 
+   445→                                </div>
+   446→                                </div>
+   447→<?php  
+   448→$current_year=date('Y');
+   449→$current_month=date('F');
+   450→$current_date=date('Y-m-d');
+   451→
+   452→$index=$_SESSION["index_number"];
+   453→$type=$_SESSION["type"];
+   454→
+   455→?>                           
+   456→                            
+   457→                            <div class="row ">
+   458→                                <center><h1>Petty Cash</h1></center>
+   459→                                <a href="#" onClick="addNewRow(this)" class="btn btn-success btn-xs "><span class="glyphicon glyphicon-plus"></span></a><!-- MSK-00094--> 
+   460→                                <a href="#" onClick="deleteRow(this)" class="btn btn-danger btn-xs " style="margin-right:2px;"><span class="glyphicon glyphicon-remove"></span></a><!-- MSK-00094-->
+   461→                                <div class="col-xs-5 col-xs-offset-7 text-right msk-t">
+   462→                                    <div class="text-right">
+   463→                                        Year: <?php echo $current_year; ?><br>
+   464→                                        Month: <?php echo $current_month; ?><br>
+   465→                                        Date: <?php echo $current_date; ?>
+   466→                                                                            
+   467→                                    </div>                                
+   468→                                </div>
+   469→                                                </div> <!-- / end client details section -->
+   470→                            <form role="form" action="../index.php" method="post" id="form1" class="form-horizontal" >
+   471→                             <table class="table table-bordered">
+   472→                                <thead>
+   473→                                    <th class="col-md-1">ID</th>
+   474→                                    <th class="col-md-6">Description</th>
+   475→                                    <th class="col-md-2">Amount($)</th>
+   476→                                </thead>
+   477→                                                                <tbody class="tBody">
+   478→                                    <tr id="tr_1">
+   479→                                        <td id="tdCount_1"> 1</td>
+   480→                                        <td id="tdDesc_1"><input type="text" id="textDesc_1" class="_desc form-control" placeholder="Description 1" autocomplete="off" name="_desc[]"></td>
+   481→                                        <td id="tdAmount_1"><input type="text" id="textAmount_1" class="amount form-control" placeholder="25.50" autocomplete="off" name="amount[]"></td>
+   482→                                    </tr>
+   483→                                                </tbody>
+   484→                                </table> 
+   485→                                </div><!--/.panel-body -->
+   486→                        <div class="panel-footer inv-footer text-right" id="msk123456">
+   487→                                <input type="hidden" name="do" value="add_petty_cash" >
+   488→                            <input type="hidden" name="_status" value="Active" >
+   489→                            <input type="hidden" name="user_type" value="Admin">
+   490→                                <input type="hidden" name="index_number" value="<?php echo $index; ?>" >
+   491→                            <input type="hidden" name="received_type" value="<?php echo $type; ?>" >
+   492→                                <input type="submit" class="btn btn-primary" id="btnSubmit" value="Submit">
+   493→                                </div>
+   494→                        </form>
+   495→                        </div><!--/. panel--> 
+   496→                </div><!--/.row --> 
+   497→            </div><!--/.modal-content -->
+   498→        </div><!--/.modal-dialog -->
+   499→    </div><!--/.modal -->
+   500→    
+   501→    <?php
+   502→if(isset($_GET["do"])&&($_GET["do"]=="alert_from_insert")){
+   503→//MSK-000143-6-PHP-JS-INSERT
+   504→ 
+   505→        $msg=$_GET['msg'];
+   506→
+   507→        if($msg==1){
+   508→                echo"
+   509→                        <script>
+   510→                        
+   511→                        var myModal = $('#insert_Success');
+   512→                        myModal.modal('show');
+   513→                        
+   514→                myModal.data('hideInterval', setTimeout(function(){
+   515→                        myModal.modal('hide');
+   516→                }, 3000));
+   517→                                                
+   518→                        </script>
+   519→                ";
+   520→        
+   521→        }
+   522→
+   523→        if($msg==2){
+   524→                
+   525→                echo"
+   526→                        <script>
+   527→                        
+   528→                        var myModal = $('#connection_Problem');
+   529→                        myModal.modal('show');
+   530→                        
+   531→                        clearTimeout(myModal.data('hideInterval'));
+   532→                myModal.data('hideInterval', setTimeout(function(){
+   533→                        myModal.modal('hide');
+   534→                }, 3000));
+   535→                        
+   536→                        </script>
+   537→                ";
+   538→        
+   539→        }
+   540→        
+   541→}
+   542→ 
+   543→?>   
+   544→    
+   545→    <!-- //MSK-000124 Modal-Approve Confirm Popup -->
+   546→        <div class="modal msk-fade" id="approveConfirm" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+   547→                <div class="modal-dialog">
+   548→                <div class="modal-content">
+   549→                                <div class="modal-header bg-primary">
+   550→                                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+   551→                                <h4 class="modal-title" id="frm_title">Approval</h4>
+   552→                        </div>
+   553→                                <div class="modal-body bgColorWhite">
+   554→                                <strong style="color:red;">Are you sure?</strong>  Do you want to Approve this Petty Cash
+   555→                        </div>
+   556→                        <div class="modal-footer">
+   557→                                        <a href="#" style="margin-left:10px;" id="btnYesApprove" class="deletebtn btn btn-danger col-sm-2 pull-right">Yes</a><!-- MSK-000125 -->
+   558→                                <button type="button" class="btn btn-primary col-sm-2 pull-right" data-dismiss="modal" id="frm_cancel">No</button>
+   559→                        </div>
+   560→                </div>
+   561→                </div>
+   562→        </div>
+   563→    
+   564→    <div id="pettyCashDetails">
+   565→    
+   566→    </div>
+   567→     
+   568→<script>
+   569→
+   570→$(document).ready(function(){
+   571→  var rowCount1 = $('.tBody1 tr').length;
+   572→  
+   573→ 
+   574→  for(i=1; i<rowCount1+1; i++){
+   575→                
+   576→                var num1 = document.getElementById('td_paid_'+i).innerHTML;
+   577→                
+   578→                 if(!isNaN(num1)){
+   579→                        $("#aApprove_"+i).hide();
+   580→                 }
+   581→  
+   582→  }
+   583→  
+   584→});
+   585→
+   586→function addNewRow(){
+   587→        
+   588→        var last_id = $('.tBody tr:last').attr('id').replace('tr_','');
+   589→
+   590→                last_id++;
+   591→        
+   592→        var tr = '<tr id="tr_'+last_id+'">'+
+   593→                        '<td id="tdCount_'+last_id+'">'+last_id+'</td> '+
+   594→                '<td id="tdDesc_'+last_id+'"><input type="text" class="_desc form-control" id="textDesc_'+last_id+'" name="_desc[]"  placeholder="Description '+last_id+'" autocomplete="off"/> </td>'+
+   595→                                '<td id="tdAmount_'+last_id+'"><input type="text" class="amount form-control" id="textAmount_'+last_id+'" name="amount[]"  placeholder="25.50" autocomplete="off"/> </td>'+
+   596→                '</tr>';
+   597→                                
+   598→        $('.tBody').append(tr);
+   599→
+   600→}; 
+   601→
+   602→function deleteRow(){
+   603→        
+   604→        var last_id = $('.tBody tr:last').attr('id').replace('tr_','');
+   605→
+   606→        if(last_id != 1){
+   607→                $('.tBody tr:last').remove();   
+   608→                $("#btnSubmit1").attr("disabled", false); 
+   609→        }
+   610→
+   611→}
+   612→
+   613→$("#form2").submit(function (e) {
+   614→        
+   615→        var rowCount = $('.tBody tr').length;
+   616→        
+   617→        for(i=1; i<rowCount+1; i++){
+   618→                
+   619→                var markRange = document.getElementById('mark_range_text_'+i).value;
+   620→                var markGrade = document.getElementById('mark_grade_text_'+i).value;
+   621→
+   622→                if(markRange==""){
+   623→                        $("#btnSubmit1").attr("disabled", true);
+   624→                        $("#range_td_"+i).addClass('has-feedback');
+   625→                        $("#range_td_"+i).append('<span id="spanMarkRange" class="glyphicon glyphicon-remove form-control-feedback set-color-tooltip" data-toggle="tooltip" title="The mark range is required" ></span>');
+   626→                        
+   627→                        $("#mark_range_text_"+i).keydown(function(){
+   628→                                $("#btnSubmit1").attr("disabled", false);     
+   629→                                $("#range_td_"+i).removeClass('has-feedback');
+   630→                                $("#spanMarkRange").remove();
+   631→                        });
+   632→                        
+   633→                }
+   634→                
+   635→                if(markGrade==""){
+   636→                        $("#btnSubmit1").attr("disabled", true);  
+   637→                        $('#grade_td_'+i).addClass('has-feedback');
+   638→                        $('#grade_td_'+i).append('<span id="spanMarkGrade" class="glyphicon glyphicon-remove form-control-feedback set-color-tooltip" data-toggle="tooltip" title="The mark grade is required" ></span>');
+   639→                        
+   640→                        $("#mark_grade_text_"+i).keydown(function(){
+   641→                                $('#btnSubmit1').attr("disabled", false);     
+   642→                                $('#grade_td_'+i).removeClass('has-feedback');
+   643→                                $("#spanMarkGrade").remove();
+   644→                        });
+   645→                }
+   646→                
+   647→        }
+   648→        
+   649→        if(markRange == '' || markGrade == '' ){
+   650→                //MSK-000099- form validation failed
+   651→                
+   652→                $("#btnSubmit1").attr("disabled", true);
+   653→                e.preventDefault();
+   654→                return false;
+   655→                        
+   656→        }else{
+   657→                $("#btnSubmit1").attr("disabled", false);
+   658→                //return true;
+   659→                
+   660→        }
+   661→        
+   662→});
+   663→
+   664→function showModal2(pCashDetails){
+   665→//MSK-00104
+   666→        
+   667→        var myArray = $(pCashDetails).data("id").split(',');
+   668→        
+   669→        var id = myArray[0];
+   670→        var admin_index = myArray[1]; 
+   671→        
+   672→        var xhttp = new XMLHttpRequest();//MSK-00105-Ajax Start  
+   673→                xhttp.onreadystatechange = function() {
+   674→                
+   675→                        if (this.readyState == 4 && this.status == 200) {
+   676→                                
+   677→                                document.getElementById('pettyCashDetails').innerHTML = this.responseText;//MSK-000137
+   678→                                $('#modalViewPettyCash').modal('show');                 
+   679→                }
+   680→                        
+   681→                };      
+   682→                
+   683→        xhttp.open("GET", "petty_cash_details.php?id=" + id + "&admin_index="+admin_index , true);                                                                                              
+   684→                xhttp.send();//MSK-00105-Ajax End
+   685→         
+   686→};
+   687→
+   688→$('body').on('click', '.confirm-approve', function (e){
+   689→//MSK-000122    
+   690→        
+   691→    e.preventDefault();
+   692→    var id = $(this).data('id');
+   693→        $('#approveConfirm').data('id1', id).modal('show');//MSK-000123
+   694→        
+   695→});
+   696→
+   697→$('#btnYesApprove').click(function() {
+   698→//MSK-000126
+   699→  
+   700→        var myArray = $('#approveConfirm').data('id1').split(',');
+   701→        
+   702→        var id = myArray[0];
+   703→        var admin_index  = myArray[1];
+   704→                
+   705→        var xhttp = new XMLHttpRequest();//MSK-00105-Ajax Start  
+   706→                xhttp.onreadystatechange = function() {
+   707→                
+   708→                        if (this.readyState == 4 && this.status == 200) {
+   709→                                var myArray1 = eval( xhttp.responseText );
+   710→                                
+   711→                                var msg = myArray1[0];
+   712→                                
+   713→                                if(msg=1){
+   714→                                        
+   715→                                        $('#approveConfirm').modal('hide');
+   716→                                        window.location.reload();
+   717→                                        
+   718→                                        var myModal = $('#approve_Success');
+   719→                                        myModal.modal('show');
+   720→                                        
+   721→                                        clearTimeout(myModal.data('hideInterval'));
+   722→                                        myModal.data('hideInterval', setTimeout(function(){
+   723→                                                myModal.modal('hide');
+   724→                                        }, 3000));
+   725→                                        
+   726→                                }
+   727→                                
+   728→                                if(msg=2){
+   729→                                        
+   730→                                        var myModal = $('#connection_Problem');
+   731→                                        myModal.modal('show');
+   732→                        
+   733→                                        clearTimeout(myModal.data('hideInterval'));
+   734→                                        myModal.data('hideInterval', setTimeout(function(){
+   735→                                                myModal.modal('hide');
+   736→                                        }, 3000));
+   737→                                        
+   738→                                }
+   739→                                
+   740→                                
+   741→                }
+   742→                        
+   743→                };      
+   744→                
+   745→        xhttp.open("GET", "../model/approve_petty_cash.php?id=" + id  + "&admin_index="+admin_index , true);                                                                                            
+   746→                xhttp.send();//MSK-00105-Ajax End
+   747→                                                
+   748→});
+   749→
+   750→
+   751→function scrollDown(){
+   752→        
+   753→        window.scrollTo(0,document.body.scrollHeight);
+   754→}
+   755→
+   756→</script>
+   757→
+   758→<!--redirect your own url when clicking browser back button -->
+   759→<script>
+   760→(function(window, location) {
+   761→history.replaceState(null, document.title, location.pathname+"#!/history");
+   762→history.pushState(null, document.title, location.pathname);
+   763→
+   764→window.addEventListener("popstate", function() {
+   765→  if(location.hash === "#!/history") {
+   766→    history.replaceState(null, document.title, location.pathname);
+   767→    setTimeout(function(){
+   768→      location.replace("../index.php");//path to when click back button
+   769→    },0);
+   770→  }
+   771→}, false);
+   772→}(window, location));
+   773→</script>
+   774→
+   775→</div><!-- /.content-wrapper -->  
+   776→         
+   777→<?php include_once('footer.php');?>
