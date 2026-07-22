@@ -1,0 +1,902 @@
+     1→'use client'
+     2→
+     3→import React, { useState, useEffect, useCallback, useRef } from 'react'
+     4→import {
+     5→  Download, Upload, RefreshCw, Trash2, Pencil, AlertCircle,
+     6→  FileText, Sheet, Presentation, Image as ImageIcon, Archive, File,
+     7→  Loader2, Search, X, FileUp, Eye, EyeOff, Files,
+     8→  CheckCircle2, XCircle,
+     9→} from 'lucide-react'
+    10→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    11→import { Button } from '@/components/ui/button'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Textarea } from '@/components/ui/textarea'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→import { Badge } from '@/components/ui/badge'
+    17→import {
+    18→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    19→} from '@/components/ui/dialog'
+    20→import {
+    21→  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+    22→  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+    23→} from '@/components/ui/alert-dialog'
+    24→import {
+    25→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    26→} from '@/components/ui/select'
+    27→import {
+    28→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    29→} from '@/components/ui/table'
+    30→import { toast } from 'sonner'
+    31→import { useAdminStore } from '@/lib/admin-store'
+    32→import {
+    33→  DOWNLOAD_CATEGORIES,
+    34→  ALLOWED_EXTENSIONS,
+    35→  MAX_FILE_SIZE,
+    36→  formatFileSize,
+    37→  getFileTypeIcon,
+    38→  getCategoryInfo,
+    39→} from '@/lib/downloads'
+    40→
+    41→interface DownloadableFile {
+    42→  id: string
+    43→  schoolId: string
+    44→  category: string
+    45→  title: string
+    46→  description: string
+    47→  fileName: string
+    48→  filePath: string
+    49→  fileType: string
+    50→  fileSize: number
+    51→  uploadedById: string | null
+    52→  uploadedByName: string
+    53→  isActive: boolean
+    54→  downloadsCount: number
+    55→  createdAt: string
+    56→  updatedAt: string
+    57→}
+    58→
+    59→type FileTypeIcon = React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+    60→
+    61→/** خريطة نوع الملف → أيقونة + لون */
+    62→function getFileTypeDisplay(fileName: string): { Icon: FileTypeIcon; color: string } {
+    63→  switch (getFileTypeIcon(fileName)) {
+    64→    case 'pdf':
+    65→      return { Icon: FileText, color: '#dc2626' } // أحمر
+    66→    case 'word':
+    67→      return { Icon: FileText, color: '#2563eb' } // أزرق (لون Word)
+    68→    case 'excel':
+    69→      return { Icon: Sheet, color: '#16a34a' } // أخضر
+    70→    case 'powerpoint':
+    71→      return { Icon: Presentation, color: '#ea580c' } // برتقالي
+    72→    case 'image':
+    73→      return { Icon: ImageIcon, color: '#9333ea' } // بنفسجي
+    74→    case 'archive':
+    75→      return { Icon: Archive, color: '#475569' } // رمادي
+    76→    case 'text':
+    77→      return { Icon: FileText, color: '#475569' } // رمادي
+    78→    default:
+    79→      return { Icon: File, color: '#475569' } // رمادي
+    80→  }
+    81→}
+    82→
+    83→/** تحويل hex إلى rgba مع شفافية */
+    84→function withAlpha(hex: string, alpha: number): string {
+    85→  const h = hex.replace('#', '')
+    86→  const r = parseInt(h.slice(0, 2), 16)
+    87→  const g = parseInt(h.slice(2, 4), 16)
+    88→  const b = parseInt(h.slice(4, 6), 16)
+    89→  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    90→}
+    91→
+    92→/** تنسيق التاريخ بالعربية */
+    93→function formatDate(iso: string): string {
+    94→  try {
+    95→    return new Date(iso).toLocaleDateString('ar-EG', {
+    96→      year: 'numeric',
+    97→      month: 'long',
+    98→      day: 'numeric',
+    99→    })
+   100→  } catch {
+   101→    return iso.slice(0, 10)
+   102→  }
+   103→}
+   104→
+   105→export function DownloadsManagement() {
+   106→  const { selectedSchoolId, adminUser } = useAdminStore()
+   107→
+   108→  // قائمة الملفات + حالة التحميل
+   109→  const [files, setFiles] = useState<DownloadableFile[]>([])
+   110→  const [loading, setLoading] = useState(true)
+   111→  const [refreshing, setRefreshing] = useState(false)
+   112→
+   113→  // الفلاتر
+   114→  const [filterCategory, setFilterCategory] = useState<string>('all')
+   115→  const [searchInput, setSearchInput] = useState('')
+   116→  const [search, setSearch] = useState('')
+   117→  const [includeInactive, setIncludeInactive] = useState(false)
+   118→
+   119→  // نموذج الرفع
+   120→  const [uploadFile, setUploadFile] = useState<File | null>(null)
+   121→  const [uploadTitle, setUploadTitle] = useState('')
+   122→  const [uploadDescription, setUploadDescription] = useState('')
+   123→  const [uploadCategory, setUploadCategory] = useState<string>('GENERAL')
+   124→  const [uploading, setUploading] = useState(false)
+   125→  const [isDragOver, setIsDragOver] = useState(false)
+   126→  const fileInputRef = useRef<HTMLInputElement>(null)
+   127→
+   128→  // حوار التعديل
+   129→  const [editOpen, setEditOpen] = useState(false)
+   130→  const [editTarget, setEditTarget] = useState<DownloadableFile | null>(null)
+   131→  const [editTitle, setEditTitle] = useState('')
+   132→  const [editDescription, setEditDescription] = useState('')
+   133→  const [editCategory, setEditCategory] = useState('GENERAL')
+   134→  const [editIsActive, setEditIsActive] = useState(true)
+   135→  const [editSaving, setEditSaving] = useState(false)
+   136→
+   137→  // تبديل الحالة (سبينر لكل صف)
+   138→  const [togglingId, setTogglingId] = useState<string | null>(null)
+   139→
+   140→  // حوار الحذف
+   141→  const [deleteTarget, setDeleteTarget] = useState<DownloadableFile | null>(null)
+   142→  const [deleteOpen, setDeleteOpen] = useState(false)
+   143→  const [deleting, setDeleting] = useState(false)
+   144→
+   145→  // debounce البحث
+   146→  useEffect(() => {
+   147→    const t = setTimeout(() => setSearch(searchInput), 400)
+   148→    return () => clearTimeout(t)
+   149→  }, [searchInput])
+   150→
+   151→  const fetchFiles = useCallback(
+   152→    async (showSpinner = false, signal?: AbortSignal) => {
+   153→      if (!selectedSchoolId) {
+   154→        setLoading(false)
+   155→        return
+   156→      }
+   157→      if (showSpinner) setRefreshing(true)
+   158→      try {
+   159→        const params = new URLSearchParams({
+   160→          schoolId: selectedSchoolId,
+   161→          includeInactive: includeInactive ? '1' : '0',
+   162→        })
+   163→        if (filterCategory && filterCategory !== 'all') {
+   164→          params.set('category', filterCategory)
+   165→        }
+   166→        if (search.trim()) {
+   167→          params.set('search', search.trim())
+   168→        }
+   169→        const res = await fetch(`/api/downloads?${params.toString()}`, { signal })
+   170→        if (!res.ok) throw new Error('bad response')
+   171→        const data = await res.json()
+   172→        setFiles(Array.isArray(data.files) ? data.files : [])
+   173→      } catch (err) {
+   174→        if ((err as Error).name === 'AbortError') return
+   175→        toast.error('فشل في تحميل الملفات')
+   176→      } finally {
+   177→        setLoading(false)
+   178→        setRefreshing(false)
+   179→      }
+   180→    },
+   181→    [selectedSchoolId, includeInactive, filterCategory, search]
+   182→  )
+   183→
+   184→  useEffect(() => {
+   185→    const ac = new AbortController()
+   186→    fetchFiles(false, ac.signal)
+   187→    return () => ac.abort()
+   188→  }, [fetchFiles])
+   189→
+   190→  // الإحصائيات
+   191→  const totalFiles = files.length
+   192→  const totalDownloads = files.reduce((sum, f) => sum + (f.downloadsCount || 0), 0)
+   193→  const activeCount = files.filter((f) => f.isActive).length
+   194→  const inactiveCount = totalFiles - activeCount
+   195→
+   196→  // التحقق من الملف المختار
+   197→  const handleFileSelected = (file: File | null) => {
+   198→    if (!file) {
+   199→      setUploadFile(null)
+   200→      return
+   201→    }
+   202→    if (file.size > MAX_FILE_SIZE) {
+   203→      toast.error(`حجم الملف يتجاوز الحد المسموح (${formatFileSize(MAX_FILE_SIZE)})`)
+   204→      return
+   205→    }
+   206→    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase()
+   207→    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+   208→      toast.error('نوع الملف غير مدعوم. الأنواع المدعومة: ' + ALLOWED_EXTENSIONS.join('، '))
+   209→      return
+   210→    }
+   211→    setUploadFile(file)
+   212→    // تعبئة العنوان تلقائياً من اسم الملف (بدون الامتداد)
+   213→    if (!uploadTitle.trim()) {
+   214→      const baseName = file.name.replace(/\.[^.]+$/, '')
+   215→      setUploadTitle(baseName)
+   216→    }
+   217→  }
+   218→
+   219→  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+   220→    e.preventDefault()
+   221→    setIsDragOver(false)
+   222→    const file = e.dataTransfer.files?.[0]
+   223→    if (file) handleFileSelected(file)
+   224→  }
+   225→
+   226→  const clearUploadForm = () => {
+   227→    setUploadFile(null)
+   228→    setUploadTitle('')
+   229→    setUploadDescription('')
+   230→    setUploadCategory('GENERAL')
+   231→    if (fileInputRef.current) fileInputRef.current.value = ''
+   232→  }
+   233→
+   234→  const handleUpload = async () => {
+   235→    if (!uploadFile) {
+   236→      toast.error('يرجى اختيار ملف للرفع')
+   237→      return
+   238→    }
+   239→    if (!uploadTitle.trim()) {
+   240→      toast.error('عنوان الملف مطلوب')
+   241→      return
+   242→    }
+   243→    if (!selectedSchoolId) {
+   244→      toast.error('لم يتم تحديد المدرسة')
+   245→      return
+   246→    }
+   247→    setUploading(true)
+   248→    try {
+   249→      const form = new FormData()
+   250→      form.append('file', uploadFile)
+   251→      form.append('schoolId', selectedSchoolId)
+   252→      form.append('category', uploadCategory)
+   253→      form.append('title', uploadTitle.trim())
+   254→      form.append('description', uploadDescription.trim())
+   255→      if (adminUser?.id) form.append('uploadedById', adminUser.id)
+   256→      if (adminUser?.username) form.append('uploadedByName', adminUser.username)
+   257→
+   258→      const res = await fetch('/api/downloads', {
+   259→        method: 'POST',
+   260→        body: form,
+   261→      })
+   262→      const data = await res.json()
+   263→      if (!res.ok) {
+   264→        throw new Error(data.error || 'فشل رفع الملف')
+   265→      }
+   266→      toast.success('تم رفع الملف بنجاح')
+   267→      clearUploadForm()
+   268→      fetchFiles(true)
+   269→    } catch (err) {
+   270→      toast.error(err instanceof Error ? err.message : 'فشل رفع الملف')
+   271→    } finally {
+   272→      setUploading(false)
+   273→    }
+   274→  }
+   275→
+   276→  const handleToggleActive = async (file: DownloadableFile) => {
+   277→    setTogglingId(file.id)
+   278→    try {
+   279→      const res = await fetch(`/api/downloads/${file.id}`, {
+   280→        method: 'PATCH',
+   281→        headers: { 'Content-Type': 'application/json' },
+   282→        body: JSON.stringify({
+   283→          schoolId: selectedSchoolId,
+   284→          isActive: !file.isActive,
+   285→        }),
+   286→      })
+   287→      if (!res.ok) throw new Error('bad response')
+   288→      toast.success(file.isActive ? 'تم إخفاء الملف' : 'تم إظهار الملف')
+   289→      setFiles((prev) =>
+   290→        prev.map((f) => (f.id === file.id ? { ...f, isActive: !f.isActive } : f))
+   291→      )
+   292→    } catch {
+   293→      toast.error('فشل في تحديث حالة الملف')
+   294→    } finally {
+   295→      setTogglingId(null)
+   296→    }
+   297→  }
+   298→
+   299→  const openEdit = (file: DownloadableFile) => {
+   300→    setEditTarget(file)
+   301→    setEditTitle(file.title)
+   302→    setEditDescription(file.description || '')
+   303→    setEditCategory(file.category)
+   304→    setEditIsActive(file.isActive)
+   305→    setEditOpen(true)
+   306→  }
+   307→
+   308→  const handleEditSave = async () => {
+   309→    if (!editTarget) return
+   310→    if (!editTitle.trim()) {
+   311→      toast.error('عنوان الملف مطلوب')
+   312→      return
+   313→    }
+   314→    setEditSaving(true)
+   315→    try {
+   316→      const res = await fetch(`/api/downloads/${editTarget.id}`, {
+   317→        method: 'PATCH',
+   318→        headers: { 'Content-Type': 'application/json' },
+   319→        body: JSON.stringify({
+   320→          schoolId: selectedSchoolId,
+   321→          title: editTitle.trim(),
+   322→          description: editDescription.trim(),
+   323→          category: editCategory,
+   324→          isActive: editIsActive,
+   325→        }),
+   326→      })
+   327→      if (!res.ok) throw new Error('bad response')
+   328→      const data = await res.json()
+   329→      toast.success('تم تحديث الملف بنجاح')
+   330→      if (data.file) {
+   331→        setFiles((prev) => prev.map((f) => (f.id === editTarget.id ? data.file : f)))
+   332→      } else {
+   333→        fetchFiles(true)
+   334→      }
+   335→      setEditOpen(false)
+   336→    } catch {
+   337→      toast.error('فشل في تحديث الملف')
+   338→    } finally {
+   339→      setEditSaving(false)
+   340→    }
+   341→  }
+   342→
+   343→  const handleDelete = async () => {
+   344→    if (!deleteTarget) return
+   345→    setDeleting(true)
+   346→    try {
+   347→      const res = await fetch(
+   348→        `/api/downloads/${deleteTarget.id}?schoolId=${encodeURIComponent(selectedSchoolId)}`,
+   349→        { method: 'DELETE' }
+   350→      )
+   351→      if (!res.ok) throw new Error('bad response')
+   352→      toast.success('تم حذف الملف بنجاح')
+   353→      setFiles((prev) => prev.filter((f) => f.id !== deleteTarget.id))
+   354→      setDeleteOpen(false)
+   355→      setDeleteTarget(null)
+   356→    } catch {
+   357→      toast.error('فشل في حذف الملف')
+   358→    } finally {
+   359→      setDeleting(false)
+   360→    }
+   361→  }
+   362→
+   363→  return (
+   364→    <div className="space-y-6">
+   365→      {/* ===== ترويسة الصفحة ===== */}
+   366→      <div className="flex items-start justify-between gap-4 flex-wrap">
+   367→        <div>
+   368→          <h2 className="text-2xl font-bold text-[#1a1a2e] flex items-center gap-2">
+   369→            <Download className="w-6 h-6 text-[#610000]" />
+   370→            مركز التحميل
+   371→          </h2>
+   372→          <p className="text-sm text-gray-500 mt-1">
+   373→            إدارة الملفات القابلة للتحميل لشئون الطلاب والعاملين
+   374→          </p>
+   375→        </div>
+   376→        <Button
+   377→          variant="outline"
+   378→          size="sm"
+   379→          onClick={() => fetchFiles(true)}
+   380→          disabled={refreshing}
+   381→          className="min-h-[44px]"
+   382→        >
+   383→          {refreshing ? (
+   384→            <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+   385→          ) : (
+   386→            <RefreshCw className="w-4 h-4 ml-1" />
+   387→          )}
+   388→          تحديث
+   389→        </Button>
+   390→      </div>
+   391→
+   392→      {/* ===== بطاقات الإحصائيات ===== */}
+   393→      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   394→        <Card>
+   395→          <CardContent className="p-4 flex items-center gap-3">
+   396→            <div
+   397→              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+   398→              style={{ backgroundColor: withAlpha('#610000', 0.1) }}
+   399→            >
+   400→              <Files className="w-5 h-5" style={{ color: '#610000' }} />
+   401→            </div>
+   402→            <div className="min-w-0">
+   403→              <p className="text-xs text-gray-500">إجمالي الملفات</p>
+   404→              <p className="text-xl font-bold text-[#1a1a2e]">{totalFiles}</p>
+   405→            </div>
+   406→          </CardContent>
+   407→        </Card>
+   408→        <Card>
+   409→          <CardContent className="p-4 flex items-center gap-3">
+   410→            <div
+   411→              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+   412→              style={{ backgroundColor: withAlpha('#047857', 0.1) }}
+   413→            >
+   414→              <Download className="w-5 h-5" style={{ color: '#047857' }} />
+   415→            </div>
+   416→            <div className="min-w-0">
+   417→              <p className="text-xs text-gray-500">إجمالي التحميلات</p>
+   418→              <p className="text-xl font-bold text-[#1a1a2e]">{totalDownloads}</p>
+   419→            </div>
+   420→          </CardContent>
+   421→        </Card>
+   422→        <Card>
+   423→          <CardContent className="p-4 flex items-center gap-3">
+   424→            <div
+   425→              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+   426→              style={{ backgroundColor: withAlpha('#16a34a', 0.1) }}
+   427→            >
+   428→              <CheckCircle2 className="w-5 h-5" style={{ color: '#16a34a' }} />
+   429→            </div>
+   430→            <div className="min-w-0">
+   431→              <p className="text-xs text-gray-500">الملفات الظاهرة</p>
+   432→              <p className="text-xl font-bold text-[#1a1a2e]">{activeCount}</p>
+   433→            </div>
+   434→          </CardContent>
+   435→        </Card>
+   436→        <Card>
+   437→          <CardContent className="p-4 flex items-center gap-3">
+   438→            <div
+   439→              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+   440→              style={{ backgroundColor: withAlpha('#dc2626', 0.1) }}
+   441→            >
+   442→              <XCircle className="w-5 h-5" style={{ color: '#dc2626' }} />
+   443→            </div>
+   444→            <div className="min-w-0">
+   445→              <p className="text-xs text-gray-500">الملفات المخفية</p>
+   446→              <p className="text-xl font-bold text-[#1a1a2e]">{inactiveCount}</p>
+   447→            </div>
+   448→          </CardContent>
+   449→        </Card>
+   450→      </div>
+   451→
+   452→      {/* ===== شريط الفلاتر ===== */}
+   453→      <Card>
+   454→        <CardContent className="p-4">
+   455→          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+   456→            <div>
+   457→              <label className="text-sm font-medium mb-1.5 block">التصنيف</label>
+   458→              <Select value={filterCategory} onValueChange={setFilterCategory}>
+   459→                <SelectTrigger className="h-11">
+   460→                  <SelectValue placeholder="كل التصنيفات" />
+   461→                </SelectTrigger>
+   462→                <SelectContent>
+   463→                  <SelectItem value="all">كل التصنيفات</SelectItem>
+   464→                  {DOWNLOAD_CATEGORIES.map((c) => (
+   465→                    <SelectItem key={c.value} value={c.value}>
+   466→                      {c.label}
+   467→                    </SelectItem>
+   468→                  ))}
+   469→                </SelectContent>
+   470→              </Select>
+   471→            </div>
+   472→            <div>
+   473→              <label className="text-sm font-medium mb-1.5 block">بحث</label>
+   474→              <div className="relative">
+   475→                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+   476→                <Input
+   477→                  placeholder="بحث بالعنوان أو الوصف أو اسم الملف"
+   478→                  value={searchInput}
+   479→                  onChange={(e) => setSearchInput(e.target.value)}
+   480→                  className="h-11 pr-10"
+   481→                />
+   482→              </div>
+   483→            </div>
+   484→            <div className="flex items-center gap-3 h-11 px-1">
+   485→              <Switch
+   486→                checked={includeInactive}
+   487→                onCheckedChange={setIncludeInactive}
+   488→                id="show-inactive"
+   489→              />
+   490→              <label
+   491→                htmlFor="show-inactive"
+   492→                className="text-sm font-medium cursor-pointer select-none"
+   493→              >
+   494→                إظهار المخفية
+   495→              </label>
+   496→            </div>
+   497→          </div>
+   498→        </CardContent>
+   499→      </Card>
+   500→
+   501→      {/* ===== قسم الرفع ===== */}
+   502→      <Card>
+   503→        <CardHeader>
+   504→          <CardTitle className="flex items-center gap-2 text-base">
+   505→            <Upload className="w-5 h-5 text-[#610000]" />
+   506→            رفع ملف جديد
+   507→          </CardTitle>
+   508→        </CardHeader>
+   509→        <CardContent className="space-y-4">
+   510→          {/* منطقة السحب والإفلات */}
+   511→          <div
+   512→            onDragOver={(e) => {
+   513→              e.preventDefault()
+   514→              setIsDragOver(true)
+   515→            }}
+   516→            onDragLeave={() => setIsDragOver(false)}
+   517→            onDrop={handleDrop}
+   518→            onClick={() => fileInputRef.current?.click()}
+   519→            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+   520→              isDragOver
+   521→                ? 'border-[#610000] bg-[#610000]/5'
+   522→                : 'border-gray-300 hover:border-[#610000]/50'
+   523→            }`}
+   524→          >
+   525→            <input
+   526→              ref={fileInputRef}
+   527→              type="file"
+   528→              className="hidden"
+   529→              accept={ALLOWED_EXTENSIONS.join(',')}
+   530→              onChange={(e) => handleFileSelected(e.target.files?.[0] || null)}
+   531→            />
+   532→            {uploadFile ? (
+   533→              <div className="flex items-center justify-center gap-3">
+   534→                {(() => {
+   535→                  const { Icon, color } = getFileTypeDisplay(uploadFile.name)
+   536→                  return <Icon className="w-8 h-8" style={{ color }} />
+   537→                })()}
+   538→                <div className="text-right">
+   539→                  <p className="font-medium text-sm text-[#1a1a2e]">{uploadFile.name}</p>
+   540→                  <p className="text-xs text-gray-500">{formatFileSize(uploadFile.size)}</p>
+   541→                </div>
+   542→                <Button
+   543→                  variant="ghost"
+   544→                  size="icon"
+   545→                  className="h-8 w-8"
+   546→                  onClick={(e) => {
+   547→                    e.stopPropagation()
+   548→                    clearUploadForm()
+   549→                  }}
+   550→                >
+   551→                  <X className="w-4 h-4" />
+   552→                </Button>
+   553→              </div>
+   554→            ) : (
+   555→              <>
+   556→                <FileUp className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+   557→                <p className="text-sm text-gray-600">
+   558→                  اسحب وأفلت الملف هنا أو{' '}
+   559→                  <span className="text-[#610000] font-medium">اضغط للاختيار</span>
+   560→                </p>
+   561→                <p className="text-xs text-gray-400 mt-1">
+   562→                  الحد الأقصى للحجم: {formatFileSize(MAX_FILE_SIZE)}
+   563→                </p>
+   564→                <p className="text-xs text-gray-400">
+   565→                  الأنواع المدعومة: {ALLOWED_EXTENSIONS.join('، ')}
+   566→                </p>
+   567→              </>
+   568→            )}
+   569→          </div>
+   570→
+   571→          {/* نموذج بيانات الملف — يظهر فقط بعد اختيار ملف */}
+   572→          {uploadFile && (
+   573→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   574→              <div>
+   575→                <label className="text-sm font-medium mb-1.5 block">
+   576→                  العنوان <span className="text-red-500">*</span>
+   577→                </label>
+   578→                <Input
+   579→                  placeholder="عنوان واضح للملف"
+   580→                  value={uploadTitle}
+   581→                  onChange={(e) => setUploadTitle(e.target.value)}
+   582→                  className="h-11"
+   583→                />
+   584→              </div>
+   585→              <div>
+   586→                <label className="text-sm font-medium mb-1.5 block">التصنيف</label>
+   587→                <Select value={uploadCategory} onValueChange={setUploadCategory}>
+   588→                  <SelectTrigger className="h-11">
+   589→                    <SelectValue placeholder="اختر التصنيف" />
+   590→                  </SelectTrigger>
+   591→                  <SelectContent>
+   592→                    {DOWNLOAD_CATEGORIES.map((c) => (
+   593→                      <SelectItem key={c.value} value={c.value}>
+   594→                        {c.label}
+   595→                      </SelectItem>
+   596→                    ))}
+   597→                  </SelectContent>
+   598→                </Select>
+   599→              </div>
+   600→              <div className="md:col-span-2">
+   601→                <label className="text-sm font-medium mb-1.5 block">
+   602→                  الوصف (اختياري)
+   603→                </label>
+   604→                <Textarea
+   605→                  placeholder="وصف مختصر لمحتوى الملف"
+   606→                  value={uploadDescription}
+   607→                  onChange={(e) => setUploadDescription(e.target.value)}
+   608→                  rows={3}
+   609→                />
+   610→              </div>
+   611→              <div className="md:col-span-2">
+   612→                <Button
+   613→                  onClick={handleUpload}
+   614→                  disabled={uploading || !uploadFile || !uploadTitle.trim()}
+   615→                  className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   616→                >
+   617→                  {uploading ? (
+   618→                    <>
+   619→                      <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+   620→                      جاري الرفع...
+   621→                    </>
+   622→                  ) : (
+   623→                    <>
+   624→                      <Upload className="w-4 h-4 ml-1" />
+   625→                      رفع الملف
+   626→                    </>
+   627→                  )}
+   628→                </Button>
+   629→              </div>
+   630→            </div>
+   631→          )}
+   632→        </CardContent>
+   633→      </Card>
+   634→
+   635→      {/* ===== جدول الملفات ===== */}
+   636→      <Card>
+   637→        <CardHeader>
+   638→          <CardTitle className="flex items-center gap-2 text-base">
+   639→            <Files className="w-5 h-5 text-[#610000]" />
+   640→            الملفات ({files.length})
+   641→          </CardTitle>
+   642→        </CardHeader>
+   643→        <CardContent>
+   644→          {loading ? (
+   645→            <div className="space-y-2">
+   646→              {Array.from({ length: 5 }).map((_, i) => (
+   647→                <Skeleton key={i} className="h-14 w-full rounded-md" />
+   648→              ))}
+   649→            </div>
+   650→          ) : files.length === 0 ? (
+   651→            <div className="text-center py-12">
+   652→              <AlertCircle className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+   653→              <p className="text-gray-500">لا توجد ملفات في مركز التحميل</p>
+   654→              <p className="text-xs text-gray-400 mt-1">
+   655→                ابدأ برفع ملف جديد من القسم أعلاه
+   656→              </p>
+   657→            </div>
+   658→          ) : (
+   659→            <div className="overflow-x-auto">
+   660→              <Table>
+   661→                <TableHeader>
+   662→                  <TableRow>
+   663→                    <TableHead>الملف</TableHead>
+   664→                    <TableHead>التصنيف</TableHead>
+   665→                    <TableHead>الحجم</TableHead>
+   666→                    <TableHead>التحميلات</TableHead>
+   667→                    <TableHead>الحالة</TableHead>
+   668→                    <TableHead>التاريخ</TableHead>
+   669→                    <TableHead className="text-left">إجراءات</TableHead>
+   670→                  </TableRow>
+   671→                </TableHeader>
+   672→                <TableBody>
+   673→                  {files.map((file) => {
+   674→                    const { Icon, color } = getFileTypeDisplay(file.fileName)
+   675→                    const catInfo = getCategoryInfo(file.category)
+   676→                    return (
+   677→                      <TableRow
+   678→                        key={file.id}
+   679→                        className={!file.isActive ? 'opacity-60' : ''}
+   680→                      >
+   681→                        <TableCell>
+   682→                          <div className="flex items-center gap-3 min-w-[200px]">
+   683→                            <div
+   684→                              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+   685→                              style={{ backgroundColor: withAlpha(color, 0.1) }}
+   686→                            >
+   687→                              <Icon className="w-5 h-5" style={{ color }} />
+   688→                            </div>
+   689→                            <div className="min-w-0">
+   690→                              <p className="font-medium text-sm text-[#1a1a2e] truncate max-w-[220px]">
+   691→                                {file.title}
+   692→                              </p>
+   693→                              <p className="text-xs text-gray-400 truncate max-w-[220px]">
+   694→                                {file.fileName}
+   695→                              </p>
+   696→                            </div>
+   697→                          </div>
+   698→                        </TableCell>
+   699→                        <TableCell>
+   700→                          {catInfo ? (
+   701→                            <span
+   702→                              className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+   703→                              style={{
+   704→                                backgroundColor: withAlpha(catInfo.color, 0.12),
+   705→                                color: catInfo.color,
+   706→                              }}
+   707→                            >
+   708→                              {catInfo.label}
+   709→                            </span>
+   710→                          ) : (
+   711→                            <span className="text-xs text-gray-400">{file.category}</span>
+   712→                          )}
+   713→                        </TableCell>
+   714→                        <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+   715→                          {formatFileSize(file.fileSize)}
+   716→                        </TableCell>
+   717→                        <TableCell className="text-sm text-gray-600">
+   718→                          <span className="inline-flex items-center gap-1">
+   719→                            <Download className="w-3.5 h-3.5 text-gray-400" />
+   720→                            {file.downloadsCount || 0}
+   721→                          </span>
+   722→                        </TableCell>
+   723→                        <TableCell>
+   724→                          {file.isActive ? (
+   725→                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+   726→                              ظاهر
+   727→                            </Badge>
+   728→                          ) : (
+   729→                            <Badge className="bg-red-100 text-red-700 hover:bg-red-100">
+   730→                              مخفي
+   731→                            </Badge>
+   732→                          )}
+   733→                        </TableCell>
+   734→                        <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+   735→                          {formatDate(file.createdAt)}
+   736→                        </TableCell>
+   737→                        <TableCell>
+   738→                          <div className="flex items-center gap-1">
+   739→                            <Button
+   740→                              variant="ghost"
+   741→                              size="icon"
+   742→                              className="h-8 w-8"
+   743→                              onClick={() => openEdit(file)}
+   744→                              title="تعديل"
+   745→                            >
+   746→                              <Pencil className="w-4 h-4 text-gray-600" />
+   747→                            </Button>
+   748→                            <Button
+   749→                              variant="ghost"
+   750→                              size="icon"
+   751→                              className="h-8 w-8"
+   752→                              onClick={() => handleToggleActive(file)}
+   753→                              disabled={togglingId === file.id}
+   754→                              title={file.isActive ? 'إخفاء' : 'إظهار'}
+   755→                            >
+   756→                              {togglingId === file.id ? (
+   757→                                <Loader2 className="w-4 h-4 animate-spin" />
+   758→                              ) : file.isActive ? (
+   759→                                <EyeOff className="w-4 h-4 text-gray-600" />
+   760→                              ) : (
+   761→                                <Eye className="w-4 h-4 text-gray-600" />
+   762→                              )}
+   763→                            </Button>
+   764→                            <Button
+   765→                              variant="ghost"
+   766→                              size="icon"
+   767→                              className="h-8 w-8 hover:bg-red-50"
+   768→                              onClick={() => {
+   769→                                setDeleteTarget(file)
+   770→                                setDeleteOpen(true)
+   771→                              }}
+   772→                              title="حذف"
+   773→                            >
+   774→                              <Trash2 className="w-4 h-4 text-red-600" />
+   775→                            </Button>
+   776→                          </div>
+   777→                        </TableCell>
+   778→                      </TableRow>
+   779→                    )
+   780→                  })}
+   781→                </TableBody>
+   782→              </Table>
+   783→            </div>
+   784→          )}
+   785→        </CardContent>
+   786→      </Card>
+   787→
+   788→      {/* ===== حوار التعديل ===== */}
+   789→      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+   790→        <DialogContent dir="rtl">
+   791→          <DialogHeader>
+   792→            <DialogTitle>تعديل الملف</DialogTitle>
+   793→            <DialogDescription>تعديل بيانات الملف القابل للتحميل</DialogDescription>
+   794→          </DialogHeader>
+   795→          <div className="space-y-4 mt-2">
+   796→            <div>
+   797→              <label className="text-sm font-medium mb-1.5 block">
+   798→                العنوان <span className="text-red-500">*</span>
+   799→              </label>
+   800→              <Input
+   801→                value={editTitle}
+   802→                onChange={(e) => setEditTitle(e.target.value)}
+   803→                className="h-11"
+   804→              />
+   805→            </div>
+   806→            <div>
+   807→              <label className="text-sm font-medium mb-1.5 block">الوصف</label>
+   808→              <Textarea
+   809→                value={editDescription}
+   810→                onChange={(e) => setEditDescription(e.target.value)}
+   811→                rows={3}
+   812→              />
+   813→            </div>
+   814→            <div>
+   815→              <label className="text-sm font-medium mb-1.5 block">التصنيف</label>
+   816→              <Select value={editCategory} onValueChange={setEditCategory}>
+   817→                <SelectTrigger className="h-11">
+   818→                  <SelectValue placeholder="اختر التصنيف" />
+   819→                </SelectTrigger>
+   820→                <SelectContent>
+   821→                  {DOWNLOAD_CATEGORIES.map((c) => (
+   822→                    <SelectItem key={c.value} value={c.value}>
+   823→                      {c.label}
+   824→                    </SelectItem>
+   825→                  ))}
+   826→                </SelectContent>
+   827→              </Select>
+   828→            </div>
+   829→            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+   830→              <Switch
+   831→                checked={editIsActive}
+   832→                onCheckedChange={setEditIsActive}
+   833→                id="edit-is-active"
+   834→              />
+   835→              <label
+   836→                htmlFor="edit-is-active"
+   837→                className="text-sm font-medium cursor-pointer select-none"
+   838→              >
+   839→                {editIsActive ? 'الملف ظاهر للتحميل' : 'الملف مخفي'}
+   840→              </label>
+   841→            </div>
+   842→          </div>
+   843→          <div className="flex gap-3 justify-end mt-4">
+   844→            <Button
+   845→              variant="outline"
+   846→              onClick={() => setEditOpen(false)}
+   847→              className="min-h-[44px]"
+   848→            >
+   849→              <X className="w-4 h-4 ml-1" />
+   850→              إلغاء
+   851→            </Button>
+   852→            <Button
+   853→              onClick={handleEditSave}
+   854→              disabled={editSaving || !editTitle.trim()}
+   855→              className="bg-[#610000] hover:bg-[#8B0000] text-white min-h-[44px]"
+   856→            >
+   857→              {editSaving ? (
+   858→                <>
+   859→                  <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+   860→                  جاري الحفظ...
+   861→                </>
+   862→              ) : (
+   863→                'حفظ التعديلات'
+   864→              )}
+   865→            </Button>
+   866→          </div>
+   867→        </DialogContent>
+   868→      </Dialog>
+   869→
+   870→      {/* ===== حوار تأكيد الحذف ===== */}
+   871→      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+   872→        <AlertDialogContent dir="rtl">
+   873→          <AlertDialogHeader>
+   874→            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+   875→            <AlertDialogDescription>
+   876→              هل أنت متأكد من حذف الملف &quot;{deleteTarget?.title}&quot;؟ لا يمكن التراجع
+   877→              عن هذا الإجراء وسيتم حذف الملف نهائياً.
+   878→            </AlertDialogDescription>
+   879→          </AlertDialogHeader>
+   880→          <AlertDialogFooter>
+   881→            <AlertDialogCancel className="min-h-[44px]">إلغاء</AlertDialogCancel>
+   882→            <AlertDialogAction
+   883→              onClick={handleDelete}
+   884→              disabled={deleting}
+   885→              className="bg-red-600 hover:bg-red-700 text-white min-h-[44px]"
+   886→            >
+   887→              {deleting ? (
+   888→                <>
+   889→                  <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+   890→                  جاري الحذف...
+   891→                </>
+   892→              ) : (
+   893→                'حذف'
+   894→              )}
+   895→            </AlertDialogAction>
+   896→          </AlertDialogFooter>
+   897→        </AlertDialogContent>
+   898→      </AlertDialog>
+   899→    </div>
+   900→  )
+   901→}
+   902→

@@ -1,0 +1,1537 @@
+     1→generator client {
+     2→  provider = "prisma-client-js"
+     3→}
+     4→
+     5→datasource db {
+     6→  provider = "sqlite"
+     7→  url      = env("DATABASE_URL")
+     8→}
+     9→
+    10→// ===== المدارس (Multi-Tenant) =====
+    11→model School {
+    12→  id             String    @id @default(cuid())
+    13→  name           String
+    14→  subdomain      String    @unique
+    15→  description    String    @default("")
+    16→  logoUrl        String?
+    17→  primaryColor   String    @default("#610000")
+    18→  secondaryColor String    @default("#009688")
+    19→  address        String    @default("")
+    20→  phone          String    @default("")
+    21→  email          String    @default("")
+    22→  facebookUrl    String?
+    23→  mapEmbedUrl    String?   // Google Maps embed URL for location map
+    24→  isActive       Boolean   @default(true)
+    25→  createdAt      DateTime  @default(now())
+    26→  updatedAt      DateTime  @updatedAt
+    27→
+    28→  // ===== حقول الاشتراك والتسجيل =====
+    29→  // حالة الاشتراك العامة (نسخة سريعة للقراءة بدون join)
+    30→  subscriptionStatus String @default("PENDING_APPROVAL") // PENDING_APPROVAL|TRIAL|ACTIVE|PAST_DUE|CANCELLED|EXPIRED
+    31→  // الباقة المطلوبة عند التسجيل (للموافقة من super-admin)
+    32→  pendingPlanId   String?
+    33→  // بيانات المسؤول الذي سجّل المدرسة (للتواصل أثناء الموافقة)
+    34→  registrantName  String   @default("")
+    35→  registrantEmail String   @default("")
+    36→  registrantPhone String   @default("")
+    37→  registrantUsername String @default("")
+    38→  registrantTempPassword String @default("") // كلمة مرور مؤقتة تُولّد عند الموافقة
+    39→  // سبب الرفض (إن وُجد)
+    40→  rejectionReason String   @default("")
+    41→  approvedAt      DateTime?
+    42→  approvedById    String?
+    43→
+    44→  settings       Settings?
+    45→  users          User[]
+    46→  news           News[]
+    47→  gallery        Gallery[]
+    48→  teachers       Teacher[]
+    49→  stats          SchoolStats?
+    50→  schedules      Schedule[]
+    51→  pages          Page[]
+    52→  grades         Grade[]
+    53→  results        Result[]
+    54→  sliders        Slider[]
+    55→  customSections CustomSection[]
+    56→  students       Student[]
+    57→  expenses       Expense[]
+    58→  expenseCategories ExpenseCategory[]
+    59→  expenseVendors ExpenseVendor[]
+    60→  expenseBudgets ExpenseBudget[]
+    61→  recurringExpenses RecurringExpense[]
+    62→  pettyCashFunds PettyCash[]
+    63→  buses          Bus[]
+    64→  busRoutes      BusRoute[]
+    65→  transportPayments TransportPayment[]
+    66→  fees           Fee[]
+    67→  feePayments    FeePayment[]
+    68→  attendanceRecords Attendance[]
+    69→  employees      Employee[]
+    70→  employeeAttendance EmployeeAttendance[]
+    71→  salaries       Salary[]
+    72→  academicYears  AcademicYear[]
+    73→  classrooms     Classroom[]
+    74→  conversations  Conversation[]
+    75→  messages       Message[]
+    76→  announcements  Announcement[]
+    77→  events         Event[]
+    78→  eventRegistrations EventRegistration[]
+    79→  eventReminders EventReminder[]
+    80→  eventGallery   EventGallery[]
+    81→  eventFeedback  EventFeedback[]
+    82→  exams          Exam[]
+    83→  examQuestions  Question[]
+    84→  examSubmissions Submission[]
+    85→  examAnswers    Answer[]
+    86→  examViolations ExamViolation[]
+    87→  examAppeals    ExamAppeal[]
+    88→  examModeration ExamModerationLog[]
+    89→  questionBank   QuestionBank[]
+    90→  examTeacherProfile ExamTeacherProfile[]
+    91→  downloads      DownloadableFile[]
+    92→  // ===== اشتراكات SaaS =====
+    93→  subscription   SchoolSubscription?
+    94→  invoices       Invoice[]
+    95→  paymentTransactions PaymentTransaction[]
+    96→}
+    97→
+    98→// ===== الإعدادات =====
+    99→model Settings {
+   100→  id             String   @id @default(cuid())
+   101→  schoolId       String   @unique
+   102→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   103→  heroTitle      String   @default("")
+   104→  heroSubtitle   String   @default("المرحلة الإعدادية")
+   105→  bannerTitle    String?
+   106→  bannerImageUrl String?
+   107→  vision         String?
+   108→  aboutImage     String?
+   109→  aboutVideoUrl  String?
+   110→  showNewsTicker Boolean  @default(true)
+   111→  showHeroBanner Boolean  @default(true)
+   112→  showLiveStream Boolean  @default(false)
+   113→  liveStreamUrl  String?
+   114→  facebookUrl    String?
+   115→  youtubeUrl     String?
+   116→  showSlider     Boolean  @default(true)
+   117→  showNews       Boolean  @default(true)
+   118→  showServices   Boolean  @default(true)
+   119→  showGallery    Boolean  @default(true)
+   120→  showTeachers   Boolean  @default(true)
+   121→  showStats      Boolean  @default(true)
+   122→  showContact    Boolean  @default(true)
+   123→  showAbout      Boolean  @default(true)
+   124→  sectionOrder   String   @default("[]") // JSON array: ["slider","about","news","services","gallery","teachers","stats","contact"]
+   125→  developerName  String   @default("محروس شعبان")
+   126→  developerPhoto String?  // URL for developer's circular photo
+   127→  createdAt      DateTime @default(now())
+   128→  updatedAt      DateTime @updatedAt
+   129→}
+   130→
+   131→// ===== المستخدمين / المشرفين =====
+   132→model User {
+   133→  id          String  @id @default(cuid())
+   134→  schoolId    String
+   135→  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   136→  username    String
+   137→  password    String
+   138→  role        String  @default("school_admin") // super_admin, school_admin, teacher
+   139→  permissions String  @default("{}") // JSON: {slider:true, news:true, gallery:false, ...}
+   140→  createdAt   DateTime @default(now())
+   141→  updatedAt   DateTime @updatedAt
+   142→
+   143→  @@unique([schoolId, username])
+   144→}
+   145→
+   146→// ===== الأخبار =====
+   147→model News {
+   148→  id        String   @id @default(cuid())
+   149→  schoolId  String
+   150→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   151→  title     String
+   152→  slug      String?
+   153→  excerpt   String?
+   154→  content   String?
+   155→  image     String?
+   156→  category  String   @default("أخبار")
+   157→  active    Boolean  @default(true)
+   158→  archived  Boolean  @default(false)
+   159→  createdAt DateTime @default(now())
+   160→  updatedAt DateTime @updatedAt
+   161→
+   162→  @@unique([schoolId, slug])
+   163→}
+   164→
+   165→// ===== معرض الصور =====
+   166→model Gallery {
+   167→  id        String   @id @default(cuid())
+   168→  schoolId  String
+   169→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   170→  title     String?
+   171→  imageUrl  String
+   172→  archived  Boolean  @default(false)
+   173→  createdAt DateTime @default(now())
+   174→  updatedAt DateTime @updatedAt
+   175→}
+   176→
+   177→// ===== المعلمون =====
+   178→model Teacher {
+   179→  id        String   @id @default(cuid())
+   180→  schoolId  String
+   181→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   182→  name      String
+   183→  subject   String
+   184→  email     String?
+   185→  imageUrl  String?
+   186→  sortOrder Int      @default(0)
+   187→  active    Boolean  @default(true)
+   188→  archived  Boolean  @default(false)
+   189→  createdAt DateTime @default(now())
+   190→  updatedAt DateTime @updatedAt
+   191→}
+   192→
+   193→// ===== إحصائيات المدرسة =====
+   194→model SchoolStats {
+   195→  id        String   @id @default(cuid())
+   196→  schoolId  String   @unique
+   197→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   198→  students  Int      @default(0)
+   199→  teachers  Int      @default(0)
+   200→  classes   Int      @default(0)
+   201→  years     Int      @default(0)
+   202→  createdAt DateTime @default(now())
+   203→  updatedAt DateTime @updatedAt
+   204→}
+   205→
+   206→// ===== الصفوف الدراسية والمواد =====
+   207→model Grade {
+   208→  id        String   @id @default(cuid())
+   209→  schoolId  String
+   210→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   211→  name      String
+   212→  subjects  String   // JSON string: ["عربي","انجليزي","رياضيات",...]
+   213→  archived  Boolean  @default(false)
+   214→  createdAt DateTime @default(now())
+   215→  updatedAt DateTime @updatedAt
+   216→}
+   217→
+   218→// ===== النتائج =====
+   219→model Result {
+   220→  id         String   @id @default(cuid())
+   221→  schoolId   String
+   222→  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   223→  gradeName  String
+   224→  term       String
+   225→  students   String   // JSON string: [{seatNumber, studentName, arabic, english, ...}]
+   226→  uploadDate DateTime @default(now())
+   227→  archived   Boolean  @default(false)
+   228→  createdAt  DateTime @default(now())
+   229→  updatedAt  DateTime @updatedAt
+   230→}
+   231→
+   232→// ===== جداول الحصص =====
+   233→model Schedule {
+   234→  id          String   @id @default(cuid())
+   235→  schoolId    String
+   236→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   237→  title       String
+   238→  category    String   @default("class") // class, teacher, daily
+   239→  grade       String?
+   240→  section     String?
+   241→  teacherName String?
+   242→  dayOfWeek   Int?
+   243→  filePath    String
+   244→  fileName    String
+   245→  type        String   @default("حالي") // حالي, أرشيف
+   246→  active      Boolean  @default(true)
+   247→  archived    Boolean  @default(false)
+   248→  createdAt   DateTime @default(now())
+   249→  updatedAt   DateTime @updatedAt
+   250→}
+   251→
+   252→// ===== سلايدر الصور =====
+   253→model Slider {
+   254→  id        String   @id @default(cuid())
+   255→  schoolId  String
+   256→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   257→  imageUrl  String
+   258→  title     String?
+   259→  subtitle  String?
+   260→  link      String?
+   261→  sortOrder Int      @default(0)
+   262→  active    Boolean  @default(true)
+   263→  archived  Boolean  @default(false)
+   264→  createdAt DateTime @default(now())
+   265→  updatedAt DateTime @updatedAt
+   266→}
+   267→
+   268→// ===== الصفحات الثابتة =====
+   269→model Page {
+   270→  id        String   @id @default(cuid())
+   271→  schoolId  String
+   272→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   273→  slug      String
+   274→  title     String
+   275→  content   String?
+   276→  createdAt DateTime @default(now())
+   277→  updatedAt DateTime @updatedAt
+   278→
+   279→  @@unique([schoolId, slug])
+   280→}
+   281→
+   282→// ===== الأقسام المخصصة =====
+   283→model CustomSection {
+   284→  id        String   @id @default(cuid())
+   285→  schoolId  String
+   286→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   287→  title     String
+   288→  content   String   @default("") // HTML content
+   289→  imageUrl  String?
+   290→  layout    String   @default("full") // full, image-right, image-left, cards
+   291→  active    Boolean  @default(true)
+   292→  sortOrder Int      @default(0)
+   293→  createdAt DateTime @default(now())
+   294→  updatedAt DateTime @updatedAt
+   295→}
+   296→
+   297→// ============================================================
+   298→// ===== وحدات إدارة المدرسة الجديدة =====
+   299→// ============================================================
+   300→
+   301→// ===== السنة الدراسية =====
+   302→model AcademicYear {
+   303→  id          String   @id @default(cuid())
+   304→  schoolId    String
+   305→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   306→  name        String   // "2024/2025"
+   307→  startDate   DateTime
+   308→  endDate     DateTime
+   309→  isActive    Boolean  @default(false)
+   310→  createdAt   DateTime @default(now())
+   311→  updatedAt   DateTime @updatedAt
+   312→
+   313→  classrooms  Classroom[]
+   314→  fees        Fee[]
+   315→  attendanceRecords Attendance[]
+   316→  expenses    Expense[]
+   317→  expenseBudgets ExpenseBudget[]
+   318→  announcements Announcement[]
+   319→  events        Event[]
+   320→
+   321→  @@unique([schoolId, name])
+   322→}
+   323→
+   324→// ===== الفصول الدراسية =====
+   325→model Classroom {
+   326→  id             String   @id @default(cuid())
+   327→  schoolId       String
+   328→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   329→  academicYearId String
+   330→  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+   331→  name           String   // "الصف الأول - أ"
+   332→  gradeLevel     String   // "الصف الأول الإعدادي"
+   333→  section        String   @default("أ") // أ، ب، ج
+   334→  capacity       Int      @default(30)
+   335→  teacherId      String?  // معلم الفصل
+   336→  createdAt      DateTime @default(now())
+   337→  updatedAt      DateTime @updatedAt
+   338→
+   339→  students       Student[]
+   340→  attendanceRecords Attendance[]
+   341→
+   342→  @@unique([schoolId, academicYearId, name])
+   343→}
+   344→
+   345→// ===== الطلاب =====
+   346→model Student {
+   347→  id             String   @id @default(cuid())
+   348→  schoolId       String
+   349→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   350→  classroomId    String?
+   351→  classroom      Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+   352→  studentNumber  String   // رقم الطالب
+   353→  name           String   // الاسم
+   354→  nationalId     String?  // الرقم القومي
+   355→  dateOfBirth    DateTime? // تاريخ الميلاد
+   356→  gender         String   @default("ذكر") // ذكر، أنثى
+   357→  address        String?  // العنوان
+   358→  phone          String?  // هاتف ولي الأمر
+   359→  parentName     String?  // اسم ولي الأمر
+   360→  parentPhone    String?  // هاتف ولي الأمر الأول
+   361→  parentPhone2   String?  // هاتف ولي الأمر الثاني
+   362→  parentNationalId String? // الرقم القومي لولي الأمر
+   363→  enrollDate     DateTime @default(now()) // تاريخ القيد
+   364→  status         String   @default("نشط") // نشط، منقول، منسحب، متخرج
+   365→  previousSchool String?  // المدرسة السابقة
+   366→  notes          String?  // ملاحظات
+   367→  archived       Boolean  @default(false)
+   368→  createdAt      DateTime @default(now())
+   369→  updatedAt      DateTime @updatedAt
+   370→
+   371→  feePayments    FeePayment[]
+   372→  studentFees    StudentFee[]
+   373→  attendanceRecords Attendance[]
+   374→  transport      StudentTransport?
+   375→
+   376→  @@unique([schoolId, studentNumber])
+   377→}
+   378→
+   379→// ===== المصروفات =====
+   380→model Expense {
+   381→  id              String   @id @default(cuid())
+   382→  schoolId        String
+   383→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   384→  academicYearId  String?
+   385→  academicYear    AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+   386→  categoryId      String?
+   387→  category        ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   388→  vendorId        String?
+   389→  vendor          ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+   390→  recurringExpenseId String?
+   391→  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+   392→  title           String   // بيان المصروف
+   393→  amount          Float    // المبلغ
+   394→  expenseDate     DateTime // تاريخ الصرف
+   395→  paymentMethod   String   @default("نقدي") // نقدي، تحويل، شيك، بطاقة
+   396→  recipient       String?  // المستلم
+   397→  reference       String?  // رقم المرجع / الإيصال
+   398→  checkNumber     String?  // رقم الشيك
+   399→  bankName        String?  // البنك
+   400→  checkDate       DateTime? // تاريخ استحقاق الشيك (للشيكات المؤجلة)
+   401→  attachments     String?  // JSON array of file URLs
+   402→  notes           String?  // ملاحظات
+   403→  status          String   @default("مدفوع") // مسودة، معلق، معتمد، مدفوع، مرفوض
+   404→  createdBy       String?  // من أنشأ السجل
+   405→  approvedBy      String?  // من اعتمد السجل
+   406→  approvedAt      DateTime? // تاريخ الاعتماد
+   407→  createdAt       DateTime @default(now())
+   408→  updatedAt       DateTime @updatedAt
+   409→
+   410→  approvals       ExpenseApproval[]
+   411→  pettyCashTx     PettyCashTransaction[]
+   412→
+   413→  @@index([schoolId, expenseDate])
+   414→  @@index([schoolId, categoryId])
+   415→  @@index([schoolId, status])
+   416→}
+   417→
+   418→// ===== تصنيفات المصروفات =====
+   419→model ExpenseCategory {
+   420→  id        String   @id @default(cuid())
+   421→  schoolId  String
+   422→  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   423→  name      String   // رواتب، صيانة، كهرباء، ماء، قرطاسية...
+   424→  parentId  String?  // للتصنيفات الفرعية
+   425→  parent    ExpenseCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+   426→  children  ExpenseCategory[] @relation("CategoryHierarchy")
+   427→  icon      String?  // أيقونة (Lucide name)
+   428→  color     String?  // لون (hex)
+   429→  sortOrder Int      @default(0)
+   430→  active    Boolean  @default(true)
+   431→  createdAt DateTime @default(now())
+   432→  updatedAt DateTime @updatedAt
+   433→
+   434→  expenses  Expense[]
+   435→  budgets   ExpenseBudget[]
+   436→  recurringExpenses RecurringExpense[]
+   437→
+   438→  @@unique([schoolId, name])
+   439→}
+   440→
+   441→// ===== الموردون / المستفيدون =====
+   442→model ExpenseVendor {
+   443→  id            String   @id @default(cuid())
+   444→  schoolId      String
+   445→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   446→  name          String   // اسم المورد
+   447→  type          String   @default("مورد") // مورد، مقاول، جهة حكومية، مستفيد
+   448→  contactPerson String?  // المسؤول
+   449→  phone         String?  // الهاتف
+   450→  email         String?  // البريد
+   451→  address       String?  // العنوان
+   452→  taxNumber     String?  // البطاقة الضريبية
+   453→  taxOffice     String?  // المأمورية
+   454→  bankName      String?  // البنك
+   455→  bankAccount   String?  // رقم الحساب
+   456→  openingBalance Float   @default(0) // الرصيد الافتتاحي
+   457→  notes         String?
+   458→  active        Boolean  @default(true)
+   459→  createdAt     DateTime @default(now())
+   460→  updatedAt     DateTime @updatedAt
+   461→
+   462→  expenses      Expense[]
+   463→  recurringExpenses RecurringExpense[]
+   464→
+   465→  @@unique([schoolId, name])
+   466→}
+   467→
+   468→// ===== الميزانيات =====
+   469→model ExpenseBudget {
+   470→  id              String   @id @default(cuid())
+   471→  schoolId        String
+   472→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   473→  academicYearId  String
+   474→  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+   475→  categoryId      String
+   476→  category        ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+   477→  period          String   // سنوي، ربعي، شهري
+   478→  fiscalMonth     Int?     // 1-12 (للميزانية الشهرية)
+   479→  fiscalQuarter   Int?     // 1-4 (للميزانية الربعية)
+   480→  amount          Float    // المبلغ المخصص
+   481→  notes           String?
+   482→  createdAt       DateTime @default(now())
+   483→  updatedAt       DateTime @updatedAt
+   484→
+   485→  @@unique([schoolId, academicYearId, categoryId, period, fiscalMonth, fiscalQuarter])
+   486→}
+   487→
+   488→// ===== المصروفات المتكررة =====
+   489→model RecurringExpense {
+   490→  id              String   @id @default(cuid())
+   491→  schoolId        String
+   492→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   493→  categoryId      String?
+   494→  category        ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+   495→  vendorId        String?
+   496→  vendor          ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+   497→  title           String   // بيان المصروف
+   498→  amount          Float    // المبلغ
+   499→  frequency       String   // أسبوعي، شهري، ربعي، سنوي
+   500→  startDate       DateTime // تاريخ بدء التكرار
+   501→  endDate         DateTime? // تاريخ انتهاء التكرار (null = لا نهائي)
+   502→  nextRunDate     DateTime // تاريخ التشغيل التالي
+   503→  lastRunDate     DateTime? // تاريخ آخر تشغيل
+   504→  paymentMethod   String   @default("نقدي")
+   505→  recipient       String?
+   506→  reference       String?
+   507→  notes           String?
+   508→  active          Boolean  @default(true)
+   509→  autoGenerate    Boolean  @default(false) // إنشاء تلقائي دون تدخل
+   510→  createdAt       DateTime @default(now())
+   511→  updatedAt       DateTime @updatedAt
+   512→
+   513→  expenses        Expense[]
+   514→
+   515→  @@index([schoolId, nextRunDate])
+   516→}
+   517→
+   518→// ===== العهد (الصندوق الصغير) =====
+   519→model PettyCash {
+   520→  id            String   @id @default(cuid())
+   521→  schoolId      String
+   522→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   523→  name          String   // اسم الصندوق
+   524→  custodianId   String?  // أمين العهد (Employee ID)
+   525→  custodianName String?  // اسم أمين العهد (نص حر)
+   526→  openingBalance Float   @default(0) // الرصيد الافتتاحي
+   527→  currentBalance Float   @default(0) // الرصيد الحالي
+   528→  maximumBalance Float?  // الحد الأقصى للصندوق
+   529→  active        Boolean  @default(true)
+   530→  openedAt      DateTime @default(now())
+   531→  closedAt      DateTime?
+   532→  notes         String?
+   533→  createdAt     DateTime @default(now())
+   534→  updatedAt     DateTime @updatedAt
+   535→
+   536→  transactions  PettyCashTransaction[]
+   537→
+   538→  @@unique([schoolId, name])
+   539→}
+   540→
+   541→// ===== حركات العهد =====
+   542→model PettyCashTransaction {
+   543→  id            String   @id @default(cuid())
+   544→  pettyCashId   String
+   545→  pettyCash     PettyCash @relation(fields: [pettyCashId], references: [id], onDelete: Cascade)
+   546→  schoolId      String
+   547→  type          String   // صرف، تغذية، تسوية
+   548→  amount        Float    // المبلغ
+   549→  expenseId     String?  // ربط بالمصروف (للصرف)
+   550→  expense       Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+   551→  recipient     String?  // المستلم
+   552→  date          DateTime // تاريخ الحركة
+   553→  reference     String?  // رقم الإيصال
+   554→  notes         String?
+   555→  balanceAfter  Float    // الرصيد بعد الحركة
+   556→  createdBy     String?
+   557→  createdAt     DateTime @default(now())
+   558→
+   559→  @@index([pettyCashId, date])
+   560→}
+   561→
+   562→// ===== سجل اعتماد المصروفات =====
+   563→model ExpenseApproval {
+   564→  id            String   @id @default(cuid())
+   565→  expenseId     String
+   566→  expense       Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+   567→  schoolId      String
+   568→  approverId    String?  // معرف المستخدم المعتمد
+   569→  approverName  String   // اسم المعتمد
+   570→  approverRole  String?  // دور المعتمد
+   571→  action        String   // اعتماد، رفض، طلب تعديل
+   572→  notes         String?  // ملاحظات الاعتماد
+   573→  approvedAt    DateTime @default(now())
+   574→}
+   575→
+   576→// ===== الباصات =====
+   577→model Bus {
+   578→  id              String   @id @default(cuid())
+   579→  schoolId        String
+   580→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   581→  plateNumber     String   // رقم اللوحة
+   582→  driverName      String   // اسم السائق
+   583→  driverPhone     String?  // هاتف السائق
+   584→  driverLicense   String?  // رقم رخصة السائق
+   585→  supervisorName  String?  // اسم المشرف
+   586→  supervisorPhone String?  // هاتف المشرف
+   587→  capacity        Int      @default(30) // السعة
+   588→  model           String?  // موديل الباص
+   589→  color           String?  // لون الباص (للتمييز)
+   590→  active          Boolean  @default(true)
+   591→  notes           String?  // ملاحظات
+   592→  createdAt       DateTime @default(now())
+   593→  updatedAt       DateTime @updatedAt
+   594→
+   595→  routes          BusRoute[]
+   596→
+   597→  @@unique([schoolId, plateNumber])
+   598→}
+   599→
+   600→// ===== خطوط الباص =====
+   601→model BusRoute {
+   602→  id           String   @id @default(cuid())
+   603→  schoolId     String
+   604→  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   605→  busId        String
+   606→  bus          Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+   607→  name         String   // اسم الخط / المنطقة
+   608→  area         String   // المنطقة الجغرافية
+   609→  morningTime  String?  // موعد الصباح
+   610→  afternoonTime String? // موعد الظهيرة
+   611→  stops        String   @default("[]") // JSON: [{"name":"محطة 1","time":"7:00"},...]
+   612→  monthlyFee   Float    @default(0) // الاشتراك الشهري
+   613→  active       Boolean  @default(true)
+   614→  createdAt    DateTime @default(now())
+   615→  updatedAt    DateTime @updatedAt
+   616→
+   617→  subscriptions StudentTransport[]
+   618→}
+   619→
+   620→// ===== اشتراكات النقل =====
+   621→model StudentTransport {
+   622→  id           String   @id @default(cuid())
+   623→  schoolId     String
+   624→  studentId    String   @unique
+   625→  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   626→  routeId      String
+   627→  route        BusRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+   628→  startDate    DateTime // بداية الاشتراك
+   629→  endDate      DateTime? // نهاية الاشتراك
+   630→  direction    String   @default("ذهاب وعودة") // ذهاب، عودة، ذهاب وعودة
+   631→  monthlyFee   Float    @default(0) // قد يختلف عن رسوم الخط
+   632→  status       String   @default("نشط") // نشط، ملغي، متوقف
+   633→  notes        String?
+   634→  createdAt    DateTime @default(now())
+   635→  updatedAt    DateTime @updatedAt
+   636→
+   637→  payments     TransportPayment[]
+   638→}
+   639→
+   640→// ===== مدفوعات النقل =====
+   641→model TransportPayment {
+   642→  id             String   @id @default(cuid())
+   643→  schoolId       String
+   644→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   645→  subscriptionId String
+   646→  subscription   StudentTransport @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+   647→  month          Int      // الشهر 1-12
+   648→  year           Int      // السنة
+   649→  amount         Float    // المبلغ المدفوع
+   650→  paymentDate    DateTime // تاريخ الدفع
+   651→  paymentMethod  String   @default("نقدي") // نقدي، تحويل، بطاقة
+   652→  receiptNumber  String?  // رقم الإيصال
+   653→  notes          String?
+   654→  createdBy      String?
+   655→  createdAt      DateTime @default(now())
+   656→  updatedAt      DateTime @updatedAt
+   657→
+   658→  @@unique([schoolId, subscriptionId, month, year])
+   659→}
+   660→
+   661→// ===== الرسوم والأقساط =====
+   662→model Fee {
+   663→  id             String   @id @default(cuid())
+   664→  schoolId       String
+   665→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   666→  academicYearId String
+   667→  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+   668→  name           String   // "رسوم الدراسة - الصف الأول"
+   669→  gradeLevel     String?  // الصف الدراسي (null = جميع الصفوف)
+   670→  totalAmount    Float    // إجمالي الرسوم
+   671→  installments   Int      @default(1) // عدد الأقساط
+   672→  installmentAmount Float? // قيمة القسط (يُحسب تلقائياً)
+   673→  dueDates       String   @default("[]") // JSON: ["2024-09-01","2024-12-01","2025-03-01"]
+   674→  feeType        String   @default("دراسة") // دراسة، أنشطة، كتب، أخرى
+   675→  active         Boolean  @default(true)
+   676→  createdAt      DateTime @default(now())
+   677→  updatedAt      DateTime @updatedAt
+   678→
+   679→  payments       FeePayment[]
+   680→  feeInstallments FeeInstallment[]
+   681→  studentFees    StudentFee[]
+   682→}
+   683→
+   684→// ===== أقساط الرسوم =====
+   685→model FeeInstallment {
+   686→  id            String   @id @default(cuid())
+   687→  schoolId      String
+   688→  feeId         String
+   689→  fee           Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+   690→  installmentNo Int      // رقم القسط (1، 2، 3...)
+   691→  amount        Float    // مبلغ القسط
+   692→  dueDate       DateTime // تاريخ الاستحقاق
+   693→  createdAt     DateTime @default(now())
+   694→  updatedAt     DateTime @updatedAt
+   695→
+   696→  payments      FeePayment[]
+   697→
+   698→  @@unique([schoolId, feeId, installmentNo])
+   699→}
+   700→
+   701→// ===== تخصيص الرسوم للطلاب =====
+   702→model StudentFee {
+   703→  id             String   @id @default(cuid())
+   704→  schoolId       String
+   705→  studentId      String
+   706→  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   707→  feeId          String
+   708→  fee            Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+   709→  totalAmount    Float    // الإجمالي بعد الخصم
+   710→  discountType   String?  // نسبة، ثابت، إعفاء
+   711→  discountValue  Float?   // قيمة الخصم
+   712→  discountReason String?  // سبب الخصم
+   713→  assignedAt     DateTime @default(now())
+   714→  createdAt      DateTime @default(now())
+   715→  updatedAt      DateTime @updatedAt
+   716→
+   717→  payments       FeePayment[]
+   718→
+   719→  @@unique([schoolId, studentId, feeId])
+   720→}
+   721→
+   722→// ===== دفعات الأقساط =====
+   723→model FeePayment {
+   724→  id            String   @id @default(cuid())
+   725→  schoolId      String
+   726→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   727→  feeId         String
+   728→  fee           Fee      @relation(fields: [feeId], references: [id], onDelete: Cascade)
+   729→  studentId     String
+   730→  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   731→  studentFeeId  String?  // ربط بتخصيص الرسوم
+   732→  studentFee    StudentFee? @relation(fields: [studentFeeId], references: [id], onDelete: SetNull)
+   733→  installmentId String?  // ربط بالقسط المحدد
+   734→  installment   FeeInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+   735→  amount        Float    // المبلغ المدفوع
+   736→  paymentDate   DateTime // تاريخ الدفع
+   737→  paymentMethod String   @default("نقدي") // نقدي، تحويل، بطاقة، شيك
+   738→  receiptNumber String?  // رقم الإيصال
+   739→  installmentNo Int      @default(1) // رقم القسط
+   740→  notes         String?
+   741→  createdBy     String?
+   742→  createdAt     DateTime @default(now())
+   743→  updatedAt     DateTime @updatedAt
+   744→}
+   745→
+   746→// ===== الحضور والغياب =====
+   747→model Attendance {
+   748→  id            String   @id @default(cuid())
+   749→  schoolId      String
+   750→  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   751→  academicYearId String?
+   752→  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+   753→  classroomId   String?
+   754→  classroom     Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+   755→  studentId     String
+   756→  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+   757→  date          DateTime // تاريخ اليوم
+   758→  status        String   @default("حاضر") // حاضر، غائب، غائب بعذر، متأخر
+   759→  arrivalTime   String?  // وقت الحضور
+   760→  notes         String?  // سبب الغيب أو ملاحظة
+   761→  recordedBy    String?  // من سجل
+   762→  createdAt     DateTime @default(now())
+   763→  updatedAt     DateTime @updatedAt
+   764→
+   765→  @@unique([schoolId, studentId, date])
+   766→}
+   767→
+   768→// ===== الموظفين =====
+   769→model Employee {
+   770→  id             String   @id @default(cuid())
+   771→  schoolId       String
+   772→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   773→  employeeNumber String   // رقم الموظف
+   774→  name           String   // الاسم
+   775→  nationalId     String?  // الرقم القومي
+   776→  jobTitle       String   // المسمى الوظيفي
+   777→  department     String?  // القسم
+   778→  qualification  String?  // المؤهل
+   779→  specialization String?  // التخصص
+   780→  hireDate       DateTime? // تاريخ التعيين
+   781→  phone          String?  // الهاتف
+   782→  email          String?  // البريد
+   783→  address        String?  // العنوان
+   784→  salary         Float    @default(0) // الراتب الأساسي
+   785→  allowances     Float    @default(0) // البدلات
+   786→  deductions     Float    @default(0) // الخصومات الثابتة
+   787→  contractType   String   @default("دائم") // دائم، مؤقت، جزء وقت
+   788→  status         String   @default("نشط") // نشط، إجازة، مستقيل
+   789→  bankName       String?  // البنك
+   790→  bankAccount    String?  // رقم الحساب البنكي
+   791→  imageUrl       String?  // الصورة
+   792→  notes          String?
+   793→  archived       Boolean  @default(false)
+   794→  createdAt      DateTime @default(now())
+   795→  updatedAt      DateTime @updatedAt
+   796→
+   797→  salaries       Salary[]
+   798→  attendanceRecords EmployeeAttendance[]
+   799→
+   800→  @@unique([schoolId, employeeNumber])
+   801→}
+   802→
+   803→// ===== الرواتب =====
+   804→model Salary {
+   805→  id             String   @id @default(cuid())
+   806→  schoolId       String
+   807→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   808→  employeeId     String
+   809→  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+   810→  month          Int      // الشهر 1-12
+   811→  year           Int      // السنة
+   812→  basicSalary    Float    // الراتب الأساسي
+   813→  allowances     Float    @default(0) // البدلات
+   814→  overtime       Float    @default(0) // ساعات إضافية
+   815→  bonus          Float    @default(0) // مكافآت
+   816→  deductions     Float    @default(0) // الخصومات
+   817→  advancePayment Float    @default(0) // السلف
+   818→  insurance      Float    @default(0) // التأمينات
+   819→  taxes          Float    @default(0) // الضرائب
+   820→  netSalary      Float    // الصافي (يُحسب تلقائياً)
+   821→  paymentDate    DateTime? // تاريخ الصرف
+   822→  paymentMethod  String   @default("تحويل") // تحويل، نقدي، شيك
+   823→  status         String   @default("معلق") // معلق، مدفوع، ملغي
+   824→  notes          String?
+   825→  createdAt      DateTime @default(now())
+   826→  updatedAt      DateTime @updatedAt
+   827→
+   828→  @@unique([schoolId, employeeId, month, year])
+   829→}
+   830→
+   831→// ===== حضور وغياب الموظفين =====
+   832→model EmployeeAttendance {
+   833→  id             String   @id @default(cuid())
+   834→  schoolId       String
+   835→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   836→  employeeId     String
+   837→  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+   838→  date           DateTime // تاريخ اليوم
+   839→  status         String   @default("حاضر") // حاضر، غائب، متأخر، إجازة مرضية، إجازة رسمية، إجازة شخصية
+   840→  checkIn        String?  // وقت الحضور
+   841→  checkOut       String?  // وقت الانصراف
+   842→  leaveType      String?  // نوع الإجازة: مرضية، رسمية، شخصية، أمومة، أخرى
+   843→  leaveDuration  String?  @default("يوم كامل") // يوم كامل، نصف يوم
+   844→  notes          String?  // سبب الغياب أو ملاحظة
+   845→  recordedBy     String?  // من سجل
+   846→  createdAt      DateTime @default(now())
+   847→  updatedAt      DateTime @updatedAt
+   848→
+   849→  @@unique([schoolId, employeeId, date])
+   850→}
+   851→
+   852→// ===== التواصل والإشعارات — المرحلة الأولى =====
+   853→
+   854→// المحادثات (فردية / مجموعة / إدارية)
+   855→model Conversation {
+   856→  id            String    @id @default(cuid())
+   857→  schoolId      String
+   858→  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   859→  type          String    @default("فردية") // فردية، مجموعة، إدارية
+   860→  title         String    @default("") // عنوان المحادثة (للمجموعات)
+   861→  participants  String    @default("[]") // JSON array of userIds
+   862→  lastMessageAt DateTime?
+   863→  createdAt     DateTime  @default(now())
+   864→  updatedAt     DateTime  @updatedAt
+   865→
+   866→  messages      Message[]
+   867→
+   868→  @@index([schoolId])
+   869→}
+   870→
+   871→// الرسائل الخاصة بين المستخدمين
+   872→model Message {
+   873→  id             String    @id @default(cuid())
+   874→  schoolId       String
+   875→  school         School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   876→  conversationId String?
+   877→  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+   878→  senderId       String    // معرف المرسل
+   879→  senderName     String    @default("") // اسم المرسل (نسخة سريعة)
+   880→  senderRole     String    @default("") // دور المرسل (مدير، معلم، موظف...)
+   881→  recipientId    String    // معرف المستلم
+   882→  recipientName  String    @default("") // اسم المستلم
+   883→  subject        String    @default("") // الموضوع
+   884→  content        String    // نص الرسالة
+   885→  attachments    String?   // JSON array of file URLs
+   886→  priority       String    @default("عادي") // عادي، عاجل، هام
+   887→  isRead         Boolean   @default(false)
+   888→  readAt         DateTime?
+   889→  isStarred      Boolean   @default(false) // تم التمييز بنجمة
+   890→  isArchived     Boolean   @default(false) // مؤرشف
+   891→  createdAt      DateTime  @default(now())
+   892→  updatedAt      DateTime  @updatedAt
+   893→
+   894→  @@index([schoolId, recipientId])
+   895→  @@index([schoolId, senderId])
+   896→}
+   897→
+   898→// الإعلانات الموجهة
+   899→model Announcement {
+   900→  id            String    @id @default(cuid())
+   901→  schoolId      String
+   902→  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   903→  academicYearId String?
+   904→  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+   905→  title         String    // عنوان الإعلان
+   906→  content       String    // محتوى الإعلان
+   907→  targetType    String    @default("الكل") // الكل، صف، مرحلة، موظفين، أولياء أمور، معلمين
+   908→  targetIds     String    @default("[]") // JSON array للمعرفات المستهدفة (صفوف/مراحل)
+   909→  authorId      String    // معرف المنشئ
+   910→  authorName    String    @default("") // اسم المنشئ
+   911→  imageUrl      String?   // صورة مرفقة
+   912→  isPinned       Boolean   @default(false) // مثبت
+   913→  isPublished   Boolean   @default(true) // منشور
+   914→  publishedAt   DateTime? // تاريخ النشر
+   915→  expiresAt     DateTime? // تاريخ الانتهاء
+   916→  viewCount     Int       @default(0) // عدد المشاهدات
+   917→  createdAt     DateTime  @default(now())
+   918→  updatedAt     DateTime  @updatedAt
+   919→
+   920→  @@index([schoolId, isPublished])
+   921→  @@index([schoolId, targetType])
+   922→}
+   923→
+   924→// ===== الفعاليات والأحداث =====
+   925→
+   926→model Event {
+   927→  id            String    @id @default(cuid())
+   928→  schoolId      String
+   929→  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   930→  academicYearId String?
+   931→  academicYear  AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+   932→  title         String
+   933→  description   String    @default("")
+   934→  type          String    @default("نشاط")
+   935→  status        String    @default("مجدولة")
+   936→  startDate     DateTime
+   937→  endDate       DateTime?
+   938→  location      String    @default("")
+   939→  coverImageUrl String?
+   940→  organizerId   String
+   941→  organizerName String    @default("")
+   942→  targetAudience String   @default("الكل")
+   943→  targetIds     String    @default("[]")
+   944→  maxAttendees  Int?
+   945→  isPublic      Boolean   @default(true)
+   946→  program       String?
+   947→  requirements  String?
+   948→  budget        Float?
+   949→  aiGenerated   Boolean   @default(false)
+   950→  viewCount     Int       @default(0)
+   951→  createdAt     DateTime  @default(now())
+   952→  updatedAt     DateTime  @updatedAt
+   953→
+   954→  registrations EventRegistration[]
+   955→  reminders     EventReminder[]
+   956→  gallery       EventGallery[]
+   957→  feedback      EventFeedback[]
+   958→
+   959→  @@index([schoolId, status])
+   960→  @@index([schoolId, type])
+   961→  @@index([schoolId, startDate])
+   962→}
+   963→
+   964→model EventRegistration {
+   965→  id             String   @id @default(cuid())
+   966→  schoolId       String
+   967→  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   968→  eventId        String
+   969→  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   970→  registrantId   String
+   971→  registrantName String   @default("")
+   972→  registrantType String   @default("طالب")
+   973→  status         String   @default("مسجل")
+   974→  registeredAt   DateTime @default(now())
+   975→  attendedAt     DateTime?
+   976→  notes          String?
+   977→
+   978→  @@unique([schoolId, eventId, registrantId])
+   979→  @@index([eventId])
+   980→}
+   981→
+   982→model EventReminder {
+   983→  id          String   @id @default(cuid())
+   984→  schoolId    String
+   985→  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+   986→  eventId     String
+   987→  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   988→  sendAt      DateTime
+   989→  channel     String   @default("داخلي")
+   990→  message     String
+   991→  sent        Boolean  @default(false)
+   992→  sentAt      DateTime?
+   993→  targetCount Int      @default(0)
+   994→  createdAt   DateTime @default(now())
+   995→
+   996→  @@index([eventId])
+   997→}
+   998→
+   999→model EventGallery {
+  1000→  id         String   @id @default(cuid())
+  1001→  schoolId   String
+  1002→  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1003→  eventId    String
+  1004→  event      Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  1005→  imageUrl   String
+  1006→  caption    String?
+  1007→  uploadedAt DateTime @default(now())
+  1008→
+  1009→  @@index([eventId])
+  1010→}
+  1011→
+  1012→model EventFeedback {
+  1013→  id           String   @id @default(cuid())
+  1014→  schoolId     String
+  1015→  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1016→  eventId      String
+  1017→  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  1018→  reviewerId   String
+  1019→  reviewerName String   @default("")
+  1020→  rating       Int
+  1021→  comment      String?
+  1022→  createdAt    DateTime @default(now())
+  1023→
+  1024→  @@unique([schoolId, eventId, reviewerId])
+  1025→  @@index([eventId])
+  1026→}
+  1027→
+  1028→// ====================================================================
+  1029→// ===== وحدة إدارة الامتحانات (Exams Management) =====
+  1030→// كل العمليات الأمنية في الباك إند: فحص الملفات + تعقيم + إشراف AI
+  1031→// ====================================================================
+  1032→
+  1033→// ----- التعدادادات (Enums) -----
+  1034→enum ExamStatus {
+  1035→  DRAFT          // مسودة
+  1036→  PUBLISHED      // منشور
+  1037→  CLOSED         // مغلق
+  1038→  ARCHIVED       // مؤرشف
+  1039→}
+  1040→
+  1041→// فئة الامتحان: تدريبي (practice) أو رسمي (official)
+  1042→enum ExamCategory {
+  1043→  TRAINING       // تدريبي — يسمح بإعادة المحاولة، تصحيح فوري، يعرض الإجابات
+  1044→  OFFICIAL       // رسمي — امتحان حقيقي يؤثر على الدرجة النهائية
+  1045→}
+  1046→
+  1047→// الفئة الزمنية للامتحان التدريبي (مثل Oracle Academy)
+  1048→enum ExamPeriod {
+  1049→  NONE           // بدون فئة (للرسمي أو المخصص)
+  1050→  WEEKLY         // أسبوعي (نهاية الأسبوع)
+  1051→  MIDMONTH       // نصف شهري (منتصف الشهر)
+  1052→  MONTHLY        // شهري (نهاية الشهر)
+  1053→  CUMULATIVE     // تراكمي (نهاية الترم)
+  1054→}
+  1055→
+  1056→enum QuestionType {
+  1057→  MCQ            // اختيار من متعدد
+  1058→  TRUE_FALSE     // صح/خطأ
+  1059→  SHORT          // إجابة قصيرة
+  1060→  ESSAY          // مقال
+  1061→  IMAGE_ANSWER   // رفع صورة (خط يدوي)
+  1062→  FILE_PDF       // رفع PDF
+  1063→}
+  1064→
+  1065→enum SubmissionStatus {
+  1066→  IN_PROGRESS    // قيد الحل
+  1067→  SUBMITTED      // تم التسليم
+  1068→  GRADED         // تم التصحيح
+  1069→  FLAGGED        // مُعلَّق للمراجعة
+  1070→  AUTO_CLOSED    // أُغلق تلقائياً (انتهى الوقت)
+  1071→}
+  1072→
+  1073→enum ModerationStatus {
+  1074→  PENDING        // بانتظار الفحص
+  1075→  SAFE           // آمن
+  1076→  FLAGGED        // مُعلَّق
+  1077→  BLOCKED        // مرفوض
+  1078→  ERROR          // خطأ في الفحص
+  1079→}
+  1080→
+  1081→enum ViolationType {
+  1082→  TAB_SWITCH            // مغادرة الصفحة
+  1083→  COPY_ATTEMPT          // محاولة نسخ
+  1084→  PASTE_ATTEMPT         // محاولة لصق
+  1085→  MULTIPLE_DEVICES      // تعدد الأجهزة
+  1086→  SUSPICIOUS_FILE       // ملف مشبوه
+  1087→  RATE_LIMIT_EXCEEDED   // تجاوز معدل الإرسال
+  1088→  FOCUS_LOSS            // فقدان التركيز
+  1089→  RIGHT_CLICK           // زر الفأرة الأيمن
+  1090→  SHORTCUT_KEY          // اختصار لوحة المفاتيح
+  1091→}
+  1092→
+  1093→enum AppealStatus {
+  1094→  PENDING        // قيد النظر
+  1095→  APPROVED       // مقبول
+  1096→  REJECTED       // مرفوض
+  1097→}
+  1098→
+  1099→enum ModerationAction {
+  1100→  AUTO_ALLOWED      // سماح تلقائي (آمن)
+  1101→  AUTO_BLOCKED      // رفض تلقائي (مرفوض)
+  1102→  AUTO_FLAGGED      // تعليق تلقائي للمراجعة البشرية
+  1103→  HUMAN_APPROVED    // سماح بشري بعد تعليق
+  1104→  HUMAN_REJECTED    // رفض بشري بعد تعليق
+  1105→}
+  1106→
+  1107→// ----- نماذج الامتحانات -----
+  1108→model Exam {
+  1109→  id              String    @id @default(cuid())
+  1110→  schoolId        String
+  1111→  school          School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1112→  title           String
+  1113→  description     String    @default("")
+  1114→  subject         String    // المادة (نص حر لتفادي الربط الإجباري)
+  1115→  subjectId       String?   // معرف المادة إن وُجد في جدول آخر
+  1116→  teacherId       String    // مُنشئ الامتحان
+  1117→  teacherName     String    @default("")  // اسم المعلم (للعرض السريع)
+  1118→  classroomId     String?   // الفصل المستهدف
+  1119→  classroomName   String    @default("")  // اسم الفصل (للعرض)
+  1120→  academicYearId  String?   // السنة الدراسية
+  1121→  startDate       DateTime  // وقت الفتح
+  1122→  endDate         DateTime  // وقت الإغلاق
+  1123→  durationMinutes Int       // المدة بالدقائق
+  1124→  passwordHash    String?   // كلمة سر الدخول (مشفرّة bcrypt)
+  1125→  shuffleQuestions Boolean   @default(false)
+  1126→  shuffleOptions   Boolean   @default(false)
+  1127→  allowReview      Boolean   @default(true)   // السماح للطالب بمراجعة إجاباته بعد التسليم
+  1128→  showResultImmediately Boolean @default(false) // إظهار النتيجة فوراً
+  1129→  parentVisible    Boolean   @default(false)   // هل يرى ولي الأمر الورقة؟
+  1130→  maxAttempts      Int       @default(1)
+  1131→  maxFileSizeMb    Int       @default(5)
+  1132→  allowTextAnswers Boolean   @default(true)
+  1133→  allowImageAnswers Boolean  @default(true)
+  1134→  allowPdfAnswers  Boolean   @default(false)
+  1135→  ipRestriction    String?   // قيد IP اختياري
+  1136→  antiCheatEnabled Boolean   @default(true)
+  1137→  status           ExamStatus @default(DRAFT)
+  1138→  totalPoints      Float     @default(0)
+  1139→  passingScore     Float?    // درجة النجاح
+  1140→  // ===== امتحانات تدريبية (مثل Oracle Academy) =====
+  1141→  category         ExamCategory @default(OFFICIAL) // تدريبي أو رسمي
+  1142→  examPeriod       ExamPeriod   @default(NONE)     // الفئة الزمنية للتدريبي
+  1143→  showAnswersAfter Boolean   @default(false) // إظهار الإجابات الصحيحة بعد التسليم (للتدريبي)
+  1144→  allowRetakes     Boolean   @default(false) // السماح بإعادة المحاولة بدون حد (للتدريبي)
+  1145→  createdAt        DateTime  @default(now())
+  1146→  updatedAt        DateTime  @updatedAt
+  1147→
+  1148→  questions   Question[]
+  1149→  submissions Submission[]
+  1150→
+  1151→  @@index([schoolId])
+  1152→  @@index([teacherId])
+  1153→  @@index([classroomId])
+  1154→  @@index([status])
+  1155→  @@index([startDate, endDate])
+  1156→  @@index([category])
+  1157→  @@index([examPeriod])
+  1158→}
+  1159→
+  1160→model Question {
+  1161→  id            String       @id @default(cuid())
+  1162→  schoolId      String
+  1163→  school        School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1164→  examId        String
+  1165→  exam          Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  1166→  type          QuestionType
+  1167→  text          String       // نص السؤال (بعد الفلترة عند الإنشاء)
+  1168→  options       String?      // JSON array: ["خيار 1", "خيار 2", ...]
+  1169→  correctAnswer String?      // للـ MCQ/TRUE_FALSE: index أو "true"/"false"
+  1170→  correctText   String?      // للـ SHORT: نص نموذجي
+  1171→  rubric        String?      // لـ ESSAY: معايير التصحيح JSON
+  1172→  points        Float        @default(1)
+  1173→  order         Int          @default(0)
+  1174→  explanation   String?      // تفسير الإجابة (يظهر بعد التصحيح)
+  1175→  attachmentPath String?     // مسار صورة السؤال في secure-storage
+  1176→  attachmentUrl  String?     // URL للعرض (مؤقت)
+  1177→  textModeration  ModerationStatus @default(PENDING)
+  1178→  imageModeration  ModerationStatus @default(PENDING)
+  1179→  moderationNotes String?          // JSON: أسباب قرار الـ AI
+  1180→  moderatedAt     DateTime?
+  1181→  createdAt      DateTime    @default(now())
+  1182→  updatedAt      DateTime    @updatedAt
+  1183→
+  1184→  answers Answer[]
+  1185→
+  1186→  @@index([examId])
+  1187→  @@index([schoolId])
+  1188→}
+  1189→
+  1190→model Submission {
+  1191→  id              String           @id @default(cuid())
+  1192→  schoolId        String
+  1193→  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1194→  examId          String
+  1195→  exam            Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  1196→  studentId       String
+  1197→  studentName     String           @default("")
+  1198→  attemptNumber   Int              @default(1)
+  1199→  startedAt       DateTime         @default(now())
+  1200→  submittedAt     DateTime?
+  1201→  autoClosedAt    DateTime?        // متى أُغلق تلقائياً
+  1202→  status          SubmissionStatus @default(IN_PROGRESS)
+  1203→  totalScore      Float?
+  1204→  maxScore        Float?
+  1205→  percentage      Float?
+  1206→  passed          Boolean?
+  1207→  ipHash          String           @default("")  // بصمة الجهاز
+  1208→  userAgentHash   String           @default("")
+  1209→  focusEvents     Int              @default(0)
+  1210→  tabSwitches     Int              @default(0)
+  1211→  copyAttempts    Int              @default(0)
+  1212→  lastActivityAt  DateTime?
+  1213→  gradedAt        DateTime?
+  1214→  gradedById      String?
+  1215→  gradedByName    String?          @default("")
+  1216→  notes           String           @default("")
+  1217→  createdAt       DateTime         @default(now())
+  1218→  updatedAt       DateTime         @updatedAt
+  1219→
+  1220→  answers     Answer[]
+  1221→  violations  ExamViolation[]
+  1222→  appeals     ExamAppeal[]
+  1223→
+  1224→  @@unique([examId, studentId, attemptNumber])
+  1225→  @@index([examId])
+  1226→  @@index([studentId])
+  1227→  @@index([status])
+  1228→  @@index([schoolId])
+  1229→}
+  1230→
+  1231→model Answer {
+  1232→  id              String           @id @default(cuid())
+  1233→  schoolId        String
+  1234→  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1235→  submissionId    String
+  1236→  submission      Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  1237→  questionId      String
+  1238→  question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  1239→  textAnswer      String?          // النص بعد الفلترة والتعقيم
+  1240→  textOriginalLength Int           @default(0)  // الطول الأصلي قبل التعقيم (للإحصاء)
+  1241→  imageAnswerPath String?          // مسار الصورة في secure-storage (آمن)
+  1242→  imageAnswerUrl  String?          // URL مؤقت للعرض
+  1243→  fileAnswerPath  String?          // مسار PDF في secure-storage
+  1244→  fileAnswerUrl   String?          // URL مؤقت للعرض
+  1245→  imageHash       String?          // hash بصري للصورة (anti-cheat)
+  1246→  textModeration  ModerationStatus @default(PENDING)
+  1247→  imageModeration ModerationStatus @default(PENDING)
+  1248→  fileModeration  ModerationStatus @default(PENDING)
+  1249→  moderationNotes String?          // JSON: أسباب قرار الـ AI
+  1250→  moderatedAt     DateTime?
+  1251→  score           Float?
+  1252→  maxScore        Float            @default(1)
+  1253→  isCorrect       Boolean?
+  1254→  teacherNote     String?
+  1255→  aiSuggestedScore Float?          // اقتراح AI للدرجة
+  1256→  aiConfidence    Float?           // ثقة AI (0-1)
+  1257→  aiAssisted      Boolean          @default(false)  // هل استُخدم AI في التصحيح
+  1258→  lastAiAssistAt  DateTime?        // متى آخر اقتراح AI
+  1259→  gradedAt        DateTime?
+  1260→  gradedById      String?
+  1261→  createdAt       DateTime         @default(now())
+  1262→  updatedAt       DateTime         @updatedAt
+  1263→
+  1264→  appeals     ExamAppeal[]
+  1265→  moderationLogs ExamModerationLog[]
+  1266→
+  1267→  @@index([submissionId])
+  1268→  @@index([questionId])
+  1269→  @@index([schoolId])
+  1270→  @@index([textModeration])
+  1271→  @@index([imageModeration])
+  1272→}
+  1273→
+  1274→model ExamViolation {
+  1275→  id            String        @id @default(cuid())
+  1276→  schoolId      String
+  1277→  school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1278→  submissionId  String
+  1279→  submission    Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  1280→  examId        String         @default("")
+  1281→  studentId     String         @default("")
+  1282→  type          ViolationType
+  1283→  severity      Int           @default(1)  // 1=منخفض، 2=متوسط، 3=عالي
+  1284→  details       String        @default("")
+  1285→  userAgent     String        @default("")
+  1286→  ipHash        String        @default("")
+  1287→  createdAt     DateTime      @default(now())
+  1288→
+  1289→  @@index([submissionId])
+  1290→  @@index([examId])
+  1291→  @@index([studentId])
+  1292→  @@index([type])
+  1293→  @@index([schoolId])
+  1294→}
+  1295→
+  1296→model ExamAppeal {
+  1297→  id            String      @id @default(cuid())
+  1298→  schoolId      String
+  1299→  school        School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1300→  answerId      String
+  1301→  answer        Answer      @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  1302→  submissionId  String
+  1303→  submission    Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  1304→  studentId     String
+  1305→  studentName   String      @default("")
+  1306→  reason        String
+  1307→  requestedScore Float?
+  1308→  status        AppealStatus @default(PENDING)
+  1309→  teacherReply  String?
+  1310→  reviewedById  String?
+  1311→  reviewedAt    DateTime?
+  1312→  createdAt     DateTime    @default(now())
+  1313→  updatedAt     DateTime    @updatedAt
+  1314→
+  1315→  @@index([answerId])
+  1316→  @@index([submissionId])
+  1317→  @@index([status])
+  1318→  @@index([schoolId])
+  1319→}
+  1320→
+  1321→model ExamModerationLog {
+  1322→  id            String           @id @default(cuid())
+  1323→  schoolId      String
+  1324→  school        School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1325→  answerId      String?
+  1326→  answer        Answer?          @relation(fields: [answerId], references: [id], onDelete: SetNull)
+  1327→  questionId    String?
+  1328→  action        ModerationAction
+  1329→  targetType    String           @default("text")  // text|image|pdf|file
+  1330→  reason        String           @default("")
+  1331→  aiConfidence  Float?
+  1332→  reviewerId    String?
+  1333→  reviewerName  String           @default("")
+  1334→  metadata      String?          // JSON إضافي
+  1335→  createdAt     DateTime         @default(now())
+  1336→
+  1337→  @@index([answerId])
+  1338→  @@index([action])
+  1339→  @@index([schoolId])
+  1340→}
+  1341→
+  1342→// ----- بنك الأسئلة (Question Bank) -----
+  1343→// أسئلة قابلة لإعادة الاستخدام عبر الامتحانات، يصنعها المعلم ويصنّفها.
+  1344→model QuestionBank {
+  1345→  id            String       @id @default(cuid())
+  1346→  schoolId      String
+  1347→  school        School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1348→  teacherId     String
+  1349→  teacherName   String       @default("")
+  1350→  subject       String       @default("")   // المادة (لتصفية بنك الأسئلة)
+  1351→  classroomName String       @default("")   // الصف المستهدف (اختياري)
+  1352→  type          QuestionType
+  1353→  text          String       // نص السؤال (بعد الفلترة)
+  1354→  options       String?      // JSON array
+  1355→  correctAnswer String?
+  1356→  correctText   String?
+  1357→  rubric        String?      // معايير التصحيح JSON
+  1358→  points        Float        @default(1)
+  1359→  explanation   String?
+  1360→  tags          String       @default("[]") // JSON array of tags
+  1361→  difficulty    String       @default("medium")  // easy|medium|hard
+  1362→  usageCount    Int          @default(0)   // عدد مرات الاستخدام في امتحانات
+  1363→  isPublic      Boolean      @default(false) // مرئي لمعلمي المدرسة الآخرين؟
+  1364→  textModeration  ModerationStatus @default(PENDING)
+  1365→  imageModeration  ModerationStatus @default(PENDING)
+  1366→  moderationNotes String?
+  1367→  moderatedAt   DateTime?
+  1368→  createdAt     DateTime     @default(now())
+  1369→  updatedAt     DateTime     @updatedAt
+  1370→
+  1371→  @@index([schoolId])
+  1372→  @@index([teacherId])
+  1373→  @@index([subject])
+  1374→  @@index([type])
+  1375→  @@index([isPublic])
+  1376→}
+  1377→
+  1378→// ----- ملف المعلم للامتحانات -----
+  1379→// يخزّن إعدادات المعلم الافتراضية + إحصاءات سريعة.
+  1380→model ExamTeacherProfile {
+  1381→  id              String   @id @default(cuid())
+  1382→  schoolId        String
+  1383→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1384→  teacherId       String   @unique
+  1385→  teacherName     String   @default("")
+  1386→  defaultSubject  String   @default("")
+  1387→  defaultDurationMinutes Int @default(30)
+  1388→  defaultMaxAttempts Int   @default(1)
+  1389→  defaultPassingScore Float @default(50)
+  1390→  defaultAllowText Boolean  @default(true)
+  1391→  defaultAllowImage Boolean @default(true)
+  1392→  defaultAllowPdf  Boolean  @default(false)
+  1393→  defaultAntiCheat Boolean  @default(true)
+  1394→  totalExamsCreated Int    @default(0)
+  1395→  totalQuestionsInBank Int @default(0)
+  1396→  createdAt       DateTime @default(now())
+  1397→  updatedAt       DateTime @updatedAt
+  1398→}
+  1399→
+  1400→// ===== مركز التحميل — ملفات قابلة للتحميل لشئون الطلاب/العاملين/الموارد المالية =====
+  1401→model DownloadableFile {
+  1402→  id              String   @id @default(cuid())
+  1403→  schoolId        String
+  1404→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1405→  // تصنيف الملف: شئون الطلاب / شئون العاملين / شئون مالية / إدارية / عام
+  1406→  category        String   @default("GENERAL")
+  1407→  title           String   // عنوان عربي واضح
+  1408→  description     String   @default("")
+  1409→  fileName        String   // الاسم الأصلي للملف (للعرض عند التحميل)
+  1410→  filePath        String   // المسار النسبي على القرص
+  1411→  fileType        String   @default("") // MIME type
+  1412→  fileSize        Int      @default(0)  // بالبايت
+  1413→  uploadedById    String?
+  1414→  uploadedByName  String   @default("")
+  1415→  isActive        Boolean  @default(true)  // إخفاء/إظهار بدون حذف
+  1416→  downloadsCount  Int      @default(0)  // عدّاد التحميلات
+  1417→  createdAt       DateTime @default(now())
+  1418→  updatedAt       DateTime @updatedAt
+  1419→
+  1420→  @@index([schoolId, category])
+  1421→  @@index([schoolId, isActive])
+  1422→  @@index([category, isActive])
+  1423→}
+  1424→
+  1425→// ============================================================
+  1426→// ===== نظام الاشتراكات SaaS (3 باقات + فترة تجريبية) =====
+  1427→// ============================================================
+  1428→
+  1429→// باقات النظام — يديرها super-admin (3 سجلات ثابتة)
+  1430→model SubscriptionPlan {
+  1431→  id              String   @id @default(cuid())
+  1432→  code            String   @unique  // "basic" | "pro" | "enterprise"
+  1433→  nameAr          String             // "الباقة الأساسية"
+  1434→  description     String   @default("")
+  1435→  // الأسعار بالجنيه المصري
+  1436→  priceMonthly    Float               // السعر الشهري
+  1437→  priceAnnual     Float               // السعر السنوي (مع خصم ≈ شهران مجانًا)
+  1438→  trialDays       Int      @default(14)
+  1439→  // الحدود (null = غير محدود)
+  1440→  maxStudents     Int?
+  1441→  maxTeachers     Int?
+  1442→  maxAdmins       Int?
+  1443→  maxStorageMb    Int
+  1444→  // الميزات المُفعّلة (JSON array of module keys)
+  1445→  // مثال: ["news","students","exams_training","exams_official","transport","fees","expenses","staff"]
+  1446→  features        String   @default("[]")
+  1447→  isActive        Boolean  @default(true)
+  1448→  sortOrder       Int      @default(0)
+  1449→  createdAt       DateTime @default(now())
+  1450→  updatedAt       DateTime @updatedAt
+  1451→
+  1452→  subscriptions   SchoolSubscription[]
+  1453→  invoices        Invoice[]
+  1454→}
+  1455→
+  1456→// اشتراك المدرسة — واحد نشط لكل مدرسة
+  1457→model SchoolSubscription {
+  1458→  id              String   @id @default(cuid())
+  1459→  schoolId        String   @unique
+  1460→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1461→  planId          String
+  1462→  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  1463→  // حالة الاشتراك
+  1464→  status          String   @default("PENDING_APPROVAL") // PENDING_APPROVAL|TRIAL|ACTIVE|PAST_DUE|CANCELLED|EXPIRED
+  1465→  startDate       DateTime @default(now())
+  1466→  trialEndDate    DateTime?    // نهاية الفترة التجريبية
+  1467→  currentPeriodEnd DateTime   // نهاية الفترة المدفوعة الحالية
+  1468→  billingCycle    String   @default("MONTHLY") // MONTHLY|ANNUAL
+  1469→  autoRenew       Boolean  @default(true)
+  1470→  cancelledAt     DateTime?
+  1471→  // الباقة المطلوبة للدورة التالية (للترقية/التخفيض من بداية الدورة القادمة)
+  1472→  pendingPlanId   String?  // إن وُجد، يسري عند التجديد التالي
+  1473→  pendingCycle    String?  // MONTHLY|ANNUAL (إن غُيّرت دورة الفوترة)
+  1474→  createdAt       DateTime @default(now())
+  1475→  updatedAt       DateTime @updatedAt
+  1476→
+  1477→  invoices        Invoice[]
+  1478→
+  1479→  @@index([status])
+  1480→  @@index([planId])
+  1481→}
+  1482→
+  1483→// الفاتورة
+  1484→model Invoice {
+  1485→  id              String   @id @default(cuid())
+  1486→  invoiceNumber   String   @unique   // INV-2025-0001
+  1487→  subscriptionId  String
+  1488→  subscription    SchoolSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  1489→  schoolId        String
+  1490→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1491→  planId          String
+  1492→  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  1493→  amount          Float               // المبلغ بالجنيه
+  1494→  currency        String   @default("EGP")
+  1495→  periodStart     DateTime
+  1496→  periodEnd       DateTime
+  1497→  // حالة الفاتورة
+  1498→  status          String   @default("PENDING") // PENDING|PAID|FAILED|REFUNDED|VOID
+  1499→  dueDate         DateTime
+  1500→  paidAt          DateTime?
+  1501→  paymentMethod   String?  // paymob|manual|stripe
+  1502→  // بيانات إضافية للدفع اليدوي (تحويل بنكي)
+  1503→  manualReceiptUrl String? // رابط إيصال التحويل المرفوع
+  1504→  manualNotes     String   @default("") // ملاحظات من المدرسة
+  1505→  reviewedAt      DateTime? // تاريخ مراجعة super-admin
+  1506→  reviewedById    String?
+  1507→  createdAt       DateTime @default(now())
+  1508→  updatedAt       DateTime @updatedAt
+  1509→
+  1510→  transactions    PaymentTransaction[]
+  1511→
+  1512→  @@index([schoolId, status])
+  1513→  @@index([subscriptionId])
+  1514→  @@index([status, dueDate])
+  1515→}
+  1516→
+  1517→// حركة الدفع (لكل محاولة دفع سجل)
+  1518→model PaymentTransaction {
+  1519→  id              String   @id @default(cuid())
+  1520→  invoiceId       String
+  1521→  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  1522→  schoolId        String
+  1523→  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  1524→  gateway         String   // paymob|manual|stripe
+  1525→  gatewayRef      String?  // مرجع البوابة (merchant_order_id لـ Paymob)
+  1526→  amount          Float
+  1527→  currency        String   @default("EGP")
+  1528→  status          String   @default("PENDING") // PENDING|SUCCESS|FAILED|REFUNDED
+  1529→  payload         String   @default("{}") // JSON: استجابة البوابة الكاملة
+  1530→  createdAt       DateTime @default(now())
+  1531→  updatedAt       DateTime @updatedAt
+  1532→
+  1533→  @@index([invoiceId])
+  1534→  @@index([schoolId])
+  1535→  @@index([gateway, status])
+  1536→}
+  1537→
