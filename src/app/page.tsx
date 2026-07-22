@@ -14,6 +14,9 @@ const PageLoader = () => (
 
 const AdminLayout = dynamic(() => import('@/components/admin/admin-layout').then(m => ({ default: m.AdminLayout })), { loading: PageLoader })
 const AdminLogin = dynamic(() => import('@/components/admin/admin-login').then(m => ({ default: m.AdminLogin })))
+const PricingPage = dynamic(() => import('@/components/pricing-page').then(m => ({ default: m.PricingPage })))
+const BillingDashboard = dynamic(() => import('@/components/billing-dashboard').then(m => ({ default: m.BillingDashboard })))
+const SuperAdminDashboard = dynamic(() => import('@/components/super-admin-dashboard').then(m => ({ default: m.SuperAdminDashboard })))
 const StudentLifePage = dynamic(() => import('@/components/student-life-page'), { loading: PageLoader })
 const ResultsPage = dynamic(() => import('@/components/results-page'), { loading: PageLoader })
 const SchedulesPage = dynamic(() => import('@/components/schedules-page'), { loading: PageLoader })
@@ -124,6 +127,9 @@ function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [servicesOpen, setServicesOpen] = useState(false)
   const [showAdminLogin, setShowAdminLogin] = useState(false)
+  const [showPricing, setShowPricing] = useState(false)
+  const [showBilling, setShowBilling] = useState(false)
+  const [showSuperAdmin, setShowSuperAdmin] = useState(false)
   const [showResultsPage, setShowResultsPage] = useState(false)
   const [showStudentLife, setShowStudentLife] = useState(false)
   const [showSchedulesPage, setShowSchedulesPage] = useState(false)
@@ -400,6 +406,30 @@ function HomePage() {
             <div className="flex-1 min-w-0">
               <h1 className="text-base md:text-xl font-bold truncate" style={{ color: school.primaryColor }}>{school.name}</h1>
               {settings?.heroSubtitle && <p className="text-xs text-gray-500 truncate">{settings.heroSubtitle}</p>}
+            </div>
+            {/* أزرار الاشتراك والمنصة */}
+            <div className="hidden md:flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowPricing(true)}
+                className="px-3 py-1.5 text-xs font-medium text-[#610000] border border-[#610000]/30 rounded-lg hover:bg-[#610000]/5 transition flex items-center gap-1"
+                title="باقات الاشتراك وتسجيل مدرسة جديدة"
+              >
+                <span>📋</span> الباقات
+              </button>
+              <button
+                onClick={() => setShowBilling(true)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-1"
+                title="فوترة واشتراك المدرسة"
+              >
+                <span>💳</span> الفوترة
+              </button>
+              <button
+                onClick={() => setShowSuperAdmin(true)}
+                className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50 transition flex items-center gap-1"
+                title="لوحة إدارة المنصة (super-admin)"
+              >
+                <span>👑</span> المنصة
+              </button>
             </div>
             <button className="lg:hidden p-2 text-2xl text-gray-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? '✕' : '☰'}
@@ -945,6 +975,15 @@ function HomePage() {
 
       {/* Admin Login Modal */}
       <AdminLogin open={showAdminLogin} onOpenChange={setShowAdminLogin} />
+
+      {/* Pricing & Signup Modal */}
+      <PricingPage open={showPricing} onOpenChange={setShowPricing} />
+
+      {/* Billing Dashboard Modal */}
+      <BillingDashboard open={showBilling} onOpenChange={setShowBilling} schoolId={selectedSchoolId || school?.id || ''} />
+
+      {/* Super-Admin Dashboard Modal */}
+      <SuperAdminDashboard open={showSuperAdmin} onOpenChange={setShowSuperAdmin} />
     </div>
   )
 }

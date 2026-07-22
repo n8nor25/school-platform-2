@@ -25,6 +25,22 @@ model School {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // ===== حقول الاشتراك والتسجيل =====
+  // حالة الاشتراك العامة (نسخة سريعة للقراءة بدون join)
+  subscriptionStatus String @default("PENDING_APPROVAL") // PENDING_APPROVAL|TRIAL|ACTIVE|PAST_DUE|CANCELLED|EXPIRED
+  // الباقة المطلوبة عند التسجيل (للموافقة من super-admin)
+  pendingPlanId   String?
+  // بيانات المسؤول الذي سجّل المدرسة (للتواصل أثناء الموافقة)
+  registrantName  String   @default("")
+  registrantEmail String   @default("")
+  registrantPhone String   @default("")
+  registrantUsername String @default("")
+  registrantTempPassword String @default("") // كلمة مرور مؤقتة تُولّد عند الموافقة
+  // سبب الرفض (إن وُجد)
+  rejectionReason String   @default("")
+  approvedAt      DateTime?
+  approvedById    String?
+
   settings       Settings?
   users          User[]
   news           News[]
@@ -73,6 +89,10 @@ model School {
   questionBank   QuestionBank[]
   examTeacherProfile ExamTeacherProfile[]
   downloads      DownloadableFile[]
+  // ===== اشتراكات SaaS =====
+  subscription   SchoolSubscription?
+  invoices       Invoice[]
+  paymentTransactions PaymentTransaction[]
 }
 
 // ===== الإعدادات =====
@@ -1400,4 +1420,117 @@ model DownloadableFile {
   @@index([schoolId, category])
   @@index([schoolId, isActive])
   @@index([category, isActive])
+}
+
+// ============================================================
+// ===== نظام الاشتراكات SaaS (3 باقات + فترة تجريبية) =====
+// ============================================================
+
+// باقات النظام — يديرها super-admin (3 سجلات ثابتة)
+model SubscriptionPlan {
+  id              String   @id @default(cuid())
+  code            String   @unique  // "basic" | "pro" | "enterprise"
+  nameAr          String             // "الباقة الأساسية"
+  description     String   @default("")
+  // الأسعار بالجنيه المصري
+  priceMonthly    Float               // السعر الشهري
+  priceAnnual     Float               // السعر السنوي (مع خصم ≈ شهران مجانًا)
+  trialDays       Int      @default(14)
+  // الحدود (null = غير محدود)
+  maxStudents     Int?
+  maxTeachers     Int?
+  maxAdmins       Int?
+  maxStorageMb    Int
+  // الميزات المُفعّلة (JSON array of module keys)
+  // مثال: ["news","students","exams_training","exams_official","transport","fees","expenses","staff"]
+  features        String   @default("[]")
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions   SchoolSubscription[]
+  invoices        Invoice[]
+}
+
+// اشتراك المدرسة — واحد نشط لكل مدرسة
+model SchoolSubscription {
+  id              String   @id @default(cuid())
+  schoolId        String   @unique
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  // حالة الاشتراك
+  status          String   @default("PENDING_APPROVAL") // PENDING_APPROVAL|TRIAL|ACTIVE|PAST_DUE|CANCELLED|EXPIRED
+  startDate       DateTime @default(now())
+  trialEndDate    DateTime?    // نهاية الفترة التجريبية
+  currentPeriodEnd DateTime   // نهاية الفترة المدفوعة الحالية
+  billingCycle    String   @default("MONTHLY") // MONTHLY|ANNUAL
+  autoRenew       Boolean  @default(true)
+  cancelledAt     DateTime?
+  // الباقة المطلوبة للدورة التالية (للترقية/التخفيض من بداية الدورة القادمة)
+  pendingPlanId   String?  // إن وُجد، يسري عند التجديد التالي
+  pendingCycle    String?  // MONTHLY|ANNUAL (إن غُيّرت دورة الفوترة)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  invoices        Invoice[]
+
+  @@index([status])
+  @@index([planId])
+}
+
+// الفاتورة
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique   // INV-2025-0001
+  subscriptionId  String
+  subscription    SchoolSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  amount          Float               // المبلغ بالجنيه
+  currency        String   @default("EGP")
+  periodStart     DateTime
+  periodEnd       DateTime
+  // حالة الفاتورة
+  status          String   @default("PENDING") // PENDING|PAID|FAILED|REFUNDED|VOID
+  dueDate         DateTime
+  paidAt          DateTime?
+  paymentMethod   String?  // paymob|manual|stripe
+  // بيانات إضافية للدفع اليدوي (تحويل بنكي)
+  manualReceiptUrl String? // رابط إيصال التحويل المرفوع
+  manualNotes     String   @default("") // ملاحظات من المدرسة
+  reviewedAt      DateTime? // تاريخ مراجعة super-admin
+  reviewedById    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions    PaymentTransaction[]
+
+  @@index([schoolId, status])
+  @@index([subscriptionId])
+  @@index([status, dueDate])
+}
+
+// حركة الدفع (لكل محاولة دفع سجل)
+model PaymentTransaction {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gateway         String   // paymob|manual|stripe
+  gatewayRef      String?  // مرجع البوابة (merchant_order_id لـ Paymob)
+  amount          Float
+  currency        String   @default("EGP")
+  status          String   @default("PENDING") // PENDING|SUCCESS|FAILED|REFUNDED
+  payload         String   @default("{}") // JSON: استجابة البوابة الكاملة
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([schoolId])
+  @@index([gateway, status])
 }
