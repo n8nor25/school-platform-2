@@ -19,6 +19,7 @@ import { db } from "@/lib/db";
 import { resolveSchoolId } from "@/lib/school-utils";
 import {
   DOWNLOAD_CATEGORY_VALUES,
+  DOWNLOAD_VISIBILITY_VALUES,
   MAX_FILE_SIZE,
   isAllowedMimeType,
   generateUniqueFileName,
@@ -40,12 +41,29 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category");
     const includeInactive = searchParams.get("includeInactive") === "1" || searchParams.get("includeInactive") === "true";
     const search = searchParams.get("search")?.trim() || "";
+    const folderId = searchParams.get("folderId");
+    const visibility = searchParams.get("visibility");
+    const publicOnly = searchParams.get("publicOnly") === "1" || searchParams.get("publicOnly") === "true";
 
     const where: Record<string, unknown> = { schoolId };
     if (category && DOWNLOAD_CATEGORY_VALUES.includes(category as never)) {
       where.category = category;
     }
     if (!includeInactive) where.isActive = true;
+    // فلتر المجلد: "root" = جذر التصنيف (folderId = null) | معرّف = مجلد محدد | بدون = الكل
+    if (folderId === "root") {
+      where.folderId = null;
+    } else if (folderId) {
+      where.folderId = folderId;
+    }
+    // فلتر الصلاحية
+    if (visibility && DOWNLOAD_VISIBILITY_VALUES.includes(visibility as never)) {
+      where.visibility = visibility;
+    }
+    // الصفحة العامة ترى الصلاحيات العامة فقط (PUBLIC/STAFF/TEACHER/PARENT)
+    if (publicOnly) {
+      where.visibility = { not: "ADMIN" };
+    }
     if (search) {
       where.OR = [
         { title: { contains: search } },
@@ -56,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     const files = await db.downloadableFile.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       take: 500,
     });
 
@@ -77,6 +95,10 @@ export async function POST(request: NextRequest) {
     const description = (form.get("description") as string) || "";
     const uploadedById = (form.get("uploadedById") as string) || null;
     const uploadedByName = (form.get("uploadedByName") as string) || "";
+    const folderId = (form.get("folderId") as string) || null;
+    const visibility = ((form.get("visibility") as string) || "PUBLIC").toUpperCase();
+    const sortOrderRaw = form.get("sortOrder");
+    const sortOrder = sortOrderRaw !== null && sortOrderRaw !== "" && Number.isFinite(Number(sortOrderRaw)) ? Number(sortOrderRaw) : 0;
 
     const schoolId = await resolveSchoolId(schoolIdParam);
     if (!schoolId) {
@@ -107,6 +129,19 @@ export async function POST(request: NextRequest) {
     if (!DOWNLOAD_CATEGORY_VALUES.includes(category as never)) {
       return NextResponse.json({ error: "التصنيف غير صالح" }, { status: 400 });
     }
+    if (!DOWNLOAD_VISIBILITY_VALUES.includes(visibility as never)) {
+      return NextResponse.json({ error: "الصلاحية غير صالحة" }, { status: 400 });
+    }
+    // تحقق من المجلد إن وُجد
+    if (folderId) {
+      const folder = await db.downloadFolder.findUnique({ where: { id: folderId } });
+      if (!folder || folder.schoolId !== schoolId || folder.category !== category) {
+        return NextResponse.json(
+          { error: "المجلد غير صالح أو لا ينتمي لهذا التصنيف" },
+          { status: 400 }
+        );
+      }
+    }
 
     const catInfo = getCategoryInfo(category);
     if (!catInfo) {
@@ -133,6 +168,7 @@ export async function POST(request: NextRequest) {
       data: {
         schoolId,
         category,
+        folderId,
         title: title.trim().slice(0, 200),
         description: description.trim().slice(0, 2000),
         fileName: file.name.slice(0, 200),
@@ -141,6 +177,8 @@ export async function POST(request: NextRequest) {
         fileSize: buffer.length,
         uploadedById: uploadedById || null,
         uploadedByName: uploadedByName.slice(0, 100),
+        visibility,
+        sortOrder,
         isActive: true,
         downloadsCount: 0,
       },

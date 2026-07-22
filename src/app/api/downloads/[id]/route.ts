@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { resolveSchoolId } from "@/lib/school-utils";
-import { DOWNLOAD_CATEGORY_VALUES } from "@/lib/downloads";
+import { DOWNLOAD_CATEGORY_VALUES, DOWNLOAD_VISIBILITY_VALUES } from "@/lib/downloads";
 import { promises as fs } from "fs";
 import path from "path";
 
@@ -43,10 +43,36 @@ export async function PATCH(
       const cat = body.category.toUpperCase();
       if (DOWNLOAD_CATEGORY_VALUES.includes(cat as never)) {
         data.category = cat;
+        // عند تغيير التصنيف، ارفع الملف إلى جذر التصنيف الجديد
+        data.folderId = null;
       }
     }
     if (typeof body.isActive === "boolean") {
       data.isActive = body.isActive;
+    }
+    if (typeof body.visibility === "string") {
+      const vis = body.visibility.toUpperCase();
+      if (DOWNLOAD_VISIBILITY_VALUES.includes(vis as never)) {
+        data.visibility = vis;
+      }
+    }
+    if (typeof body.sortOrder === "number" && Number.isFinite(body.sortOrder)) {
+      data.sortOrder = body.sortOrder;
+    }
+    // المجلد: null = جذر التصنيف | معرّف = مجلد محدد | undefined = لا تغيير
+    if (body.folderId !== undefined) {
+      const newFolderId = body.folderId === null || body.folderId === "" ? null : body.folderId;
+      if (newFolderId) {
+        const folder = await db.downloadFolder.findUnique({ where: { id: newFolderId } });
+        const targetCategory = (data.category as string) || existing.category;
+        if (!folder || folder.schoolId !== schoolId || folder.category !== targetCategory) {
+          return NextResponse.json(
+            { error: "المجلد غير صالح أو لا ينتمي لتصنيف الملف" },
+            { status: 400 }
+          );
+        }
+      }
+      data.folderId = newFolderId;
     }
 
     const updated = await db.downloadableFile.update({

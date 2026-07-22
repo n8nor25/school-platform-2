@@ -39,6 +39,17 @@ export async function GET(
     if (!file.isActive) {
       return NextResponse.json({ error: "الملف غير متاح" }, { status: 410 });
     }
+    // صلاحية الإدارة فقط: تتطلب علامة admin (تُمرَّر من لوحة الإدارة)
+    // الملفات العامة (PUBLIC/STAFF/TEACHER/PARENT) متاحة للجميع للتحميل
+    if (file.visibility === "ADMIN") {
+      const adminToken = searchParams.get("adminToken") || request.headers.get("x-admin-token");
+      if (adminToken !== "school-admin-download") {
+        return NextResponse.json(
+          { error: "هذا الملف للإدارة فقط. سجّل دخول الإدارة للتحميل." },
+          { status: 403 }
+        );
+      }
+    }
 
     const fullPath = path.join(UPLOAD_ROOT, file.filePath);
 

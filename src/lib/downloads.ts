@@ -31,6 +31,41 @@ export function getCategoryLabel(cat: string): string {
   return getCategoryInfo(cat)?.label || cat;
 }
 
+// ============================================================
+// ===== مستويات الصلاحيات (Visibility) =====
+// ============================================================
+// PUBLIC   = للجميع (يظهر في الصفحة العامة + أي أحد يحمّله)
+// STAFF    = للعاملين فقط (يظهر في الصفحة العامة بشارة "للعاملين" — التحميل يتطلب تسجيل دخول)
+// TEACHER  = للمعلمين فقط (يظهر في بوابة المعلم + الصفحة العامة بشارة "للمعلمين")
+// PARENT   = لأولياء الأمور فقط (يظهر في بوابة أولياء الأمور + الصفحة العامة بشارة "لأولياء الأمور")
+// ADMIN    = للإدارة فقط (لا يظهر في الصفحة العامة — لوحة الإدارة فقط)
+export const DOWNLOAD_VISIBILITY_LEVELS = [
+  { value: "PUBLIC", label: "للجميع", color: "#047857", icon: "🌍", isPublic: true },
+  { value: "STAFF", label: "للعاملين", color: "#1d4ed8", icon: "👥", isPublic: true },
+  { value: "TEACHER", label: "للمعلمين", color: "#7c3aed", icon: "👨‍🏫", isPublic: true },
+  { value: "PARENT", label: "لأولياء الأمور", color: "#b45309", icon: "👨‍👩‍👧", isPublic: true },
+  { value: "ADMIN", label: "للإدارة فقط", color: "#dc2626", icon: "🔒", isPublic: false },
+] as const;
+
+export type DownloadVisibility = (typeof DOWNLOAD_VISIBILITY_LEVELS)[number]["value"];
+
+export const DOWNLOAD_VISIBILITY_VALUES = DOWNLOAD_VISIBILITY_LEVELS.map((v) => v.value);
+
+/** يُرجع معلومات الصلاحية أو null */
+export function getVisibilityInfo(v: string) {
+  return DOWNLOAD_VISIBILITY_LEVELS.find((x) => x.value === v) || null;
+}
+
+/** يُرجع label الصلاحية أو القيمة كما هي */
+export function getVisibilityLabel(v: string): string {
+  return getVisibilityInfo(v)?.label || v;
+}
+
+/** هل الصلاحية تظهر في الصفحة العامة؟ */
+export function isPublicVisibility(v: string): boolean {
+  return getVisibilityInfo(v)?.isPublic ?? false;
+}
+
 /** أنواع MIME المسموح بها + امتداداتها المقابلة */
 export const ALLOWED_MIME_TYPES: Record<string, string[]> = {
   "application/pdf": [".pdf"],

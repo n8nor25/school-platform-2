@@ -89,6 +89,7 @@ model School {
   questionBank   QuestionBank[]
   examTeacherProfile ExamTeacherProfile[]
   downloads      DownloadableFile[]
+  downloadFolders DownloadFolder[]
   // ===== اشتراكات SaaS =====
   subscription   SchoolSubscription?
   invoices       Invoice[]
@@ -1398,12 +1399,36 @@ model ExamTeacherProfile {
 }
 
 // ===== مركز التحميل — ملفات قابلة للتحميل لشئون الطلاب/العاملين/الموارد المالية =====
+// مجلد فرعي داخل تصنيف (اختياري) — ينظّم الملفات داخل كل تصنيف
+model DownloadFolder {
+  id              String   @id @default(cuid())
+  schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  // التصنيف الأب (شئون الطلاب/العاملين/مالية/إدارية/عام)
+  category        String   @default("GENERAL")
+  name            String   // اسم المجلد (عربي)
+  description     String   @default("")
+  sortOrder       Int      @default(0)  // ترتيب يدوي: الأصغر يظهر أولاً
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  files           DownloadableFile[]
+
+  @@index([schoolId, category])
+  @@index([schoolId, isActive])
+  @@unique([schoolId, category, name])
+}
+
 model DownloadableFile {
   id              String   @id @default(cuid())
   schoolId        String
   school          School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   // تصنيف الملف: شئون الطلاب / شئون العاملين / شئون مالية / إدارية / عام
   category        String   @default("GENERAL")
+  // المجلد الفرعي (اختياري) — null = في جذر التصنيف
+  folderId        String?
+  folder          DownloadFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   title           String   // عنوان عربي واضح
   description     String   @default("")
   fileName        String   // الاسم الأصلي للملف (للعرض عند التحميل)
@@ -1412,6 +1437,11 @@ model DownloadableFile {
   fileSize        Int      @default(0)  // بالبايت
   uploadedById    String?
   uploadedByName  String   @default("")
+  // الصلاحيات: من يرى/يحمّل الملف
+  // PUBLIC | STAFF | TEACHER | PARENT | ADMIN
+  visibility      String   @default("PUBLIC")
+  // الترتيب اليدوي: الأصغر يظهر أولاً (الافتراضي 0)
+  sortOrder       Int      @default(0)
   isActive        Boolean  @default(true)  // إخفاء/إظهار بدون حذف
   downloadsCount  Int      @default(0)  // عدّاد التحميلات
   createdAt       DateTime @default(now())
@@ -1420,6 +1450,9 @@ model DownloadableFile {
   @@index([schoolId, category])
   @@index([schoolId, isActive])
   @@index([category, isActive])
+  @@index([folderId])
+  @@index([schoolId, visibility])
+  @@index([sortOrder])
 }
 
 // ============================================================

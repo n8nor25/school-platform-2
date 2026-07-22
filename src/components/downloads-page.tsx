@@ -25,8 +25,10 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   DOWNLOAD_CATEGORIES,
+  DOWNLOAD_VISIBILITY_LEVELS,
   formatFileSize,
   getFileTypeIcon,
+  getVisibilityInfo,
 } from '@/lib/downloads'
 
 interface DownloadsPageProps {
@@ -38,6 +40,7 @@ interface DownloadFile {
   id: string
   schoolId: string
   category: string
+  folderId: string | null
   title: string
   description: string
   fileName: string
@@ -46,10 +49,24 @@ interface DownloadFile {
   fileSize: number
   uploadedById: string | null
   uploadedByName: string
+  visibility: string
+  sortOrder: number
   isActive: boolean
   downloadsCount: number
   createdAt: string
   updatedAt: string
+}
+
+interface DownloadFolderItem {
+  id: string
+  schoolId: string
+  category: string
+  name: string
+  description: string
+  sortOrder: number
+  isActive: boolean
+  filesCount: number
+  createdAt: string
 }
 
 // خريطة أيقونات التصنيفات (Lucide)
@@ -131,6 +148,8 @@ function formatYMD(d: Date): string {
 export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) {
   const [activeCategory, setActiveCategory] = useState<string>('STUDENT_AFFAIRS')
   const [files, setFiles] = useState<DownloadFile[]>([])
+  const [folders, setFolders] = useState<DownloadFolderItem[]>([])
+  const [activeFolderId, setActiveFolderId] = useState<string>('all') // 'all' | 'root' | folderId
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState<boolean>(true)
@@ -140,13 +159,36 @@ export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) 
   const [refreshKey, setRefreshKey] = useState<number>(0)
   const mountedRef = useRef(true)
 
-  // ===== Fetch files for active category (per spec pattern) =====
+  // ===== Fetch folders for active category =====
+  useEffect(() => {
+    mountedRef.current = true
+    const controller = new AbortController()
+    fetch(
+      `/api/download-folders?schoolId=${encodeURIComponent(schoolId)}&category=${activeCategory}`,
+      { signal: controller.signal }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (mountedRef.current) {
+          setFolders(data.folders || [])
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) setFolders([])
+      })
+    return () => {
+      mountedRef.current = false
+      controller.abort()
+    }
+  }, [schoolId, activeCategory, refreshKey])
+
+  // ===== Fetch files for active category (publicOnly=1 hides ADMIN-only) =====
   useEffect(() => {
     mountedRef.current = true
     const controller = new AbortController()
     setLoading(true)
     fetch(
-      `/api/downloads?schoolId=${encodeURIComponent(schoolId)}&category=${activeCategory}`,
+      `/api/downloads?schoolId=${encodeURIComponent(schoolId)}&category=${activeCategory}&publicOnly=1`,
       { signal: controller.signal }
     )
       .then((r) => r.json())
@@ -171,12 +213,11 @@ export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) 
   }, [schoolId, activeCategory, refreshKey])
 
   // ===== Fetch total counts (once on mount + on refresh) =====
-  // Drives the hero stat + per-tab count badges
   useEffect(() => {
     mountedRef.current = true
     const controller = new AbortController()
     setCountLoading(true)
-    fetch(`/api/downloads?schoolId=${encodeURIComponent(schoolId)}`, {
+    fetch(`/api/downloads?schoolId=${encodeURIComponent(schoolId)}&publicOnly=1`, {
       signal: controller.signal,
     })
       .then((r) => r.json())
@@ -203,17 +244,27 @@ export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) 
     }
   }, [schoolId, refreshKey])
 
-  // Filter files client-side by search query
+  // Apply folder filter + search client-side
   const filteredFiles = useMemo(() => {
-    if (!searchQuery.trim()) return files
-    const q = searchQuery.trim().toLowerCase()
-    return files.filter(
-      (f) =>
-        (f.title || '').toLowerCase().includes(q) ||
-        (f.description || '').toLowerCase().includes(q) ||
-        (f.fileName || '').toLowerCase().includes(q)
-    )
-  }, [files, searchQuery])
+    let result = files
+    // فلتر المجلد
+    if (activeFolderId === 'root') {
+      result = result.filter((f) => !f.folderId)
+    } else if (activeFolderId !== 'all') {
+      result = result.filter((f) => f.folderId === activeFolderId)
+    }
+    // فلتر البحث
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(
+        (f) =>
+          (f.title || '').toLowerCase().includes(q) ||
+          (f.description || '').toLowerCase().includes(q) ||
+          (f.fileName || '').toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [files, activeFolderId, searchQuery])
 
   const handleRefresh = () => {
     setRefreshKey((k) => k + 1)
@@ -224,6 +275,7 @@ export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) 
     // Show loading immediately to avoid a brief flash of stale data
     setLoading(true)
     setSearchQuery('')
+    setActiveFolderId('all')
     setActiveCategory(value)
   }
 
@@ -362,6 +414,17 @@ export default function DownloadsPage({ onBack, schoolId }: DownloadsPageProps) 
                   schoolId={schoolId}
                   onDownloadClick={handleDownloadClick}
                   onRetry={handleRefresh}
+                  folders={folders}
+                  activeFolderId={activeFolderId}
+                  setActiveFolderId={setActiveFolderId}
+                  filesCountByFolder={(() => {
+                    const m: Record<string, number> = {}
+                    for (const f of files) {
+                      if (f.folderId) m[f.folderId] = (m[f.folderId] || 0) + 1
+                    }
+                    return m
+                  })()}
+                  rootFilesCount={files.filter((f) => !f.folderId).length}
                 />
               )}
             </TabsContent>
@@ -390,6 +453,11 @@ interface TabContentProps {
   schoolId: string
   onDownloadClick: (file: DownloadFile) => void
   onRetry: () => void
+  folders: DownloadFolderItem[]
+  activeFolderId: string
+  setActiveFolderId: (id: string) => void
+  filesCountByFolder: Record<string, number>
+  rootFilesCount: number
 }
 
 function DownloadsTabContent({
@@ -402,9 +470,73 @@ function DownloadsTabContent({
   schoolId,
   onDownloadClick,
   onRetry,
+  folders,
+  activeFolderId,
+  setActiveFolderId,
+  filesCountByFolder,
+  rootFilesCount,
 }: TabContentProps) {
+  const hasFolders = folders.length > 0
   return (
     <div>
+      {/* Sub-folder filter chips (only if folders exist) */}
+      {hasFolders && !loading && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-gray-500 inline-flex items-center gap-1 shrink-0">
+            <FolderOpen className="w-3.5 h-3.5" />
+            المجلدات:
+          </span>
+          <button
+            onClick={() => setActiveFolderId('all')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+              activeFolderId === 'all'
+                ? 'bg-[#610000] text-white border-[#610000]'
+                : 'bg-white text-gray-700 border-gray-200 hover:border-[#610000]/40 hover:text-[#610000]'
+            }`}
+          >
+            الكل
+          </button>
+          {folders.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setActiveFolderId(f.id)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors inline-flex items-center gap-1 ${
+                activeFolderId === f.id
+                  ? 'bg-[#610000] text-white border-[#610000]'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-[#610000]/40 hover:text-[#610000]'
+              }`}
+              title={f.description || f.name}
+            >
+              <FolderOpen className="w-3 h-3" />
+              {f.name}
+              <span className={`text-[10px] font-bold px-1.5 py-0 rounded-full ${
+                activeFolderId === f.id ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {filesCountByFolder[f.id] || 0}
+              </span>
+            </button>
+          ))}
+          {rootFilesCount > 0 && (
+            <button
+              onClick={() => setActiveFolderId('root')}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors inline-flex items-center gap-1 ${
+                activeFolderId === 'root'
+                  ? 'bg-[#610000] text-white border-[#610000]'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-[#610000]/40 hover:text-[#610000]'
+              }`}
+            >
+              <FileText className="w-3 h-3" />
+              بدون مجلد
+              <span className={`text-[10px] font-bold px-1.5 py-0 rounded-full ${
+                activeFolderId === 'root' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {rootFilesCount}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Search bar */}
       <div className="mb-5">
         <div className="relative max-w-xl">
@@ -413,7 +545,7 @@ function DownloadsTabContent({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={`ابحث في ${cat.label}...`}
+            placeholder={`ابحث في ${cat.label}${activeFolderId !== 'all' ? ' (المجلد المحدد)' : ''}...`}
             className="h-11 pr-10 pl-4 text-right text-sm bg-white border-gray-200 rounded-xl shadow-sm focus-visible:ring-[#610000]/30 focus-visible:border-[#610000]"
           />
         </div>
@@ -533,30 +665,47 @@ function FileCard({ file, schoolId, onDownloadClick }: FileCardProps) {
   const iconColorClass = FILE_TYPE_COLORS[fileType] || FILE_TYPE_COLORS.file
   const catInfo = DOWNLOAD_CATEGORIES.find((c) => c.value === file.category)
   const catColor = catInfo?.color || '#610000'
+  const visInfo = getVisibilityInfo(file.visibility)
   const downloadHref = `/api/downloads/${file.id}/file?schoolId=${encodeURIComponent(schoolId)}`
 
   return (
     <Card className="group border border-gray-200 shadow-sm hover:shadow-lg hover:border-[#0891b2]/30 transition-all duration-300 rounded-xl overflow-hidden py-0 gap-0">
       <CardContent className="p-5 space-y-3">
-        {/* Top row: file type icon + category badge */}
+        {/* Top row: file type icon + badges */}
         <div className="flex items-start justify-between gap-2">
           <div
             className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${iconColorClass}`}
           >
             <FileTypeIconView type={fileType} className="w-6 h-6" />
           </div>
-          {catInfo && (
-            <span
-              className="inline-flex items-center text-[11px] font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
-              style={{
-                backgroundColor: `${catColor}15`,
-                color: catColor,
-                borderColor: `${catColor}30`,
-              }}
-            >
-              {catInfo.label}
-            </span>
-          )}
+          <div className="flex items-center gap-1 flex-wrap justify-end">
+            {visInfo && visInfo.value !== 'PUBLIC' && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap"
+                style={{
+                  backgroundColor: `${visInfo.color}15`,
+                  color: visInfo.color,
+                  borderColor: `${visInfo.color}30`,
+                }}
+                title={visInfo.label}
+              >
+                <span>{visInfo.icon}</span>
+                {visInfo.label}
+              </span>
+            )}
+            {catInfo && (
+              <span
+                className="inline-flex items-center text-[11px] font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
+                style={{
+                  backgroundColor: `${catColor}15`,
+                  color: catColor,
+                  borderColor: `${catColor}30`,
+                }}
+              >
+                {catInfo.label}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Title */}
